@@ -325,8 +325,11 @@
     .field-note { display: none; margin-top: 5px; color: #dc2626; font-size: 12px; font-weight: 700; line-height: 1.35; }
     .field-error .field-note { display: block; }
     .sku-search-wrap { position: relative; display: grid; gap: 6px; }
-    .sku-search-input { padding-right: 42px; }
-    .sku-search-caret { pointer-events: none; position: absolute; right: 14px; top: 16px; width: 9px; height: 9px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); }
+    .sku-search-input { padding-right: 76px; }
+    .sku-search-clear { position: absolute; z-index: 2; right: 38px; top: 9px; width: 34px; min-height: 34px; padding: 0; border: 0; border-radius: 50%; background: transparent !important; color: var(--muted); font-size: 22px; font-weight: 500; line-height: 1; }
+    .sku-search-clear:hover,
+    .sku-search-clear:focus { color: var(--err); background: var(--soft) !important; }
+    .sku-search-caret { pointer-events: none; position: absolute; right: 15px; top: 17px; width: 9px; height: 9px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); }
     .sku-suggestions { display: none; position: absolute; z-index: 35; left: 0; right: 0; top: 52px; max-height: 280px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); }
     .sku-suggestions.open { display: block; }
     .sku-suggestion { width: 100%; min-height: 42px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); color: var(--text); text-align: left; padding: 9px 12px; display: block; font-weight: 500; }
@@ -342,7 +345,7 @@
     .chart-legend { display: grid; gap: 7px; }
     .chart-legend button { min-height: 30px; padding: 2px 0; border: 0; background: transparent !important; display: grid; grid-template-columns: 12px minmax(0,1fr) auto; gap: 7px; align-items: center; text-align: left; font-weight: 500; }
     .chart-dot { width: 10px; height: 10px; border-radius: 3px; }
-    .chart-line { display: block; width: 100%; height: 176px; overflow: visible; }
+    .chart-line { display: block; width: 100%; height: auto; aspect-ratio: 640 / 176; overflow: visible; }
     .chart-line-labels { display: grid; gap: 2px; overflow: hidden; color: var(--muted); font-size: 10px; line-height: 1.15; text-align: center; }
     .chart-columns { display: grid; align-items: end; gap: 6px; min-height: 180px; margin-top: 12px; padding: 16px 4px 0; border-bottom: 1px solid var(--line); }
     .chart-column { min-width: 0; display: grid; grid-template-rows: 20px minmax(4px, 132px) 34px; align-items: end; gap: 4px; text-align: center; color: var(--muted); font-size: 10px; cursor: pointer; }
@@ -1067,7 +1070,13 @@
       return `${values.month}/${values.year}`;
     }
     function shouldLiveLoadStore(month){
-      return !!normalizeMonth(month);
+      const normalized = normalizeMonth(month);
+      if (!normalized) return false;
+      const cached = live.storeInfoByMonth[normalized];
+      if (!cached) return true;
+      if (normalized !== currentBusinessMonth()) return false;
+      if (cached._local) return true;
+      return Date.now() - Number(cached._cachedAt || 0) >= 120000;
     }
     function defaultStoreMonth(options){
       options = Array.isArray(options) ? options : [];
@@ -1098,18 +1107,34 @@
       return ["Tất cả", ...Array.from(set).sort((a,b) => a.localeCompare(b, "vi"))];
     }
     function monthSummary(){
-      if (typeof live !== "undefined" && live.storeInfo && Array.isArray(live.storeInfo.monthTotals) && live.storeInfo.monthTotals.length) {
-        const totalMap = {};
-        live.storeInfo.monthTotals.forEach(x => {
-          const key = normalizeMonth(x.key || x.month);
-          if (key) totalMap[key] = Number(x.value || x.total || 0);
-        });
-        const fixed = fixedMonthTotals();
-        return liveMonthOptions().map(m => [m, totalMap[m] || fixed[m] || 0]);
+      const totalMap = {};
+      const collectInfo = (info, fallbackMonth) => {
+        if (!info || typeof info !== "object") return;
+        if (Array.isArray(info.monthTotals)) {
+          info.monthTotals.forEach(x => {
+            const key = normalizeMonth(x.key || x.month);
+            const value = Number(x.value ?? x.total ?? 0);
+            if (key && (value > 0 || totalMap[key] == null)) totalMap[key] = value;
+          });
+        }
+        const month = normalizeMonth(info._month || fallbackMonth || "");
+        if (!month) return;
+        const byStoreTotal = Array.isArray(info.byStore)
+          ? info.byStore.reduce((sum, item) => sum + Number(item.value || 0), 0)
+          : 0;
+        const directTotal = Number(info.total || 0) || byStoreTotal;
+        if (directTotal > 0) totalMap[month] = directTotal;
+      };
+      if (typeof live !== "undefined") {
+        Object.keys(live.storeInfoByMonth || {}).forEach(month => collectInfo(live.storeInfoByMonth[month], month));
+        collectInfo(live.storeInfo, live.storeInfoMonth);
       }
       const months = liveMonthOptions();
       const fixed = fixedMonthTotals();
-      return months.map(m => [m, fixed[m] || (storeByMonth[m] || []).reduce((s,x) => s + Number(x[1] || 0), 0)]);
+      return months.map(m => {
+        const localTotal = (storeByMonth[m] || []).reduce((s,x) => s + Number(x[1] || 0), 0);
+        return [m, totalMap[m] ?? fixed[m] ?? localTotal ?? 0];
+      });
     }
     function isAdminUser(){
       const role = (typeof live !== "undefined" && live.user && live.user.role) || "";
@@ -1657,7 +1682,7 @@
           return {x:px,y:py,label:x[0],value:x[1]};
         });
         const polygon = type === "area" && points.length ? `<polygon points="22,152 ${points.map(p=>`${p.x},${p.y}`).join(" ")} ${width-22},152" fill="var(--brand)" opacity=".16"></polygon>` : "";
-        return `<div style="margin-top:10px"><svg class="chart-line" viewBox="0 0 ${width} 176" preserveAspectRatio="none"><line x1="20" y1="152" x2="${width-20}" y2="152" stroke="var(--line)"></line>${polygon}<polyline fill="none" stroke="var(--brand)" stroke-width="4" vector-effect="non-scaling-stroke" points="${points.map(p=>`${p.x},${p.y}`).join(" ")}"></polyline>${points.map((p,index) => `<g${action(p.label)} style="cursor:pointer"><circle cx="${p.x}" cy="${p.y}" r="5" fill="${chartColor(index)}"></circle><text x="${p.x}" y="${Math.max(13,p.y-10)}" fill="currentColor" text-anchor="middle" font-size="11">${p.value.toLocaleString("vi-VN")}</text></g>`).join("")}</svg><div class="chart-line-labels" style="grid-template-columns:repeat(${data.length},minmax(0,1fr))">${data.map(x => `<span>${html(x[0])}</span>`).join("")}</div></div>`;
+        return `<div style="margin-top:10px"><svg class="chart-line" viewBox="0 0 ${width} 176" preserveAspectRatio="xMidYMid meet"><line x1="20" y1="152" x2="${width-20}" y2="152" stroke="var(--line)"></line>${polygon}<polyline fill="none" stroke="var(--brand)" stroke-width="4" vector-effect="non-scaling-stroke" points="${points.map(p=>`${p.x},${p.y}`).join(" ")}"></polyline>${points.map((p,index) => `<g${action(p.label)} style="cursor:pointer"><circle cx="${p.x}" cy="${p.y}" r="5" fill="${chartColor(index)}"></circle><text x="${p.x}" y="${Math.max(13,p.y-10)}" fill="currentColor" text-anchor="middle" font-size="11">${p.value.toLocaleString("vi-VN")}</text></g>`).join("")}</svg><div class="chart-line-labels" style="grid-template-columns:repeat(${data.length},minmax(0,1fr))">${data.map(x => `<span>${html(x[0])}</span>`).join("")}</div></div>`;
       }
       if (type === "column") {
         return `<div class="chart-columns" style="grid-template-columns:repeat(${data.length},minmax(0,1fr))">${data.map((x,index) => `<div class="chart-column"${action(x[0])}><strong>${x[1].toLocaleString("vi-VN")}</strong><i style="height:${Math.max(4,Math.round(x[1]/max*132))}px;background:${chartColor(index)}"></i><span>${html(x[0])}</span></div>`).join("")}</div>`;
@@ -1689,7 +1714,7 @@
         return {date:day.date, total:total, stores:visibleStores};
       }).filter(day => day.total > 0);
       if (!filteredDays.length) return `<div class="muted" style="margin-top:10px">Không có dữ liệu ${html(storeType)} theo ngày trong ${html(selectedMonth)}.</div>`;
-      const chartData = filteredDays.map(day => [displayStoreDate(day.date).slice(0,5), day.total]);
+      const chartData = filteredDays.map(day => [displayStoreDate(day.date).slice(0,2), day.total]);
       return `${renderStoreChart(chartData, (appConfig.storeCharts || {}).production || "line", false)}<div class="store-day-list">${filteredDays.map(day => `<div class="store-day-row"><div class="store-day-head"><strong>${html(displayStoreDate(day.date))}</strong><strong>${Number(day.total || 0).toLocaleString("vi-VN")} đơn</strong></div><div class="store-day-types">${day.stores.map(item => `<span>${html(item.key)}: <strong>${Number(item.value || 0).toLocaleString("vi-VN")}</strong></span>`).join("")}</div></div>`).join("")}</div>`;
     }
     function admin(){
@@ -1698,8 +1723,16 @@
         return;
       }
       el("view").className = "content";
+      if (adminTab === "users") {
+        el("view").innerHTML = `<section class="section">
+          <div class="config-title">
+            <div><h2>Config user (phân quyền)</h2><div class="muted">Thêm tài khoản, sửa vai trò, màn được sử dụng và thao tác được phép.</div></div>
+            <div class="config-actions"><button onclick="setView('settings')">← Cài đặt</button></div>
+          </div>
+        </section>${adminUsersPanel()}`;
+        return;
+      }
       const tabs = [
-        ["users","User & quyền"],
         ["builder","Dynamic Builder"],
         ["views","Màn hình"],
         ["storeCharts","Biểu đồ ST"],
@@ -1709,12 +1742,24 @@
         ["data","Data & Sync"],
         ["export","Export config"]
       ];
+      if (adminTab === "menu") {
+        el("view").innerHTML = `<section class="section">
+          <div class="config-title">
+            <div><h2>Cấu hình</h2><div class="muted">Chọn riêng từng nhóm cấu hình cần chỉnh sửa.</div></div>
+            <div class="config-actions"><button onclick="setView('settings')">← Cài đặt</button></div>
+          </div>
+          <div class="settings-action-list" style="margin-top:12px">
+            ${tabs.map(item => `<button onclick="setAdminTab('${item[0]}')"><span>${html(item[1])}</span><span>›</span></button>`).join("")}
+          </div>
+        </section>`;
+        return;
+      }
+      const activeTab = tabs.find(item => item[0] === adminTab) || tabs[0];
       el("view").innerHTML = `<section class="section">
         <div class="config-title">
-          <div><h2>Cấu hình admin</h2><div class="muted">Cấu hình màn hình, cột, action, quyền user, data source và sync. Staff không thấy phần kỹ thuật.</div></div>
-          <div class="config-actions"><button onclick="setView('settings')">← Cài đặt</button><button onclick="resetAppConfig()">Reset mẫu</button><button class="primary" onclick="saveAppConfig()">Lưu config</button></div>
+          <div><h2>${html(activeTab[1])}</h2><div class="muted">Cấu hình riêng cho mục ${html(activeTab[1])}. Staff không thấy phần kỹ thuật.</div></div>
+          <div class="config-actions"><button onclick="setAdminTab('menu')">← Cấu hình</button>${adminTab === "export" ? "" : `<button class="primary" onclick="saveAppConfig()">Lưu config</button>`}</div>
         </div>
-        <div class="admin-tabs" style="margin-top:14px">${tabs.map(t => `<button class="${adminTab===t[0]?"active":""}" onclick="setAdminTab('${t[0]}')">${t[1]}</button>`).join("")}</div>
       </section>
       ${adminPanel()}`;
     }
@@ -1728,7 +1773,7 @@
       if (adminTab === "profiles") return adminProfilesPanel();
       if (adminTab === "data") return adminDataPanel();
       if (adminTab === "export") return adminExportPanel();
-      return adminUsersPanel();
+      return adminBuilderPanel();
     }
     function adminUsersPanel(){
       if (typeof live !== "undefined" && !live.adminPermissionsLoaded && !live.adminPermissionsLoading) {
@@ -2153,7 +2198,7 @@
       const adminPanel = isAdminUser() ? `<section class="section"><h2>Quản lý admin</h2>
         <div class="settings-action-list">
           <button onclick="openAdminSection('users')"><span>Config user (phân quyền)</span><span>›</span></button>
-          <button onclick="openAdminSection('profiles')"><span>Cấu hình</span><span>›</span></button>
+          <button onclick="openAdminSection('menu')"><span>Cấu hình</span><span>›</span></button>
         </div>
       </section>` : "";
       const activeProfile = (appConfig.sheetProfiles || []).find(x => x.active) || {};
@@ -2759,7 +2804,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "1.9";
+    const APP_VERSION = "10";
     const nativeImagePickerMap = {
       productCamera: ["camera", "productFiles", "productPreview"],
       productLibrary: ["library", "productFiles", "productPreview"],
@@ -3015,8 +3060,10 @@
       options = options || {};
       const id = scope === "returnth" ? "returnThProductSearch" : "skuProductSearch";
       const boxId = scope === "returnth" ? "returnThSkuSuggestions" : "skuSuggestions";
+      const hasValue = !!String(skuComboValue(scope) || "").trim();
       return `<div class="sku-search-wrap">
         <input id="${id}" class="sku-search-input" value="${html(skuComboValue(scope))}" placeholder="${html(options.placeholder || "Nhập tên SKU để tìm")}" autocomplete="off" onfocus="focusSkuCombo('${scope}')" oninput="updateSkuCombo('${scope}', this.value)">
+        <button id="${id}Clear" type="button" class="sku-search-clear" style="${hasValue ? "" : "display:none"}" title="Xóa tên SKU" aria-label="Xóa tên SKU" onclick="clearSkuCombo('${scope}')">×</button>
         <span class="sku-search-caret" aria-hidden="true"></span>
         <div id="${boxId}" class="sku-suggestions">${skuComboSuggestionsHtml(scope)}</div>
         ${options.allowCreate === false ? "" : `<button type="button" class="sku-create-link" onclick="chooseNewSkuCombo('${scope}')">Tạo mới nếu chưa có</button>`}
@@ -3031,6 +3078,10 @@
       box.innerHTML = skuComboSuggestionsHtml(scope);
       box.classList.add("open");
     }
+    document.addEventListener("click", event => {
+      if (event.target && event.target.closest && event.target.closest(".sku-search-wrap")) return;
+      document.querySelectorAll(".sku-suggestions.open").forEach(node => node.classList.remove("open"));
+    });
     function updateSkuCombo(scope, value){
       if (scope === "returnth") {
         returnThState.productSearch = value;
@@ -3040,9 +3091,32 @@
         if (skuState.productIndex !== "new") skuState.productIndex = "";
       }
       const box = skuComboBox(scope);
+      const clearButton = el(scope === "returnth" ? "returnThProductSearchClear" : "skuProductSearchClear");
+      if (clearButton) clearButton.style.display = String(value || "").trim() ? "" : "none";
       if (!box) return;
       box.innerHTML = skuComboSuggestionsHtml(scope);
       box.classList.add("open");
+    }
+    function clearSkuCombo(scope){
+      if (scope === "returnth") {
+        returnThState.product = "";
+        returnThState.productSearch = "";
+        returnThState.customProduct = false;
+        returnThState.newSubSku = "";
+        returnThState.newName = "";
+        returnThState.newUnit = "";
+        returnth();
+        setTimeout(() => focusSkuCombo("returnth"), 0);
+        return;
+      }
+      skuState.productIndex = "";
+      skuState.productSearch = "";
+      skuState.type = "";
+      skuState.newMaterial = "";
+      skuState.newName = "";
+      showProductPicker = false;
+      input();
+      setTimeout(() => focusSkuCombo("vtd"), 0);
     }
     function chooseSkuCombo(scope, key){
       if (scope === "returnth") {
@@ -3057,6 +3131,8 @@
         if (box) box.classList.remove("open");
         const input = el("returnThProductSearch");
         if (input) input.value = returnThState.product;
+        const clearButton = el("returnThProductSearchClear");
+        if (clearButton) clearButton.style.display = returnThState.product ? "" : "none";
         return;
       }
       selectProduct(String(key));
@@ -3295,6 +3371,7 @@
     };
     const PRODUCT_CACHE_KEY = "vtd_master_sku_cache_v2";
     const PRODUCT_CACHE_VERSION = 2;
+    const STORE_INFO_CACHE_KEY = "vtd_store_info_cache_v1";
     const DEVICE_ID_KEY = "vtd_device_id_v1";
     const live = {
       token: localStorage.getItem("vtd_token") || "",
@@ -3318,6 +3395,7 @@
       storeLoading: false,
       storeInfoMonth: "",
       storeInfoByMonth: {},
+      storeLocalLoading: {},
       storeRequestId: 0,
       skuItems: [],
       docFiles: [],
@@ -3608,6 +3686,145 @@
         req.onerror = () => reject(req.error);
       });
     }
+    async function buildStoreInfoFromOrderCache(month){
+      const selectedMonth = normalizeMonth(month);
+      if (!selectedMonth) return null;
+      const db = await orderLookupDb();
+      if (!db) return null;
+      return new Promise(resolve => {
+        const byStore = {};
+        const dailyStores = {};
+        const seen = {};
+        let total = 0;
+        const tx = db.transaction(ORDER_LOOKUP_STORE, "readonly");
+        const store = tx.objectStore(ORDER_LOOKUP_STORE);
+        const req = store.openCursor();
+        req.onsuccess = event => {
+          const cursor = event.target.result;
+          if (!cursor) {
+            if (!total) return resolve(null);
+            return resolve({
+              source:"Cache khách hàng trên máy",
+              total,
+              months:[selectedMonth],
+              monthTotals:[{key:selectedMonth,value:total}],
+              storeTypes:Object.keys(byStore).sort((a,b)=>a.localeCompare(b,"vi")),
+              byStore:Object.keys(byStore).map(key=>({key,value:byStore[key]})).sort((a,b)=>b.value-a.value),
+              dailyStores:Object.keys(dailyStores).sort().map(date => ({
+                date,
+                total:Object.keys(dailyStores[date]).reduce((sum,key)=>sum+Number(dailyStores[date][key]||0),0),
+                stores:Object.keys(dailyStores[date]).map(key=>({key,value:dailyStores[date][key]})).sort((a,b)=>b.value-a.value)
+              })),
+              _month:selectedMonth,
+              _cachedAt:Date.now(),
+              _local:true
+            });
+          }
+          const record = normalizeOrderLookupRecord(cursor.value || {}) || {};
+          const dateKey = record.dateKey || dateKeyFromText(record.ngayLenDon || "");
+          const explicitMonth = normalizeMonth(record.month || record.thang || "");
+          const recordMonth = /^\d{2}\/\d{4}$/.test(explicitMonth)
+            ? explicitMonth
+            : (dateKey ? `${dateKey.slice(5,7)}/${dateKey.slice(0,4)}` : "");
+          if (recordMonth === selectedMonth) {
+            const uniqueKey = String(record.od || record.maDon || record.key || cursor.primaryKey || "").trim();
+            if (uniqueKey && !seen[uniqueKey]) {
+              seen[uniqueKey] = true;
+              const storeType = String(record.storeType || record.loaiSt || "Khác").trim() || "Khác";
+              byStore[storeType] = (byStore[storeType] || 0) + 1;
+              if (dateKey) {
+                if (!dailyStores[dateKey]) dailyStores[dateKey] = {};
+                dailyStores[dateKey][storeType] = (dailyStores[dateKey][storeType] || 0) + 1;
+              }
+              total++;
+            }
+          }
+          cursor.continue();
+        };
+        req.onerror = () => resolve(null);
+      });
+    }
+    async function loadStoreInfoFromDevice(month){
+      const selectedMonth = normalizeMonth(month);
+      if (!selectedMonth) return false;
+      const info = await buildStoreInfoFromOrderCache(selectedMonth);
+      if (!info) return false;
+      live.storeInfoByMonth[selectedMonth] = info;
+      live.storeInfo = info;
+      live.storeInfoMonth = selectedMonth;
+      saveStoreInfoCache(selectedMonth, info);
+      return true;
+    }
+    async function warmStoreInfoFromDevice(){
+      if (warmStoreInfoFromDevice.running) return;
+      warmStoreInfoFromDevice.running = true;
+      const db = await orderLookupDb();
+      if (!db) {
+        warmStoreInfoFromDevice.running = false;
+        return;
+      }
+      const grouped = {};
+      await new Promise(resolve => {
+        const tx = db.transaction(ORDER_LOOKUP_STORE, "readonly");
+        const store = tx.objectStore(ORDER_LOOKUP_STORE);
+        const req = store.openCursor();
+        req.onsuccess = event => {
+          const cursor = event.target.result;
+          if (!cursor) return resolve();
+          const record = normalizeOrderLookupRecord(cursor.value || {}) || {};
+          const dateKey = record.dateKey || dateKeyFromText(record.ngayLenDon || "");
+          const explicitMonth = normalizeMonth(record.month || record.thang || "");
+          const month = /^\d{2}\/\d{4}$/.test(explicitMonth)
+            ? explicitMonth
+            : (dateKey ? `${dateKey.slice(5,7)}/${dateKey.slice(0,4)}` : "");
+          if (month) {
+            if (!grouped[month]) grouped[month] = {seen:{}, byStore:{}, daily:{}};
+            const bucket = grouped[month];
+            const uniqueKey = String(record.od || record.maDon || record.key || cursor.primaryKey || "").trim();
+            if (uniqueKey && !bucket.seen[uniqueKey]) {
+              bucket.seen[uniqueKey] = true;
+              const storeType = String(record.storeType || record.loaiSt || "Khác").trim() || "Khác";
+              bucket.byStore[storeType] = (bucket.byStore[storeType] || 0) + 1;
+              if (dateKey) {
+                if (!bucket.daily[dateKey]) bucket.daily[dateKey] = {};
+                bucket.daily[dateKey][storeType] = (bucket.daily[dateKey][storeType] || 0) + 1;
+              }
+            }
+          }
+          cursor.continue();
+        };
+        req.onerror = () => resolve();
+      });
+      Object.keys(grouped).forEach(month => {
+        const bucket = grouped[month];
+        const total = Object.keys(bucket.seen).length;
+        if (!total) return;
+        const info = {
+          source:"Cache khách hàng trên máy",
+          total,
+          months:[month],
+          monthTotals:[{key:month,value:total}],
+          storeTypes:Object.keys(bucket.byStore).sort((a,b)=>a.localeCompare(b,"vi")),
+          byStore:Object.keys(bucket.byStore).map(key=>({key,value:bucket.byStore[key]})).sort((a,b)=>b.value-a.value),
+          dailyStores:Object.keys(bucket.daily).sort().map(date => ({
+            date,
+            total:Object.keys(bucket.daily[date]).reduce((sum,key)=>sum+Number(bucket.daily[date][key]||0),0),
+            stores:Object.keys(bucket.daily[date]).map(key=>({key,value:bucket.daily[date][key]})).sort((a,b)=>b.value-a.value)
+          })),
+          _month:month,
+          _cachedAt:Date.now(),
+          _local:true
+        };
+        const existing = live.storeInfoByMonth[month];
+        if (!existing || existing._local) {
+          live.storeInfoByMonth[month] = info;
+          saveStoreInfoCache(month, info);
+        }
+      });
+      warmStoreInfoFromDevice.running = false;
+      if (view === "store") store();
+    }
+    warmStoreInfoFromDevice.running = false;
     async function orderCacheGet(maDon){
       const maDonKey = orderLookupText(maDon);
       if (!maDonKey) return null;
@@ -5103,6 +5320,7 @@
       if (user) user.innerHTML = "";
       recoverLocalQueue();
       hydrateDashboardCache();
+      hydrateStoreInfoCache();
       refreshLocalRows();
       render();
       refreshSessionAuth();
@@ -5221,9 +5439,40 @@
         loadDashboard({silent:true}),
         loadProducts(true)
       ]);
-      warmOrderLookupCache();
+      const currentMonth = currentBusinessMonth();
+      if (shouldLiveLoadStore(currentMonth)) loadStoreInfo(currentMonth);
+      warmStoreInfoFromDevice();
+      warmOrderLookupCache().then(() => warmStoreInfoFromDevice());
       warmAllDataCaches();
       render();
+    }
+    function hydrateStoreInfoCache(){
+      let cache = {};
+      try { cache = JSON.parse(localStorage.getItem(STORE_INFO_CACHE_KEY) || "{}") || {}; } catch (err) { cache = {}; }
+      const months = cache.months && typeof cache.months === "object" ? cache.months : {};
+      Object.keys(months).forEach(month => {
+        const normalized = normalizeMonth(month);
+        const info = months[month];
+        if (!normalized || !info || typeof info !== "object") return;
+        live.storeInfoByMonth[normalized] = info;
+      });
+      const current = live.storeInfoByMonth[storeMonth] || live.storeInfoByMonth[defaultStoreMonth(Object.keys(live.storeInfoByMonth))];
+      if (current) {
+        live.storeInfo = current;
+        live.storeInfoMonth = normalizeMonth(current._month || storeMonth || "");
+      }
+    }
+    function saveStoreInfoCache(month, info){
+      const normalized = normalizeMonth(month);
+      if (!normalized || !info) return;
+      let cache = {};
+      try { cache = JSON.parse(localStorage.getItem(STORE_INFO_CACHE_KEY) || "{}") || {}; } catch (err) { cache = {}; }
+      if (!cache.months || typeof cache.months !== "object") cache.months = {};
+      cache.months[normalized] = Object.assign({}, info, {_month:normalized, _cachedAt:Date.now()});
+      const monthKeys = Object.keys(cache.months).filter(key => /^\d{2}\/\d{4}$/.test(normalizeMonth(key))).sort(monthCompare);
+      while (monthKeys.length > 18) delete cache.months[monthKeys.shift()];
+      cache.updatedAt = new Date().toISOString();
+      try { localStorage.setItem(STORE_INFO_CACHE_KEY, JSON.stringify(cache)); } catch (err) {}
     }
     function preloadStoreMonths(){
       liveMonthOptions().forEach((month, index) => {
@@ -5282,16 +5531,23 @@
       });
       live.storeLoading = false;
       if (res.ok) {
-        live.storeInfo = res;
+        const existing = live.storeInfoByMonth[requestedMonth];
+        const responseTotal = Number(res.total || 0) || (Array.isArray(res.byStore) ? res.byStore.reduce((sum,item)=>sum+Number(item.value||0),0) : 0);
+        const existingTotal = existing ? (Number(existing.total || 0) || (Array.isArray(existing.byStore) ? existing.byStore.reduce((sum,item)=>sum+Number(item.value||0),0) : 0)) : 0;
+        const cachedResult = responseTotal === 0 && existingTotal > 0
+          ? Object.assign({}, existing, {_month:requestedMonth, _cachedAt:Date.now(), _local:false, source:(existing.source || "Cache trên máy") + " · API chưa có dữ liệu mới"})
+          : Object.assign({}, res, {_month:requestedMonth, _cachedAt:Date.now(), _local:false});
+        live.storeInfo = cachedResult;
         live.storeInfoMonth = requestedMonth;
-        live.storeInfoByMonth[requestedMonth] = res;
+        live.storeInfoByMonth[requestedMonth] = cachedResult;
+        saveStoreInfoCache(requestedMonth, cachedResult);
         if (res.months && res.months.length) {
           res.months.forEach(m => { const key = normalizeMonth(m); if (key && !storeByMonth[key]) storeByMonth[key] = []; });
         }
         if (Array.isArray(res.monthTotals)) {
           res.monthTotals.forEach(x => { const key = normalizeMonth(x.key || x.month); if (key && !storeByMonth[key]) storeByMonth[key] = []; });
         }
-        if (view === "store" && requestedMonth === storeMonth) setTimeout(store, 0);
+        if (view === "store") setTimeout(store, 0);
         return true;
       }
       return false;
@@ -5923,10 +6179,16 @@
       if (!monthOptions.includes(storeMonth)) storeMonth = defaultStoreMonth(monthOptions);
       const cachedInfo = live.storeInfoByMonth[storeMonth];
       const needsLive = shouldLiveLoadStore(storeMonth) && !cachedInfo;
-      if (needsLive && !live.storeLoading) {
-        loadStoreInfo(storeMonth).then(() => {
+      if (!cachedInfo && !live.storeLocalLoading[storeMonth]) {
+        const requestedMonth = storeMonth;
+        live.storeLocalLoading[requestedMonth] = true;
+        loadStoreInfoFromDevice(requestedMonth).then(async found => {
+          delete live.storeLocalLoading[requestedMonth];
+          if (!found && !live.storeLoading) await loadStoreInfo(requestedMonth);
           if (view === "store") store();
         });
+      } else if (cachedInfo && shouldLiveLoadStore(storeMonth) && !live.storeLoading) {
+        loadStoreInfo(storeMonth);
       }
       const info = cachedInfo || (live.storeInfoMonth === storeMonth ? live.storeInfo : null);
       const apiRows = info && (info.byStore || info.byDate);
@@ -5939,7 +6201,7 @@
       const total = data.reduce((s, x) => s + Number(x[1] || 0), 0) || 1;
       const max = Math.max(...data.map(x => Number(x[1] || 0)), 1);
       const bars = data.length ? data.map(x => `<tr><td>${html(x[0])}</td><td><strong>${Number(x[1]).toLocaleString("vi-VN")}</strong></td><td><div style="height:18px;background:#e8f1ff;border-radius:999px;overflow:hidden"><div style="height:100%;width:${Math.round(Number(x[1])/max*100)}%;background:#12b8a6"></div></div></td><td>${Math.round(Number(x[1])/total*100)}%</td></tr>`).join("") : `<tr><td colspan="4">Không có dữ liệu cho bộ lọc này.</td></tr>`;
-      el("view").innerHTML = `<section class="section"><h2>Thông tin ST</h2><div class="search-filter-row"><label>Tháng<select onchange="storeMonth=this.value; store()">${monthOptions.map(m => `<option ${m===storeMonth?"selected":""}>${m}</option>`).join("")}</select></label><label>Loại ST<select onchange="storeType=this.value; store()">${allStoreTypes().map(x => `<option ${x===storeType?"selected":""}>${html(x)}</option>`).join("")}</select></label></div><div class="muted" style="margin-top:8px">Nguồn: ${html((info && info.source) || (needsLive ? "Đang cập nhật tháng hiện tại..." : "Dữ liệu tháng đã chốt trong app"))}</div></section>
+      el("view").innerHTML = `<section class="section"><h2>Thông tin ST</h2><div class="search-filter-row"><label>Tháng<select onchange="storeMonth=this.value; store()">${monthOptions.map(m => `<option ${m===storeMonth?"selected":""}>${m}</option>`).join("")}</select></label><label>Loại ST<select onchange="storeType=this.value; store()">${allStoreTypes().map(x => `<option ${x===storeType?"selected":""}>${html(x)}</option>`).join("")}</select></label></div></section>
       <section class="section"><h2>Thông tin tổng hợp theo tháng</h2>${monthlySummaryChart()}</section>
       <section class="section"><h2>Số lượng đơn theo loại siêu thị</h2>${renderStoreChart(data, (appConfig.storeCharts || {}).storeType || "table", false)}</section>
       <section class="section"><h2>Dữ liệu đơn theo ngày ${html(storeMonth)}</h2>${storeDayDetails()}</section>`;
