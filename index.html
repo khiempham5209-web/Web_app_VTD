@@ -148,6 +148,22 @@
     .table-wrap { max-width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
     table { width: 100%; border-collapse: collapse; min-width: 740px; font-size: .94em; }
     th, td { padding: 8px 9px; border-bottom: 1px solid #e9eef4; text-align: left; white-space: nowrap; }
+    .settings-page .table-wrap table,
+    .admin-page .table-wrap table { min-width: 0; table-layout: fixed; font-size: .88em; }
+    .settings-page .table-wrap th,
+    .settings-page .table-wrap td,
+    .admin-page .table-wrap th,
+    .admin-page .table-wrap td { padding: 6px 5px; line-height: 1.15; white-space: normal; overflow-wrap: anywhere; vertical-align: middle; }
+    .settings-page .table-wrap th,
+    .admin-page .table-wrap th { font-size: .82em; text-align: center; }
+    .settings-page .table-wrap td,
+    .admin-page .table-wrap td { cursor: pointer; }
+    .settings-page .table-wrap td:has(button),
+    .settings-page .table-wrap td:has(a),
+    .settings-page .table-wrap td:has(input),
+    .admin-page .table-wrap td:has(button),
+    .admin-page .table-wrap td:has(a),
+    .admin-page .table-wrap td:has(input) { cursor: default; }
     .compact-table table { min-width: 0; table-layout: fixed; }
     .compact-table td { padding: 8px 9px; }
     .compact-table td:last-child { text-align: right; width: 34%; }
@@ -385,6 +401,9 @@
     body.theme-dark .modal-card .notice-box { background: #102a48; color: #edf4ff; border-color: #31577f; }
     body.theme-dark .modal-card .pass-eye:hover { background: #1e3553; }
     .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .cell-detail-card { width: min(430px, 94vw); max-height: 76vh; overflow: auto; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 14px; box-shadow: var(--shadow); }
+    .cell-detail-card h3 { margin: 0 0 10px; font-size: 18px; }
+    .cell-detail-card pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.35; }
     .scanner-card { width: min(100%, 430px); padding: 12px; gap: 10px; }
     .scanner-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .scanner-head h2 { font-size: 18px; }
@@ -577,6 +596,18 @@
     .search-table { width: 100%; min-width: 0; table-layout: fixed; font-size: 10.5px; }
     .search-table th, .search-table td { white-space: normal; overflow-wrap: anywhere; padding: 3px 1px; line-height: 1.12; text-align: center; }
     .search-table th { font-size: 10px; line-height: 1.08; text-align: center; }
+    .settings-page .table-wrap table,
+    .admin-page .table-wrap table { width: 100%; min-width: 0; table-layout: fixed; font-size: 10.5px; }
+    .settings-page .table-wrap th,
+    .settings-page .table-wrap td,
+    .admin-page .table-wrap th,
+    .admin-page .table-wrap td { white-space: normal; overflow-wrap: anywhere; padding: 3px 1px; line-height: 1.12; text-align: center; }
+    .settings-page .table-wrap th,
+    .admin-page .table-wrap th { font-size: 10px; line-height: 1.08; }
+    .settings-page .table-wrap td,
+    .admin-page .table-wrap td { font-size: 10.5px; }
+    .settings-page .table-wrap .mini-icon-btn,
+    .admin-page .table-wrap .mini-icon-btn { width: 32px; min-height: 32px; padding: 0; }
     .search-table th:nth-child(1), .search-table td:nth-child(1) { width: 13%; }
     .search-table th:nth-child(2), .search-table td:nth-child(2) { width: 13%; white-space: normal; overflow-wrap: anywhere; }
     .search-table th:nth-child(3), .search-table td:nth-child(3) { width: 17%; }
@@ -2142,7 +2173,7 @@
         setView("home");
         return;
       }
-      el("view").className = "content";
+      el("view").className = "content admin-page";
       if (adminTab === "users") {
         el("view").innerHTML = `<section class="section">
           <div class="config-title">
@@ -3266,7 +3297,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "2.1";
+    const APP_VERSION = "2.2";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const nativeImagePickerMap = {
@@ -3979,6 +4010,32 @@
       clearTimeout(box._t);
       box._t = setTimeout(() => box.remove(), 3500);
     }
+    function openCellDetail(text){
+      const old = document.getElementById("cellDetailOverlay");
+      if (old) old.remove();
+      const overlay = document.createElement("div");
+      overlay.id = "cellDetailOverlay";
+      overlay.className = "modal-overlay active";
+      overlay.innerHTML = `<div class="cell-detail-card" role="dialog" aria-modal="true">
+        <h3>Chi tiết</h3>
+        <pre>${html(text)}</pre>
+        <div class="modal-actions"><button onclick="closeCellDetail()">Đóng</button></div>
+      </div>`;
+      overlay.addEventListener("click", event => {
+        if (event.target === overlay) closeCellDetail();
+      });
+      document.body.appendChild(overlay);
+    }
+    function closeCellDetail(){
+      const overlay = document.getElementById("cellDetailOverlay");
+      if (overlay) overlay.remove();
+    }
+    document.addEventListener("click", event => {
+      const td = event.target && event.target.closest ? event.target.closest(".settings-page .table-wrap td, .admin-page .table-wrap td") : null;
+      if (!td || event.target.closest("button,a,input,select,textarea,label")) return;
+      const text = String(td.innerText || "").trim();
+      if (text.length > 18 || text.includes("\n")) openCellDetail(text);
+    });
     function setLoading(on, text = "Đang tải dữ liệu..."){
       const overlay = el("loadingOverlay");
       const label = el("loadingText");
