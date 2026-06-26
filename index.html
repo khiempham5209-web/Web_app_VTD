@@ -4,6 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
   <title>VTD App Prototype</title>
+  <script>
+    (() => {
+      const query = new URLSearchParams(location.search);
+      const desktopPath = /(?:^|\/)(?:desktop-web\/|desktop\.html$)/i.test(location.pathname);
+      if (query.get("layout") === "desktop" || desktopPath) {
+        document.documentElement.classList.add("desktop");
+        document.title = "Chứng từ VTD - Desktop";
+      }
+    })();
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
   <style>
@@ -826,6 +836,377 @@
     body.theme-dark.vtd-flat .muted {
       color: var(--muted) !important;
     }
+    /* Desktop web uses the same engine and data, with a wider operational layout. */
+    html.desktop,
+    html.desktop body {
+      width: 100%;
+      max-width: none;
+      min-height: 100%;
+      overflow-x: auto;
+      background: #f4f7fb !important;
+    }
+    html.desktop body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      font-size: 14px;
+      color: #172033;
+    }
+    html.desktop body.theme-dark {
+      background: #0c1422 !important;
+    }
+    html.desktop body.vtd-flat #app.app {
+      width: 100%;
+      max-width: none;
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      grid-template-columns: 258px minmax(0, 1fr);
+      background: #f4f7fb !important;
+      box-shadow: none;
+    }
+    html.desktop body.theme-dark.vtd-flat #app.app {
+      background: var(--bg) !important;
+    }
+    html.desktop .side {
+      display: grid;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      align-content: start;
+      gap: 22px;
+      padding: 22px 14px;
+      border-right: 1px solid #dce3ec;
+      background: #fff !important;
+      z-index: 30;
+    }
+    html.desktop body.theme-dark .side {
+      background: #111c2d !important;
+      border-color: #28364a;
+    }
+    html.desktop .brand {
+      padding: 0 8px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    html.desktop .brand .logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 7px;
+      font-family: Georgia, serif;
+    }
+    html.desktop .brand strong {
+      font: 700 16px/1.2 "Segoe UI", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+    html.desktop .brand span {
+      display: block;
+      max-width: 174px;
+      margin-top: 3px;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    html.desktop .nav {
+      gap: 4px;
+    }
+    html.desktop .nav button {
+      min-height: 42px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 6px;
+      font: 600 14px/1 "Segoe UI", Arial, sans-serif;
+      color: #435066;
+    }
+    html.desktop body.theme-dark .nav button {
+      color: #c8d3e2;
+    }
+    html.desktop .nav button span {
+      width: 22px;
+      color: #6b7a90;
+      font-size: 18px;
+      text-align: center;
+    }
+    html.desktop .nav button.active {
+      background: #eaf3fb;
+      color: #1168a8;
+    }
+    html.desktop body.theme-dark .nav button.active {
+      background: #173653;
+      color: #7cc5ff;
+    }
+    html.desktop .main {
+      width: 100%;
+      min-width: 0;
+      background: #f4f7fb !important;
+    }
+    html.desktop body.theme-dark .main {
+      background: var(--bg) !important;
+    }
+    html.desktop .top {
+      height: 68px;
+      padding: 0 28px;
+      background: rgba(255, 255, 255, .96) !important;
+      border-bottom: 1px solid #dce3ec;
+      backdrop-filter: blur(10px);
+    }
+    html.desktop body.theme-dark .top {
+      background: rgba(17, 28, 45, .96) !important;
+      border-color: #28364a;
+    }
+    html.desktop .top.no-title {
+      min-height: 68px;
+      height: 68px;
+      border-bottom: 1px solid #dce3ec;
+    }
+    html.desktop .top h1 {
+      font: 700 22px/1.2 "Segoe UI", Arial, sans-serif;
+      color: var(--text);
+    }
+    html.desktop .top .user {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--muted);
+    }
+    html.desktop .top .user button {
+      min-height: 34px !important;
+      padding: 0 12px !important;
+      font-size: 12px;
+    }
+    html.desktop .content,
+    html.desktop body.vtd-flat .content {
+      width: 100%;
+      max-width: 1580px;
+      margin: 0 auto;
+      padding: 22px 26px 36px !important;
+      display: grid;
+      gap: 14px;
+      background: transparent !important;
+    }
+    html.desktop body.vtd-flat .section {
+      padding: 16px 18px;
+      background: var(--surface);
+      border: 1px solid #dce3ec;
+      border-radius: 7px;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+    }
+    html.desktop body.theme-dark.vtd-flat .section {
+      border-color: #28364a;
+      background: var(--surface);
+    }
+    html.desktop body.vtd-flat .section + .section,
+    html.desktop body.vtd-flat .grid + .section,
+    html.desktop body.vtd-flat .section + .grid {
+      border-top: 1px solid #dce3ec;
+    }
+    html.desktop .section h2,
+    html.desktop body.vtd-flat .section h2 {
+      margin: 0 0 12px;
+      font: 700 17px/1.25 "Segoe UI", Arial, sans-serif;
+      color: var(--text);
+    }
+    html.desktop .grid {
+      gap: 14px;
+    }
+    html.desktop .cols-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    html.desktop .cols-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    html.desktop .cols-4 {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    html.desktop .home .stats {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    html.desktop .stats {
+      gap: 12px;
+    }
+    html.desktop .stat,
+    html.desktop body.vtd-flat .stat {
+      min-height: 94px;
+      padding: 16px;
+      border: 1px solid #dce3ec;
+      border-radius: 7px;
+      background: #fff;
+      display: grid;
+      align-content: center;
+    }
+    html.desktop body.theme-dark .stat {
+      border-color: #28364a;
+      background: var(--surface);
+    }
+    html.desktop .stat span {
+      margin-bottom: 8px;
+      font: 600 12px/1.2 "Segoe UI", Arial, sans-serif;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    html.desktop .stat strong {
+      font: 700 28px/1 "Segoe UI", Arial, sans-serif;
+    }
+    html.desktop input,
+    html.desktop select,
+    html.desktop textarea,
+    html.desktop button {
+      min-height: 42px;
+      font: 400 14px/1.3 "Segoe UI", Arial, sans-serif;
+    }
+    html.desktop button {
+      font-weight: 600;
+    }
+    html.desktop label {
+      gap: 6px;
+      font: 600 13px/1.3 "Segoe UI", Arial, sans-serif;
+    }
+    html.desktop .form-sheet {
+      width: 100%;
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+    html.desktop .scan-row {
+      grid-template-columns: minmax(0, 1fr) 46px;
+    }
+    html.desktop .scan-btn {
+      min-height: 42px;
+      font-size: 20px;
+    }
+    html.desktop .table-wrap,
+    html.desktop body.vtd-flat .table-wrap {
+      border: 1px solid #dce3ec;
+      border-radius: 6px;
+      background: #fff;
+    }
+    html.desktop body.theme-dark .table-wrap {
+      border-color: #28364a;
+      background: var(--surface);
+    }
+    html.desktop table,
+    html.desktop .search-table {
+      width: 100%;
+      min-width: 720px;
+      table-layout: auto;
+      font: 400 13px/1.35 "Segoe UI", Arial, sans-serif;
+    }
+    html.desktop th,
+    html.desktop body.vtd-flat th {
+      padding: 10px 12px;
+      background: #f6f8fb;
+      color: #5b687c;
+      font-size: 12px;
+      text-align: left;
+      white-space: nowrap;
+    }
+    html.desktop td,
+    html.desktop body.vtd-flat td {
+      padding: 10px 12px;
+      background: var(--surface);
+      white-space: nowrap;
+    }
+    html.desktop .result-table,
+    html.desktop .result-table tbody,
+    html.desktop .result-table tr,
+    html.desktop .result-table td {
+      display: table;
+      width: auto;
+    }
+    html.desktop .result-table {
+      width: 100%;
+    }
+    html.desktop .result-table tbody {
+      display: table-row-group;
+    }
+    html.desktop .result-table tr {
+      display: table-row;
+      padding: 0;
+    }
+    html.desktop .result-table td {
+      display: table-cell !important;
+      padding: 10px 12px;
+      border-bottom: 1px solid #e7ecf2;
+      font-size: 13px !important;
+    }
+    html.desktop .result-table td::before {
+      display: none !important;
+    }
+    html.desktop .search-table th,
+    html.desktop .search-table td {
+      width: auto !important;
+      padding: 9px 10px;
+      font-size: 13px;
+      text-align: left;
+      white-space: nowrap !important;
+    }
+    html.desktop .detail {
+      grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
+      gap: 18px;
+    }
+    html.desktop .permission-grid {
+      display: grid;
+    }
+    html.desktop .permission-row {
+      display: contents;
+    }
+    html.desktop .config-title {
+      display: flex;
+    }
+    html.desktop .config-actions {
+      justify-content: flex-end;
+    }
+    html.desktop .mobile-tabs {
+      display: none !important;
+    }
+    html.desktop .login-page {
+      width: 100%;
+      max-width: none;
+      min-height: 100vh;
+      margin: 0;
+      padding: 48px;
+      place-items: center;
+      background: #eef3f8 !important;
+      box-shadow: none;
+    }
+    html.desktop body.theme-dark .login-page {
+      background: #0c1422 !important;
+    }
+    html.desktop .login-card {
+      width: 430px;
+      max-width: calc(100vw - 32px);
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 18px 48px rgba(15, 23, 42, .12);
+    }
+    html.desktop .login-card h1 {
+      font: 700 27px/1.2 "Segoe UI", Arial, sans-serif;
+    }
+    @media (min-width: 1400px) {
+      html.desktop .side {
+        padding-left: 18px;
+        padding-right: 18px;
+      }
+      html.desktop .content,
+      html.desktop body.vtd-flat .content {
+        padding-left: 32px !important;
+        padding-right: 32px !important;
+      }
+    }
+    @media (max-width: 1050px) {
+      html.desktop body.vtd-flat #app.app {
+        grid-template-columns: 220px minmax(0, 1fr);
+      }
+      html.desktop .content,
+      html.desktop body.vtd-flat .content {
+        padding: 18px !important;
+      }
+      html.desktop .home .stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      html.desktop .cols-3,
+      html.desktop .cols-4 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
   </style>
 </head>
 <body class="vtd-flat">
@@ -848,14 +1229,14 @@
     <aside class="side">
       <div class="brand">
         <div class="logo">V</div>
-        <div><strong>Chứng từ VTD</strong><span>khiempham5209@gmail.com</span></div>
+        <div><strong>Chứng từ VTD</strong><span id="sideAccount">Tài khoản</span></div>
       </div>
       <nav class="nav" id="nav"></nav>
     </aside>
     <main class="main">
       <header class="top">
         <h1 id="title">Trang chủ</h1>
-        <div class="top-actions"><button id="homeRefreshBtn" class="top-refresh" type="button" title="Tải lại dữ liệu trang chủ" aria-label="Tải lại dữ liệu trang chủ" onclick="retryDashboard()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 4v6h-6"></path></svg></button><div class="user">admin · <button style="min-height:32px;padding:0 8px" onclick="logout()">Thoát</button></div></div>
+        <div class="top-actions"><button id="homeRefreshBtn" class="top-refresh" type="button" title="Tải lại dữ liệu trang chủ" aria-label="Tải lại dữ liệu trang chủ" onclick="retryDashboard()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 4v6h-6"></path></svg></button><div class="user"><span id="topAccount">Tài khoản</span><button style="min-height:32px;padding:0 8px" onclick="logout()">Đăng xuất</button></div></div>
       </header>
       <div class="content" id="view"></div>
     </main>
@@ -935,6 +1316,7 @@
     let editingUserIndex = -1;
     let detailRows = rows;
     const navState = {fromView:"home", scrollY:0, detailIndex:0, detailKey:""};
+    const settingsUiState = {scrollY:0, openDetails:[]};
     const expandedSku = {};
     var dynamicState = {rows:{}, loaded:{}, loading:{}, query:{}, detail:{}};
     const defaultAppConfig = {
@@ -998,6 +1380,7 @@
       personal: {
         fontScale:"Lớn",
         theme:"Theo hệ thống",
+        themeColor:"Xanh dương",
         displayMode:"Chuyên nghiệp",
         homeDetailFields:["ma","slog","loai","ngay","user","po","images","st"],
         bottomTabs:["home","search","input","returnth","store","settings"],
@@ -1025,10 +1408,22 @@
     function applyPersonalSettings(){
       const scale = (appConfig.personal && appConfig.personal.fontScale) || "Lớn";
       const theme = (appConfig.personal && appConfig.personal.theme) || "Theo hệ thống";
+      const themeColor = (appConfig.personal && appConfig.personal.themeColor) || "Xanh dương";
       const displayMode = (appConfig.personal && appConfig.personal.displayMode) || "Chuyên nghiệp";
       const hcmHour = Number(new Intl.DateTimeFormat("en-US", {timeZone:"Asia/Ho_Chi_Minh", hour:"2-digit", hour12:false}).format(new Date()));
       const timeDark = hcmHour >= 18 || hcmHour < 6;
       const useDark = theme === "Tối" || (theme === "Theo hệ thống" && timeDark);
+      const palettes = {
+        "Xanh dương": {brand:"#1769aa", soft: useDark ? "#17375f" : "#e6f2ff"},
+        "Xanh lá": {brand:"#0f8a5f", soft: useDark ? "#123d34" : "#e4f8ed"},
+        "Xanh ngọc": {brand:"#0f7f8a", soft: useDark ? "#103b42" : "#e0f7fa"},
+        "Tím": {brand:"#6d45b8", soft: useDark ? "#2e2550" : "#efe8ff"},
+        "Đỏ": {brand:"#b42318", soft: useDark ? "#4a1d1a" : "#ffe8e5"},
+        "Đen": {brand:"#111827", soft: useDark ? "#0b1220" : "#eef2f7"}
+      };
+      const selectedPalette = palettes[themeColor] || palettes["Xanh dương"];
+      document.documentElement.style.setProperty("--brand", selectedPalette.brand);
+      document.documentElement.style.setProperty("--brand-soft", selectedPalette.soft);
       document.body.classList.toggle("font-xl", scale === "Rất lớn");
       document.body.classList.toggle("font-md", scale === "Vừa");
       document.body.classList.toggle("font-sm", scale === "Nhỏ");
@@ -1090,8 +1485,9 @@
       if (typeof live !== "undefined" && live.storeInfo) {
         if (Array.isArray(live.storeInfo.months)) months.push(...live.storeInfo.months.map(normalizeMonth));
         if (Array.isArray(live.storeInfo.monthTotals)) months.push(...live.storeInfo.monthTotals.map(x => normalizeMonth(x.key || x.month)));
+        if (Array.isArray(live.storeInfoKnownMonths)) months.push(...live.storeInfoKnownMonths.map(normalizeMonth));
       }
-      const local = monthKeys().filter(m => !["01/2026"].includes(m));
+      const local = monthKeys();
       const merged = [...months, ...local, ...fallbackBusinessMonths()]
         .filter(m => /^\d{2}\/\d{4}$/.test(m))
         .filter((m,i,a)=>a.indexOf(m)===i)
@@ -1195,13 +1591,15 @@
       return screens
         .map((s, i) => {
           const cfg = screenConfig(s[0]);
+          const showIcon = cfg.showIcon !== false;
           return {
             id: s[0],
-            icon: cfg.icon || s[1],
+            icon: showIcon ? (cfg.icon || s[1]) : "",
             name: cfg.name || s[2],
             position: Number(cfg.position || i + 1),
             mobile: cfg.mobile !== false,
-            enabled: cfg.enabled !== false
+            enabled: cfg.enabled !== false,
+            showIcon
           };
         })
         .filter(s => s.enabled)
@@ -1210,16 +1608,26 @@
     }
     function allScreenDefs(){ return [...configuredScreenDefs(), ...dynamicScreens()]; }
     function shell(){
-      const navScreens = allowedScreens();
+      const desktopMode = document.documentElement.classList.contains("desktop");
+      const allowed = allowedScreens();
+      const navScreens = desktopMode ? allowed.filter(s => s[0] !== "admin") : allowed;
       const tabScreens = mobileScreens();
-      if (!navScreens.some(s => s[0] === view)) view = (appConfig.personal && appConfig.personal.defaultScreen) || "home";
-      el("nav").innerHTML = navScreens.map(s => `<button class="${view===s[0]?'active':''}" onclick="setView('${s[0]}')"><span>${s[1]}</span>${s[2]}</button>`).join("");
+      if (!allowed.some(s => s[0] === view)) view = (appConfig.personal && appConfig.personal.defaultScreen) || "home";
+      el("nav").innerHTML = navScreens.map(s => `<button class="${view===s[0]?'active':''}" onclick="setView('${s[0]}')">${s[1] ? `<span>${s[1]}</span>` : ""}${s[2]}</button>`).join("");
       el("tabs").style.setProperty("--tab-count", Math.max(tabScreens.length, 1));
-      el("tabs").innerHTML = tabScreens.map(s => `<button class="${view===s[0]?'active':''}" onclick="setView('${s[0]}')"><span>${s[1]}</span><small>${s[2]}</small></button>`).join("");
+      el("tabs").innerHTML = tabScreens.map(s => `<button class="${view===s[0]?'active':''}" onclick="setView('${s[0]}')">${s[1] ? `<span>${s[1]}</span>` : ""}<small>${s[2]}</small></button>`).join("");
       const top = document.querySelector(".top");
-      const hideTopTitle = document.body.classList.contains("vtd-flat") && ["search", "input", "returnth", "store"].includes(view);
+      const hideTopTitle = !desktopMode && document.body.classList.contains("vtd-flat") && ["search", "input", "returnth", "store"].includes(view);
       if (top) top.classList.toggle("no-title", hideTopTitle);
       el("title").textContent = hideTopTitle ? "" : (allScreenDefs().find(s => s[0]===view)?.[2] || "");
+      let cachedAccount = {};
+      try { cachedAccount = JSON.parse(localStorage.getItem("vtd_user") || "{}") || {}; } catch (err) {}
+      const accountEmail = cachedAccount.email || cachedAccount.user || "Chưa đăng nhập";
+      const accountRole = String(cachedAccount.role || "Staff");
+      const sideAccount = el("sideAccount");
+      const topAccount = el("topAccount");
+      if (sideAccount) sideAccount.textContent = accountEmail;
+      if (topAccount) topAccount.textContent = `${accountEmail} · ${accountRole}`;
       const refreshBtn = el("homeRefreshBtn");
       if (refreshBtn) refreshBtn.classList.toggle("show", view === "home");
     }
@@ -1562,6 +1970,10 @@
         }
         if (view === "detail") {
           backToList();
+          return true;
+        }
+        if (view === "admin") {
+          setView("settings");
           return true;
         }
         if (view && view !== "home") {
@@ -2057,13 +2469,20 @@
       toast("Đã lưu.", "ok");
     }
     function adminViewsPanel(){
-      return `<section class="section"><h2>Cấu hình màn hình / UX</h2><div class="config-list">
+      const themeColors = ["Xanh dương","Xanh lá","Xanh ngọc","Tím","Đỏ","Đen"];
+      const currentThemeColor = (appConfig.personal && appConfig.personal.themeColor) || "Xanh dương";
+      return `<section class="section"><h2>Cấu hình màn hình / UX</h2>
+        <div class="grid cols-2" style="margin-bottom:12px">
+          <label>Màu chủ đề toàn hệ thống<select id="adminThemeColor" onchange="appConfig.personal=appConfig.personal||{};appConfig.personal.themeColor=this.value;applyPersonalSettings()">${themeColors.map(color => `<option ${color===currentThemeColor?"selected":""}>${color}</option>`).join("")}</select></label>
+        </div>
+        <div class="config-list">
         ${(appConfig.views || []).sort((a,b)=>(a.position||0)-(b.position||0)).map((v, i) => `<div class="config-card">
           <div class="config-title"><div><strong>${html(v.name)}</strong><div class="muted">${html(v.id)} · ${html(v.type)} · vị trí ${v.position}</div></div>${v.mobile !== false ? '<span class="tag on">Tab dưới</span>' : '<span class="tag off">Trong cài đặt</span>'}</div>
           <div class="grid cols-3">
             <label>Tên màn<input value="${html(v.name || "")}" onchange="appConfig.views[${i}].name=this.value"></label>
             <label>Icon<input value="${html(v.icon || "")}" placeholder="VD: ⌂, ⇈, ☷" onchange="appConfig.views[${i}].icon=this.value"></label>
             <label>Vị trí<input type="number" value="${html(v.position || i + 1)}" onchange="appConfig.views[${i}].position=Number(this.value||${i + 1})"></label>
+            <label>Hiện icon<select onchange="appConfig.views[${i}].showIcon=this.value==='true'"><option value="true" ${v.showIcon!==false?"selected":""}>Bật icon</option><option value="false" ${v.showIcon===false?"selected":""}>Tắt icon</option></select></label>
             <label>Hiển thị<select onchange="appConfig.views[${i}].mobile=this.value==='tab'"><option value="tab" ${v.mobile!==false?"selected":""}>Ngoài thanh tab</option><option value="settings" ${v.mobile===false?"selected":""}>Trong cài đặt</option></select></label>
             <label>Bật màn<select onchange="appConfig.views[${i}].enabled=this.value==='true'"><option value="true" ${v.enabled!==false?"selected":""}>Bật</option><option value="false" ${v.enabled===false?"selected":""}>Tắt</option></select></label>
             <label>Loại màn<input value="${html(v.type || "")}" onchange="appConfig.views[${i}].type=this.value"></label>
@@ -2102,10 +2521,12 @@
     }
     function saveScreenUiConfig(){
       appConfig.views.sort((a,b)=>(a.position||0)-(b.position||0));
+      appConfig.personal = appConfig.personal || cloneConfig(defaultAppConfig.personal);
+      appConfig.personal.themeColor = el("adminThemeColor")?.value || appConfig.personal.themeColor || "Xanh dương";
       saveAppConfig(false);
       render();
       toast("Đã lưu cấu hình màn.", "ok");
-      api("saveSystemConfig", {config:{uiConfig:{views: appConfig.views}}, _silent:true}).then(res => {
+      api("saveSystemConfig", {config:{uiConfig:{views: appConfig.views, personal:{themeColor: appConfig.personal.themeColor}}}, _silent:true}).then(res => {
         if (res && res.ok) {
           mergeSystemConfig(res.config || {});
           toast("Đã lưu cấu hình màn cho toàn hệ thống.", "ok");
@@ -2149,7 +2570,28 @@
       adminTab = "profiles";
       admin();
     }
+    function captureSettingsUiState(){
+      const root = el("view");
+      if (!root || !root.classList.contains("settings-page")) return;
+      settingsUiState.scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+      settingsUiState.openDetails = Array.from(root.querySelectorAll("details"))
+        .map((item, index) => item.open ? index : -1)
+        .filter(index => index >= 0);
+    }
+    function restoreSettingsUiState(){
+      const savedOpen = new Set(settingsUiState.openDetails || []);
+      const savedScroll = Number(settingsUiState.scrollY || 0);
+      requestAnimationFrame(() => {
+        const root = el("view");
+        if (!root || !root.classList.contains("settings-page")) return;
+        Array.from(root.querySelectorAll("details")).forEach((item, index) => {
+          item.open = savedOpen.has(index);
+        });
+        requestAnimationFrame(() => window.scrollTo(0, savedScroll));
+      });
+    }
     function settings(){
+      captureSettingsUiState();
       el("view").className = "content settings-page";
       const p = appConfig.personal || defaultAppConfig.personal;
       const tabOptions = allScreenDefs().filter(s => s[0] !== "admin").map(s => [s[0], s[2]]);
@@ -2160,6 +2602,8 @@
       const role = (live.user && live.user.role) || (isAdminUser() ? "admin" : "staff");
       const selectedTheme = p.theme || "Theo hệ thống";
       const selectedDisplay = p.displayMode || "Chuyên nghiệp";
+      const selectedThemeColor = p.themeColor || "Xanh dương";
+      const themeColorOptions = ["Xanh dương","Xanh lá","Xanh ngọc","Tím","Đỏ","Đen"];
       const accountName = (live.user && (live.user.name || live.user.displayName || live.user.fullName)) || currentEmail();
       const stats = live.accountStats || {loading:true, total:0, bySlog:{}};
       const statsText = stats.loading ? "Đang tính..." : Number(stats.total || 0).toLocaleString("vi-VN");
@@ -2188,6 +2632,7 @@
         <div class="grid cols-2">
           <label>Font chữ<select id="personalFont"><option ${p.fontScale==="Nhỏ"?"selected":""}>Nhỏ</option><option ${p.fontScale==="Vừa"?"selected":""}>Vừa</option><option ${p.fontScale==="Lớn"?"selected":""}>Lớn</option><option ${p.fontScale==="Rất lớn"?"selected":""}>Rất lớn</option></select></label>
           <label>Đổi màu nền<select id="personalTheme"><option ${selectedTheme==="Theo hệ thống"?"selected":""}>Theo hệ thống</option><option ${selectedTheme==="Sáng"?"selected":""}>Sáng</option><option ${selectedTheme==="Tối"?"selected":""}>Tối</option></select></label>
+          <label>Màu chủ đề<select id="personalThemeColor">${themeColorOptions.map(color => `<option ${color===selectedThemeColor?"selected":""}>${color}</option>`).join("")}</select></label>
           <label>Chế độ hiển thị<select id="personalDisplay"><option ${selectedDisplay==="Chuyên nghiệp"?"selected":""}>Chuyên nghiệp</option><option ${selectedDisplay==="Dễ nhìn"?"selected":""}>Dễ nhìn</option></select></label>
           <label>Màn mở đầu<select id="personalDefault">${tabOptions.map(x => `<option value="${x[0]}" ${p.defaultScreen===x[0]?"selected":""}>${x[1]}</option>`).join("")}</select></label>
         </div>
@@ -2223,6 +2668,7 @@
       if (isAdminUser() && !live.queueErrorsLoaded) setTimeout(loadQueueErrors, 0);
       if (isAdminUser() && !live.forgotPassRequestsLoaded) setTimeout(loadForgotPassRequests, 0);
       if (!live.accountStatsLoaded && !live.accountStatsLoading) setTimeout(loadAccountStats, 0);
+      restoreSettingsUiState();
     }
     function settingsFold(title, body, open){
       return `<details ${open ? "open" : ""}><summary>${html(title)}</summary><div class="settings-body">${body || ""}</div></details>`;
@@ -2266,6 +2712,7 @@
       }
     }
     function openAdminSection(tab){
+      captureSettingsUiState();
       adminTab = tab || "users";
       setView("admin");
     }
@@ -2376,6 +2823,7 @@
       appConfig.personal = appConfig.personal || cloneConfig(defaultAppConfig.personal);
       appConfig.personal.fontScale = el("personalFont").value;
       appConfig.personal.theme = el("personalTheme").value;
+      appConfig.personal.themeColor = el("personalThemeColor")?.value || appConfig.personal.themeColor || "Xanh dương";
       appConfig.personal.displayMode = el("personalDisplay").value;
       appConfig.personal.defaultScreen = el("personalDefault").value;
       appConfig.personal.bottomTabs = selectedChecks("personalTabs");
@@ -2774,6 +3222,9 @@
       }
       if (config.uiConfig && config.uiConfig.storeCharts) {
         appConfig.storeCharts = Object.assign({}, appConfig.storeCharts || {}, config.uiConfig.storeCharts);
+      }
+      if (config.uiConfig && config.uiConfig.personal) {
+        appConfig.personal = Object.assign({}, appConfig.personal || defaultAppConfig.personal, config.uiConfig.personal);
       }
       saveAppConfig(false);
     }
@@ -3395,6 +3846,7 @@
       storeLoading: false,
       storeInfoMonth: "",
       storeInfoByMonth: {},
+      storeInfoKnownMonths: [],
       storeLocalLoading: {},
       storeRequestId: 0,
       skuItems: [],
@@ -5041,6 +5493,7 @@
     }
     async function enqueueReturnThSave(payload){
       const itemLocalId = localId();
+      const clientBatchId = payload.clientBatchId || itemLocalId;
       const sourceItems = Array.isArray(payload.items) ? payload.items : [];
       const imagePayloads = [];
       sourceItems.forEach((sku, skuIndex) => {
@@ -5054,6 +5507,7 @@
       });
       const imageRefs = await persistQueueImages(itemLocalId, imagePayloads);
       const cleanItems = sourceItems.map((sku, skuIndex) => Object.assign({}, sku, {
+        clientItemId: sku.clientItemId || `${clientBatchId}-${skuIndex + 1}`,
         images: imageRefs.filter(ref => Number(ref.skuIndex || 0) === skuIndex)
       }));
       const item = {
@@ -5067,7 +5521,7 @@
         attempts: 0,
         lastError: "",
         lastStep: "queued",
-        payload: Object.assign({}, payload, {items: cleanItems}),
+        payload: Object.assign({}, payload, {clientBatchId, clientId: itemLocalId, items: cleanItems}),
         images: imageRefs
       };
       const queue = localQueue();
@@ -5138,10 +5592,16 @@
             }
 
             const returnThItems = (Array.isArray(item.payload.items) ? item.payload.items : []).map((sku, skuIndex) => Object.assign({}, sku, {
+              clientItemId: sku.clientItemId || `${item.payload.clientBatchId || item.localId}-${skuIndex + 1}`,
               images: filesBySku[skuIndex] || [],
               files: filesBySku[skuIndex] || []
             }));
-            const res = await returnThApi("saveReturnTh", Object.assign({}, item.payload, {items: returnThItems, _silent:true}));
+            const res = await returnThApi("saveReturnTh", Object.assign({}, item.payload, {
+              clientBatchId: item.payload.clientBatchId || item.localId,
+              clientId: item.localId,
+              items: returnThItems,
+              _silent:true
+            }));
             queue = localQueue();
             const updated = queue.find(x => x.localId === item.localId);
             if (!updated) continue;
@@ -5450,6 +5910,7 @@
       let cache = {};
       try { cache = JSON.parse(localStorage.getItem(STORE_INFO_CACHE_KEY) || "{}") || {}; } catch (err) { cache = {}; }
       const months = cache.months && typeof cache.months === "object" ? cache.months : {};
+      live.storeInfoKnownMonths = Array.isArray(cache.knownMonths) ? cache.knownMonths.map(normalizeMonth).filter(Boolean) : [];
       Object.keys(months).forEach(month => {
         const normalized = normalizeMonth(month);
         const info = months[month];
@@ -5462,6 +5923,23 @@
         live.storeInfoMonth = normalizeMonth(current._month || storeMonth || "");
       }
     }
+    function rememberStoreMonths(months){
+      const normalizedMonths = (Array.isArray(months) ? months : [])
+        .map(m => normalizeMonth(m && typeof m === "object" ? (m.key || m.month) : m))
+        .filter(m => /^\d{2}\/\d{4}$/.test(m));
+      if (!normalizedMonths.length) return [];
+      let cache = {};
+      try { cache = JSON.parse(localStorage.getItem(STORE_INFO_CACHE_KEY) || "{}") || {}; } catch (err) { cache = {}; }
+      const known = new Set([...(Array.isArray(cache.knownMonths) ? cache.knownMonths : []), ...(live.storeInfoKnownMonths || [])].map(normalizeMonth).filter(Boolean));
+      const before = known.size;
+      normalizedMonths.forEach(month => known.add(month));
+      const sorted = Array.from(known).sort(monthCompare);
+      cache.knownMonths = sorted;
+      cache.updatedAt = new Date().toISOString();
+      live.storeInfoKnownMonths = sorted;
+      try { localStorage.setItem(STORE_INFO_CACHE_KEY, JSON.stringify(cache)); } catch (err) {}
+      return sorted.length > before ? sorted.filter(month => !live.storeInfoByMonth[month]) : [];
+    }
     function saveStoreInfoCache(month, info){
       const normalized = normalizeMonth(month);
       if (!normalized || !info) return;
@@ -5469,13 +5947,20 @@
       try { cache = JSON.parse(localStorage.getItem(STORE_INFO_CACHE_KEY) || "{}") || {}; } catch (err) { cache = {}; }
       if (!cache.months || typeof cache.months !== "object") cache.months = {};
       cache.months[normalized] = Object.assign({}, info, {_month:normalized, _cachedAt:Date.now()});
+      const apiMonths = [
+        normalized,
+        ...(Array.isArray(info.months) ? info.months : []),
+        ...(Array.isArray(info.monthTotals) ? info.monthTotals.map(x => x.key || x.month) : [])
+      ].map(normalizeMonth).filter(Boolean);
+      cache.knownMonths = Array.from(new Set([...(Array.isArray(cache.knownMonths) ? cache.knownMonths : []), ...apiMonths])).sort(monthCompare);
+      live.storeInfoKnownMonths = cache.knownMonths;
       const monthKeys = Object.keys(cache.months).filter(key => /^\d{2}\/\d{4}$/.test(normalizeMonth(key))).sort(monthCompare);
       while (monthKeys.length > 18) delete cache.months[monthKeys.shift()];
       cache.updatedAt = new Date().toISOString();
       try { localStorage.setItem(STORE_INFO_CACHE_KEY, JSON.stringify(cache)); } catch (err) {}
     }
-    function preloadStoreMonths(){
-      liveMonthOptions().forEach((month, index) => {
+    function preloadStoreMonths(months){
+      (Array.isArray(months) && months.length ? months : liveMonthOptions()).forEach((month, index) => {
         if (live.storeInfoByMonth[month]) return;
         setTimeout(() => loadStoreInfo(month), index * 450);
       });
@@ -5541,12 +6026,16 @@
         live.storeInfoMonth = requestedMonth;
         live.storeInfoByMonth[requestedMonth] = cachedResult;
         saveStoreInfoCache(requestedMonth, cachedResult);
-        if (res.months && res.months.length) {
-          res.months.forEach(m => { const key = normalizeMonth(m); if (key && !storeByMonth[key]) storeByMonth[key] = []; });
-        }
-        if (Array.isArray(res.monthTotals)) {
-          res.monthTotals.forEach(x => { const key = normalizeMonth(x.key || x.month); if (key && !storeByMonth[key]) storeByMonth[key] = []; });
-        }
+        const discoveredMonths = [
+          ...(Array.isArray(res.months) ? res.months : []),
+          ...(Array.isArray(res.monthTotals) ? res.monthTotals.map(x => x.key || x.month) : [])
+        ];
+        const newMonths = rememberStoreMonths(discoveredMonths);
+        discoveredMonths.forEach(m => {
+          const key = normalizeMonth(m);
+          if (key && !storeByMonth[key]) storeByMonth[key] = [];
+        });
+        if (newMonths.length) preloadStoreMonths(newMonths);
         if (view === "store") setTimeout(store, 0);
         return true;
       }
