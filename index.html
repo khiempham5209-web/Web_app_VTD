@@ -583,6 +583,14 @@
     .search-table th:nth-child(4), .search-table td:nth-child(4) { width: 9%; }
     .search-table th:nth-child(5), .search-table td:nth-child(5) { width: 13%; }
     .search-table th:nth-child(6), .search-table td:nth-child(6) { width: 35%; white-space: nowrap; overflow-wrap: normal; font-size: 10px; text-align: left; }
+    .return-th-table .search-table { font-size: 10.5px; }
+    .return-th-table .search-table th,
+    .return-th-table .search-table td { padding: 3px 1px; line-height: 1.12; text-align: center; }
+    .return-th-table .search-table th:nth-child(1), .return-th-table .search-table td:nth-child(1) { width: 14%; }
+    .return-th-table .search-table th:nth-child(2), .return-th-table .search-table td:nth-child(2) { width: 14%; }
+    .return-th-table .search-table th:nth-child(3), .return-th-table .search-table td:nth-child(3) { width: 20%; }
+    .return-th-table .search-table th:nth-child(4), .return-th-table .search-table td:nth-child(4) { width: 36%; text-align: left; font-size: 10px; overflow-wrap: anywhere; }
+    .return-th-table .search-table th:nth-child(5), .return-th-table .search-table td:nth-child(5) { width: 16%; }
     .result-table thead { display: none; }
     .result-table, .result-table tbody, .result-table tr, .result-table td { display: block; width: 100%; }
     .result-table tr { padding: 10px 12px; border-bottom: 1px solid #e9eef4; position: relative; }
@@ -2747,6 +2755,9 @@
     async function runLookupCacheNow(){
       await warmOrderLookupCache(true);
       await warmAllDataCaches(true);
+      await loadReturnThToday(true);
+      await loadReturnThSku(true);
+      await reportReturnThCacheProgress();
       await loadLookupCacheStatus(true);
     }
     function adminQueueErrorPanel(){
@@ -3255,7 +3266,9 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "10";
+    const APP_VERSION = "2.1";
+    const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
+    const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const nativeImagePickerMap = {
       productCamera: ["camera", "productFiles", "productPreview"],
       productLibrary: ["library", "productFiles", "productPreview"],
@@ -3853,6 +3866,10 @@
       docFiles: [],
       productFiles: [],
       returnThFiles: [],
+      returnThTodayRows: [],
+      returnThTodayLoaded: false,
+      returnThTodayLoading: false,
+      returnThTodayDay: "",
       lookupCacheStatus: [],
       lookupCacheStatusLoaded: false,
       queueErrors: [],
@@ -4558,6 +4575,23 @@
         return {status:"error", downloaded:0, total:0, lastError:String(err && err.message || err)};
       }
     }
+    function returnThCacheProgress(){
+      try {
+        const rows = loadReturnThRowsCache();
+        const today = todayText();
+        const todayRows = rows.filter(row => row && row.date === today);
+        const downloaded = todayRows.length;
+        return {
+          status: live.returnThTodayLoading ? "downloading" : "done",
+          downloaded,
+          total: downloaded,
+          updatedAt: rows.length ? (JSON.parse(localStorage.getItem(RETURN_TH_TODAY_CACHE_KEY) || "{}").updatedAt || "") : "",
+          lastError: ""
+        };
+      } catch (err) {
+        return {status:"error", downloaded:0, total:0, lastError:String(err && err.message || err)};
+      }
+    }
     function reportMasterSkuCacheProgress(progress){
       progress = progress || masterSkuCacheProgress();
       return api("reportLookupCacheStatus", Object.assign({}, progress, {
@@ -4568,10 +4602,21 @@
         _silent: true
       }));
     }
+    function reportReturnThCacheProgress(progress){
+      progress = progress || returnThCacheProgress();
+      return api("reportLookupCacheStatus", Object.assign({}, progress, {
+        cacheType: "returnThToday",
+        label: "TH Truemilk hôm nay",
+        deviceId: deviceId(),
+        appVersion: APP_VERSION,
+        _silent: true
+      }));
+    }
     function localCacheSummaryRows(){
       const order = orderCacheProgress();
       const data = dataCacheProgress();
       const masterSku = masterSkuCacheProgress();
+      const returnTh = returnThCacheProgress();
       const q = queueStats();
       const qTotal = Number(q.pending || 0) + Number(q.pendingImage || 0) + Number(q.syncing || 0) + Number(q.error || 0);
       return [
@@ -4581,6 +4626,7 @@
           return {label:DATA_CACHE_TYPES[type].label, status:cacheStatusLabel(p.status), progress:(Number(p.downloaded || 0) + "/" + Number(p.total || 0))};
         }),
         {label:"Master SKU", status:cacheStatusLabel(masterSku.status), progress:(Number(masterSku.downloaded || 0) + "/" + Number(masterSku.total || 0))},
+        {label:"TH Truemilk hôm nay", status:cacheStatusLabel(returnTh.status), progress:(Number(returnTh.downloaded || 0) + "/" + Number(returnTh.total || 0))},
         {label:"Queue sync", status:qTotal ? (q.error ? "Lỗi" : q.syncing ? "Đang sync" : "Đang chờ") : "Đã đủ", progress:`${qTotal} đơn`}
       ];
     }
@@ -5302,6 +5348,189 @@
         .filter(item => item && item.kind !== "returnTh" && item.status !== "done")
         .map(localRecordFromQueue);
     }
+    function returnThRecordKey(row){
+      return [
+        row && (row.id || row.localId || ""),
+        row && (row.date || ""),
+        row && (row.time || ""),
+        row && (row.maDon || ""),
+        row && (row.user || "")
+      ].join("|");
+    }
+    function normalizeReturnThRemoteRow(row){
+      row = row || {};
+      const rawItems = Array.isArray(row.items) ? row.items : [];
+      const items = rawItems.map(item => ({
+        tenSanPham: item.tenSanPham || item.name || item.product || "",
+        soLuong: item.soLuong || item.qty || item.quantity || "",
+        tinhTrang: item.tinhTrang || item.status || "",
+        ghiChu: item.ghiChu || item.note || "",
+        imageLink: item.imageLink || item.image || ""
+      }));
+      const qty = items.reduce((sum, item) => sum + (Number(item.soLuong) || 0), 0);
+      return {
+        id: row.id || row.key || "",
+        maDon: row.maDon || row.ma_don || row.orderCode || "",
+        date: row.date || row.ngay || todayText(),
+        time: row.time || row.gio || "",
+        user: row.user || row.userEmail || row.email || "",
+        status: row.status || "done",
+        qty: qty || Number(row.qty || row.soLuong || 0) || 0,
+        products: row.products || items.map(item => item.tenSanPham).filter(Boolean).join("; "),
+        items
+      };
+    }
+    function returnThMergeRows(){
+      const merged = [];
+      const seen = {};
+      Array.prototype.slice.call(arguments).flat().map(normalizeReturnThRemoteRow).forEach(row => {
+        if (!row || (!row.id && !row.maDon && !row.date)) return;
+        const key = returnThRecordKey(row);
+        if (seen[key]) {
+          Object.assign(seen[key], row);
+          return;
+        }
+        seen[key] = row;
+        merged.push(row);
+      });
+      return merged.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || String(b.time || "").localeCompare(String(a.time || "")));
+    }
+    function loadReturnThRowsCache(){
+      try {
+        const cache = JSON.parse(localStorage.getItem(RETURN_TH_TODAY_CACHE_KEY) || "{}") || {};
+        return Array.isArray(cache.records) ? returnThMergeRows(cache.records) : [];
+      } catch (err) {
+        return [];
+      }
+    }
+    function saveReturnThRowsCache(rows){
+      const merged = returnThMergeRows(loadReturnThRowsCache(), rows).slice(0, 6000);
+      try {
+        localStorage.setItem(RETURN_TH_TODAY_CACHE_KEY, JSON.stringify({
+          updatedAt: new Date().toISOString(),
+          records: merged
+        }));
+      } catch (err) {}
+      return merged;
+    }
+    function returnThCachedRowsForDay(day){
+      return loadReturnThRowsCache().filter(row => row.date === day);
+    }
+    function localReturnThRecord(item){
+      const p = item.payload || {};
+      const items = Array.isArray(p.items) ? p.items : [];
+      const normalizedItems = items.map(sku => ({
+        tenSanPham: sku && (sku.tenSanPham || sku.name || sku.product) || "",
+        soLuong: sku && (sku.soLuong || sku.qty || sku.quantity) || "",
+        tinhTrang: sku && (sku.tinhTrang || sku.status) || "",
+        ghiChu: sku && (sku.ghiChu || sku.note) || "",
+        imageLink: ""
+      }));
+      const totalQty = normalizedItems.reduce((sum, sku) => sum + (Number(sku && sku.soLuong) || 0), 0);
+      return {
+        id: item.localId || "",
+        localId: item.localId || "",
+        maDon: p.maDon || "",
+        date: item.dateText || todayText(),
+        time: item.timeText || "",
+        user: item.user || currentEmail(),
+        status: item.status || "pending",
+        qty: totalQty,
+        products: normalizedItems.map(sku => sku && sku.tenSanPham).filter(Boolean).join("; "),
+        items: normalizedItems
+      };
+    }
+    function returnThTodayRecords(){
+      const today = todayText();
+      const localRows = localQueue()
+        .filter(item => item && item.kind === "returnTh" && item.dateText === today)
+        .map(localReturnThRecord);
+      return returnThMergeRows(returnThCachedRowsForDay(today), live.returnThTodayRows || [], localRows)
+        .filter(row => row.date === today)
+        .sort((a, b) => String(b.time || "").localeCompare(String(a.time || "")));
+    }
+    function returnThStatusLabel(status){
+      return String(status || "").toLowerCase() === "error" ? "Fail" : "Done";
+    }
+    function loadReturnThToday(force = false){
+      const day = todayText();
+      const cached = returnThCachedRowsForDay(day);
+      if (cached.length && live.returnThTodayDay !== day) {
+        live.returnThTodayRows = cached;
+        live.returnThTodayDay = day;
+        if (view === "home") setTimeout(home, 0);
+      }
+      if (!force && live.returnThTodayLoaded && live.returnThTodayDay === day) return;
+      if (live.returnThTodayLoading) return;
+      if (!returnThApiUrl()) return;
+      live.returnThTodayLoading = true;
+      returnThApi("listToday", {date: day, allUsers:true, _silent:true}).then(res => {
+        if (res && res.ok) {
+          const allRows = saveReturnThRowsCache(Array.isArray(res.items) ? res.items : []);
+          live.returnThTodayRows = allRows.filter(row => row.date === day);
+          live.returnThTodayLoaded = true;
+          live.returnThTodayDay = day;
+          reportReturnThCacheProgress();
+          if (view === "home") home();
+        }
+      }).catch(err => {
+        reportReturnThCacheProgress({status:"error", downloaded:cached.length, total:cached.length, lastError:String(err && err.message || err)});
+      }).finally(() => {
+        live.returnThTodayLoading = false;
+      });
+    }
+    function returnThTodayTable(data){
+      const rows = data || [];
+      if (!rows.length) return `<div class="lookup">Chưa có đơn TH trong ngày.</div>`;
+      return `<div class="table-wrap return-th-table"><table class="search-table"><thead><tr><th>Ngày</th><th>Giờ</th><th>Mã đơn</th><th>User thao tác</th><th>Đồng bộ</th></tr></thead><tbody>${rows.map((row, index) => `<tr onclick="returnThDetail(${index})">
+        <td>${html(row.date)}</td>
+        <td>${html(row.time)}</td>
+        <td>${html(row.maDon || "-")}</td>
+        <td>${html(row.user || "-")}</td>
+        <td>${html(returnThStatusLabel(row.status))}</td>
+      </tr>`).join("")}</tbody></table></div>`;
+    }
+    function returnThDetail(index){
+      const row = returnThTodayRecords()[index];
+      if (!row) return;
+      navState.fromView = "home";
+      navState.scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+      view = "detail";
+      const items = Array.isArray(row.items) && row.items.length ? row.items : [{
+        tenSanPham: row.products || "",
+        soLuong: row.qty || "",
+        tinhTrang: "",
+        ghiChu: ""
+      }];
+      const itemBlocks = items.map((item, i) => `<div class="sku-card open">
+        <div class="thumb" style="display:grid;place-items:center;font-weight:900;color:#64748b">TH</div>
+        <div><strong>${html(item.tenSanPham || `SKU ${i + 1}`)}</strong>
+          <div class="sku-meta">
+            ${kvRows([
+              ["Số lượng", item.soLuong],
+              ["Tình trạng", item.tinhTrang],
+              ["Ghi chú", item.ghiChu]
+            ])}
+          </div>
+        </div>
+      </div>`).join("");
+      const detailKv = kvRows([
+        ["Mã đơn", row.maDon],
+        ["User thao tác", row.user],
+        ["Trạng thái đồng bộ", returnThStatusLabel(row.status)]
+      ]);
+      el("view").className = "content";
+      el("title").textContent = "Chi tiết TH Truemilk";
+      el("view").innerHTML = `<section class="section detail">
+        <div>
+          <button onclick="backToList()">← Quay lại</button>
+          <h2 style="margin-top:14px">Nhập TH</h2>
+          <div class="kv">${detailKv}</div>
+          <h2 style="margin-top:16px">Sản phẩm</h2>
+          ${itemBlocks}
+        </div>
+      </section>`;
+    }
     function saveDashboardCache(data){
       try {
         localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify({
@@ -5468,6 +5697,9 @@
       payload.orderCode = maDon;
       payload["Mã đơn"] = maDon;
       const itemLocalId = localId();
+      payload.clientId = payload.clientId || itemLocalId;
+      payload.clientBatchId = payload.clientBatchId || itemLocalId;
+      payload.idempotencyKey = payload.idempotencyKey || itemLocalId;
       const imageRefs = await persistQueueImages(itemLocalId, imagePayloads || []);
       const item = {
         localId: itemLocalId,
@@ -5493,8 +5725,8 @@
     }
     async function enqueueReturnThSave(payload){
       const itemLocalId = localId();
-      const clientBatchId = payload.clientBatchId || itemLocalId;
       const sourceItems = Array.isArray(payload.items) ? payload.items : [];
+      const clientBatchId = payload.clientBatchId || itemLocalId;
       const imagePayloads = [];
       sourceItems.forEach((sku, skuIndex) => {
         (sku.images || []).slice(0, 1).forEach((img, imgIndex) => imagePayloads.push(Object.assign({}, img, {
@@ -5623,6 +5855,8 @@
             saveLocalQueue(queue);
             updateInputSyncBadge();
             scheduleQueueReport();
+            live.returnThTodayLoaded = false;
+            if (view === "home") loadReturnThToday(true);
             continue;
           }
           await ensureQueueItemImageRefs(item);
@@ -5897,8 +6131,10 @@
     async function warmLiveData(){
       await Promise.allSettled([
         loadDashboard({silent:true}),
-        loadProducts(true)
+        loadProducts(true),
+        loadReturnThSku(false)
       ]);
+      loadReturnThToday(false);
       const currentMonth = currentBusinessMonth();
       if (shouldLiveLoadStore(currentMonth)) loadStoreInfo(currentMonth);
       warmStoreInfoFromDevice();
@@ -6056,7 +6292,10 @@
         slogMap[r.slog] = (slogMap[r.slog] || 0) + 1;
       });
       const qStats = queueStats({includeReturnTh:false});
+      const returnThRows = returnThTodayRecords();
+      loadReturnThToday(false);
       const bySlog = ["O1B1","O1B3","O1BH","Ecom"].map(s => [s, String(d && d.bySlog ? (slogMap[s] || 0) : previewRows.filter(r => r.slog === s).length)]);
+      bySlog.push(["TH truemmilk", returnThRows.length.toLocaleString("vi-VN")]);
       const byStatus = d && d.byStatus ? d.byStatus.map(x => [x.key, String(x.value)]) : [["Đã đồng bộ", "0"], ["Đang đồng bộ", "0"], ["Lỗi", "0"]];
       const localSyncing = Number(qStats.pending || 0) + Number(qStats.syncing || 0);
       const localErrors = Number(qStats.error || 0);
@@ -6084,7 +6323,8 @@
           <section class="section"><h2>Trạng thái</h2>${smallTable(mergedStatus)}</section>
         </div>
         <section class="section"><h2>User thao tác trong ngày</h2>${smallTable(byUser)}</section>
-        <section class="section"><h2>Chi tiết trong ngày</h2>${searchResultView(previewRows, {hideLimit:true, summaryRows:previewRows, summaryCounts:slogMap})}</section>`;
+        <section class="section"><h2>Chi tiết trong ngày</h2>${searchResultView(previewRows, {hideLimit:true, summaryRows:previewRows, summaryCounts:slogMap})}</section>
+        <section class="section"><h2>Chi tiết TH Truemilk trong ngày</h2>${returnThTodayTable(returnThRows)}</section>`;
     }
     function search(){
       el("view").className = "content";
@@ -6160,7 +6400,10 @@
       live.dashboardError = "";
       live.dashboardRefreshActive = true;
       home();
-      await loadDashboard({silent:true});
+      await Promise.allSettled([
+        loadDashboard({silent:true}),
+        loadReturnThToday(true)
+      ]);
       live.dashboardRefreshActive = false;
       home();
     }
@@ -6374,8 +6617,60 @@
         if (!silent) setLoading(false);
       });
     }
+    function normalizeReturnThSkuItem(x){
+      return {
+        subSku: String((typeof x === "string" ? "" : (x.subSku || x.sku || "")) || "").trim(),
+        name: String((typeof x === "string" ? x : (x.name || x.tenSanPham || x["Tên sản phẩm"] || "")) || "").trim(),
+        unit: String((typeof x === "string" ? "" : (x.unit || x.donVi || "")) || "").trim()
+      };
+    }
+    function uniqueReturnThSku(items){
+      const seen = {};
+      return (Array.isArray(items) ? items : []).map(normalizeReturnThSkuItem).filter(x => x.name).filter(x => {
+        const key = String(x.subSku || x.name).toLowerCase();
+        if (seen[key]) return false;
+        seen[key] = true;
+        return true;
+      });
+    }
+    function hydrateReturnThSkuCache(){
+      try {
+        const cache = JSON.parse(localStorage.getItem(RETURN_TH_SKU_CACHE_KEY) || "{}") || {};
+        const items = uniqueReturnThSku(cache.items || []);
+        if (!items.length) return false;
+        returnThProducts.splice(0, returnThProducts.length, ...items);
+        return true;
+      } catch (err) {
+        return false;
+      }
+    }
+    function saveReturnThSkuCache(items){
+      const unique = uniqueReturnThSku(items);
+      try {
+        localStorage.setItem(RETURN_TH_SKU_CACHE_KEY, JSON.stringify({
+          day: todayText(),
+          updatedAt: new Date().toISOString(),
+          items: unique
+        }));
+      } catch (err) {}
+      return unique;
+    }
+    function returnThSkuCacheFresh(){
+      try {
+        const cache = JSON.parse(localStorage.getItem(RETURN_TH_SKU_CACHE_KEY) || "{}") || {};
+        return cache.day === todayText() && Array.isArray(cache.items) && cache.items.length;
+      } catch (err) {
+        return false;
+      }
+    }
     async function loadReturnThSku(force = false){
-      if (returnThState.loadingSku || (returnThState.skuLoaded && !force)) return;
+      const hasCached = hydrateReturnThSkuCache();
+      if (hasCached && !force && returnThSkuCacheFresh()) {
+        returnThState.skuLoaded = true;
+        if (view === "returnth") setTimeout(returnth, 0);
+        return;
+      }
+      if (returnThState.loadingSku || (returnThState.skuLoaded && !force && (hasCached || returnThProducts.length))) return;
       const url = returnThApiUrl();
       if (!url) {
         returnThState.skuLoaded = true;
@@ -6385,19 +6680,9 @@
       try {
         const res = await returnThApi("listSku", {_silent:true});
         if (res && res.ok && Array.isArray(res.items)) {
-          const items = res.items.map(x => ({
-            subSku: String((typeof x === "string" ? "" : (x.subSku || x.sku || "")) || "").trim(),
-            name: String((typeof x === "string" ? x : (x.name || x.tenSanPham || x["Tên sản phẩm"] || "")) || "").trim(),
-            unit: String((typeof x === "string" ? "" : (x.unit || x.donVi || "")) || "").trim()
-          })).filter(x => x.name);
+          const items = uniqueReturnThSku(res.items);
           if (items.length) {
-            const seen = {};
-            const unique = items.filter(x => {
-              const key = String(x.subSku || x.name).toLowerCase();
-              if (seen[key]) return false;
-              seen[key] = true;
-              return true;
-            });
+            const unique = saveReturnThSkuCache(items);
             returnThProducts.splice(0, returnThProducts.length, ...unique);
             if (returnThState.product && !unique.some(x => x.name === returnThState.product)) returnThState.product = "";
           }
@@ -6502,6 +6787,7 @@
       }
       const item = res.item || {subSku, name, unit};
       returnThProducts.push(item);
+      saveReturnThSkuCache(returnThProducts);
       returnThState.product = name;
       returnThState.productSearch = name;
       returnThState.customProduct = false;
