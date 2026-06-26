@@ -4578,11 +4578,12 @@
     function returnThCacheProgress(){
       try {
         const rows = loadReturnThRowsCache();
-        const today = todayText();
-        const todayRows = rows.filter(row => row && row.date === today);
+        const today = todayApiDateText();
+        const todayRows = rows.filter(row => row && dateTextDdMmYyyy(row.date) === today);
         const downloaded = todayRows.length;
+        const status = live.returnThTodayLoading ? "downloading" : (live.returnThTodayLoaded ? "done" : (downloaded ? "done" : "pending"));
         return {
-          status: live.returnThTodayLoading ? "downloading" : "done",
+          status,
           downloaded,
           total: downloaded,
           updatedAt: rows.length ? (JSON.parse(localStorage.getItem(RETURN_TH_TODAY_CACHE_KEY) || "{}").updatedAt || "") : "",
@@ -5313,6 +5314,18 @@
     function todayText(){
       return new Date().toLocaleDateString("vi-VN", {timeZone:"Asia/Ho_Chi_Minh"});
     }
+    function dateTextDdMmYyyy(value){
+      if (value instanceof Date && !isNaN(value.getTime())) {
+        return `${String(value.getDate()).padStart(2, "0")}/${String(value.getMonth() + 1).padStart(2, "0")}/${value.getFullYear()}`;
+      }
+      const text = String(value || "").trim();
+      const m = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) return `${String(Number(m[1])).padStart(2, "0")}/${String(Number(m[2])).padStart(2, "0")}/${m[3]}`;
+      return text;
+    }
+    function todayApiDateText(){
+      return dateTextDdMmYyyy(new Date());
+    }
     function timeText(){
       return new Date().toLocaleTimeString("vi-VN", {timeZone:"Asia/Ho_Chi_Minh", hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false});
     }
@@ -5371,7 +5384,7 @@
       return {
         id: row.id || row.key || "",
         maDon: row.maDon || row.ma_don || row.orderCode || "",
-        date: row.date || row.ngay || todayText(),
+        date: dateTextDdMmYyyy(row.date || row.ngay || todayText()),
         time: row.time || row.gio || "",
         user: row.user || row.userEmail || row.email || "",
         status: row.status || "done",
@@ -5414,7 +5427,8 @@
       return merged;
     }
     function returnThCachedRowsForDay(day){
-      return loadReturnThRowsCache().filter(row => row.date === day);
+      const key = dateTextDdMmYyyy(day);
+      return loadReturnThRowsCache().filter(row => dateTextDdMmYyyy(row.date) === key);
     }
     function localReturnThRecord(item){
       const p = item.payload || {};
@@ -5431,7 +5445,7 @@
         id: item.localId || "",
         localId: item.localId || "",
         maDon: p.maDon || "",
-        date: item.dateText || todayText(),
+        date: dateTextDdMmYyyy(item.dateText || todayText()),
         time: item.timeText || "",
         user: item.user || currentEmail(),
         status: item.status || "pending",
@@ -5441,19 +5455,19 @@
       };
     }
     function returnThTodayRecords(){
-      const today = todayText();
+      const today = todayApiDateText();
       const localRows = localQueue()
-        .filter(item => item && item.kind === "returnTh" && item.dateText === today)
+        .filter(item => item && item.kind === "returnTh" && dateTextDdMmYyyy(item.dateText) === today)
         .map(localReturnThRecord);
       return returnThMergeRows(returnThCachedRowsForDay(today), live.returnThTodayRows || [], localRows)
-        .filter(row => row.date === today)
+        .filter(row => dateTextDdMmYyyy(row.date) === today)
         .sort((a, b) => String(b.time || "").localeCompare(String(a.time || "")));
     }
     function returnThStatusLabel(status){
       return String(status || "").toLowerCase() === "error" ? "Fail" : "Done";
     }
     function loadReturnThToday(force = false){
-      const day = todayText();
+      const day = todayApiDateText();
       const cached = returnThCachedRowsForDay(day);
       if (cached.length && live.returnThTodayDay !== day) {
         live.returnThTodayRows = cached;
@@ -5466,14 +5480,25 @@
       live.returnThTodayLoading = true;
       returnThApi("listToday", {date: day, allUsers:true, _silent:true}).then(res => {
         if (res && res.ok) {
-          const allRows = saveReturnThRowsCache(Array.isArray(res.items) ? res.items : []);
-          live.returnThTodayRows = allRows.filter(row => row.date === day);
+          const remoteRows = Array.isArray(res.items) ? res.items : (Array.isArray(res.rows) ? res.rows : []);
+          const allRows = saveReturnThRowsCache(remoteRows);
+          live.returnThTodayRows = allRows.filter(row => dateTextDdMmYyyy(row.date) === day);
           live.returnThTodayLoaded = true;
           live.returnThTodayDay = day;
+          live.returnThTodayLoading = false;
           reportReturnThCacheProgress();
           if (view === "home") home();
+        } else {
+          live.returnThTodayLoading = false;
+          reportReturnThCacheProgress({
+            status:"error",
+            downloaded:cached.length,
+            total:cached.length,
+            lastError:(res && res.message) || "Không tải được dữ liệu TH Truemilk"
+          });
         }
       }).catch(err => {
+        live.returnThTodayLoading = false;
         reportReturnThCacheProgress({status:"error", downloaded:cached.length, total:cached.length, lastError:String(err && err.message || err)});
       }).finally(() => {
         live.returnThTodayLoading = false;
@@ -6648,7 +6673,7 @@
       const unique = uniqueReturnThSku(items);
       try {
         localStorage.setItem(RETURN_TH_SKU_CACHE_KEY, JSON.stringify({
-          day: todayText(),
+          day: todayApiDateText(),
           updatedAt: new Date().toISOString(),
           items: unique
         }));
@@ -6658,7 +6683,7 @@
     function returnThSkuCacheFresh(){
       try {
         const cache = JSON.parse(localStorage.getItem(RETURN_TH_SKU_CACHE_KEY) || "{}") || {};
-        return cache.day === todayText() && Array.isArray(cache.items) && cache.items.length;
+        return dateTextDdMmYyyy(cache.day) === todayApiDateText() && Array.isArray(cache.items) && cache.items.length;
       } catch (err) {
         return false;
       }
