@@ -1305,6 +1305,15 @@
       <div id="scannerStatus" class="scanner-status">Đưa mã vào khung để quét.</div>
     </div>
   </div>
+  <div id="appConfirmModal" class="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div id="appConfirmMessage" class="notice-box">Bạn có muốn thoát khỏi ứng dụng?</div>
+      <div class="modal-actions">
+        <button type="button" onclick="closeAppConfirm(false)">Hủy</button>
+        <button class="primary" type="button" onclick="closeAppConfirm(true)">OK</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     const screens = [
@@ -1678,6 +1687,33 @@
       live.searchFilters = {query:"", slog:"Tất cả", loaiHoan:"Tất cả", fromDate:"", toDate:""};
     }
     let appHistoryReady = false;
+    let appExitConfirmCallback = null;
+    let appExitConfirmed = false;
+    function openAppConfirm(message, onOk){
+      const modal = el("appConfirmModal");
+      const body = el("appConfirmMessage");
+      if (body) body.textContent = message || "Bạn có muốn thoát khỏi ứng dụng?";
+      appExitConfirmCallback = typeof onOk === "function" ? onOk : null;
+      if (modal) modal.classList.add("active");
+    }
+    function closeAppConfirm(confirmed){
+      const modal = el("appConfirmModal");
+      if (modal) modal.classList.remove("active");
+      const cb = appExitConfirmCallback;
+      appExitConfirmCallback = null;
+      if (confirmed && cb) cb();
+    }
+    function requestExitApp(){
+      openAppConfirm("Bạn có muốn thoát khỏi ứng dụng?", () => {
+        appExitConfirmed = true;
+        try {
+          if (window.history && history.length > 1) history.back();
+          else window.close();
+        } catch (err) {
+          try { window.close(); } catch (innerErr) {}
+        }
+      });
+    }
     function pushAppHistory(nextView){
       if (!appHistoryReady || !window.history || !history.pushState) return;
       try { history.pushState({v: nextView || view}, "", "#" + encodeURIComponent(nextView || view)); } catch (err) {}
@@ -1688,6 +1724,10 @@
       try { history.replaceState({v:view}, "", "#" + encodeURIComponent(view)); } catch (err) {}
       window.addEventListener("popstate", event => {
         try {
+          if (appExitConfirmed) {
+            appExitConfirmed = false;
+            return;
+          }
           if (typeof codeScanner !== "undefined" && codeScanner && codeScanner.active) {
             closeCodeScanner();
             pushAppHistory(view);
@@ -1700,13 +1740,15 @@
           }
           const next = event.state && event.state.v;
           if (!next || next === view) {
-            if (!confirm("Bạn có muốn thoát khỏi ứng dụng?")) pushAppHistory(view);
+            pushAppHistory(view);
+            requestExitApp();
             return;
           }
           view = next;
           render();
         } catch (err) {
-          if (!confirm("Bạn có muốn thoát khỏi ứng dụng?")) pushAppHistory(view);
+          pushAppHistory(view);
+          requestExitApp();
         }
       });
     }
@@ -2019,7 +2061,8 @@
           setView("home");
           return true;
         }
-        return !confirm("Bạn có muốn thoát khỏi ứng dụng?");
+        requestExitApp();
+        return true;
       } catch (err) {
       }
       return false;
@@ -3349,7 +3392,7 @@
       const input = el(id);
       if (input) input.click();
     }
-    const codeScanner = {stream:null, detector:null, active:false, targetId:"", onValue:null, frame:0, canvas:null, ctx:null, barcodeBusy:false};
+    const codeScanner = {stream:null, detector:null, active:false, targetId:"", onValue:null, frame:0, ticks:0, canvas:null, ctx:null, barcodeBusy:false};
     async function openCodeScanner(targetId, onValueName){
       const input = el(targetId);
       if (!input) return toast("Không tìm thấy ô cần nhận mã", "err");
@@ -3362,6 +3405,7 @@
       codeScanner.targetId = targetId;
       codeScanner.onValue = typeof window[onValueName] === "function" ? window[onValueName] : null;
       codeScanner.detector = null;
+      codeScanner.ticks = 0;
       if (hasNativeScanner) {
         try {
           codeScanner.detector = new BarcodeDetector({
@@ -3384,7 +3428,7 @@
         video.srcObject = codeScanner.stream;
         await video.play();
         codeScanner.active = true;
-        if (status) status.textContent = codeScanner.detector ? "Đưa mã vào khung để quét." : "Đưa QR/mã vạch vào khung để quét.";
+        if (status) status.textContent = "Đưa QR hoặc mã vạch vào khung để quét.";
         scanCodeFrame();
       } catch (err) {
         closeCodeScanner(false);
@@ -3468,16 +3512,16 @@
       const status = el("scannerStatus");
       try {
         if (video && video.readyState >= 2) {
+          codeScanner.ticks = (codeScanner.ticks || 0) + 1;
           if (codeScanner.detector) {
             const codes = await codeScanner.detector.detect(video);
             if (codes && codes.length && acceptScannedCode(codes[0].rawValue)) return;
-          } else {
-            const raw = scanQrWithCanvas(video);
-            if (acceptScannedCode(raw)) return;
-            if (codeScanner.frame % 8 === 0) {
-              const barcodeRaw = await scanBarcodeWithCanvas(video);
-              if (acceptScannedCode(barcodeRaw)) return;
-            }
+          }
+          const raw = scanQrWithCanvas(video);
+          if (acceptScannedCode(raw)) return;
+          if (codeScanner.ticks % 8 === 0) {
+            const barcodeRaw = await scanBarcodeWithCanvas(video);
+            if (acceptScannedCode(barcodeRaw)) return;
           }
         }
       } catch (err) {
@@ -3489,6 +3533,7 @@
       codeScanner.active = false;
       if (codeScanner.frame) cancelAnimationFrame(codeScanner.frame);
       codeScanner.frame = 0;
+      codeScanner.ticks = 0;
       if (codeScanner.stream) {
         codeScanner.stream.getTracks().forEach(track => track.stop());
         codeScanner.stream = null;
