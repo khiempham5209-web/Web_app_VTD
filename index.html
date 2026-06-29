@@ -207,7 +207,7 @@
     .product-picker { display: grid; gap: 8px; margin-top: 10px; }
     .sku-form { display: grid; gap: 10px; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #fbfdff; }
     .sku-added-list { display: grid; gap: 7px; margin-top: 9px; }
-    .sku-added-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 8px 9px; }
+    .sku-added-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); padding: 8px 9px; }
     .sku-added-item strong { font-size: .94em; font-weight: 500; overflow-wrap: anywhere; }
     .sku-added-item span { color: var(--muted); font-size: .86em; }
     .sku-added-item button { min-height: 30px; padding: 0 8px; font-size: 12px; }
@@ -359,7 +359,7 @@
     .sku-search-clear:hover,
     .sku-search-clear:focus { color: var(--err); background: var(--soft) !important; }
     .sku-search-caret { pointer-events: none; position: absolute; right: 15px; top: 17px; width: 9px; height: 9px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); }
-    .sku-suggestions { display: none; position: absolute; z-index: 35; left: 0; right: 0; top: 52px; max-height: 280px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); }
+    .sku-suggestions { display: none; position: absolute; z-index: 95; left: 0; right: 0; top: 52px; max-height: 280px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
     .sku-suggestions.open { display: block; }
     .sku-suggestion { width: 100%; min-height: 42px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); color: var(--text); text-align: left; padding: 9px 12px; display: block; font-weight: 500; }
     .sku-suggestion:hover,
@@ -1630,6 +1630,9 @@
     }
     function canAction(action){
       if (isSystemOwner()) return true;
+      if (action === "updateRecord" && live && live.user && Array.isArray(live.user.actions)) {
+        return live.user.actions.includes(action);
+      }
       return userActionList().includes(action);
     }
     function canAdminUsers(){
@@ -2023,6 +2026,7 @@
     }
     function canEditRecord(r){
       if (!r || !canAction("updateRecord")) return false;
+      if (!isSystemOwner() && (!live || !live.user || !Array.isArray(live.user.actions))) return false;
       const day = dateTextDdMmYyyy(r.ngay || r.dateText || r.date || "");
       return !!(day && day === todayApiDateText() && (r.id || r.rowNumber || r.sourceRow));
     }
@@ -2114,6 +2118,65 @@
       item.name = match.name;
       item.type = match.raw.type || match.raw.loai || match.raw["Loại"] || item.type || "";
     }
+    function editSkuSuggestionsHtml(index, forceAll){
+      const item = editRecordState.skuItems[index] || {};
+      const query = forceAll ? "" : skuSearchText(item.name || "");
+      const rows = skuComboOptions("vtd")
+        .filter(row => !query || skuSearchText(row.name).includes(query))
+        .slice(0, 2000);
+      if (!rows.length) {
+        return `<button type="button" class="sku-suggestion" onclick="chooseEditSkuCustom(${index})">Không thấy SKU phù hợp - nhập tay</button>`;
+      }
+      return rows.map(row => `<button type="button" class="sku-suggestion" onclick="chooseEditSku(${index}, '${html(row.key)}')">${html(row.name)}</button>`).join("");
+    }
+    function editSkuSuggestionBox(index){
+      return el(`editSkuSuggestions_${index}`);
+    }
+    function focusEditSku(index){
+      const box = editSkuSuggestionBox(index);
+      if (!box) return;
+      box.innerHTML = editSkuSuggestionsHtml(index, true);
+      box.classList.add("open");
+    }
+    function updateEditSkuName(index, value){
+      applyEditSkuName(index, value);
+      const box = editSkuSuggestionBox(index);
+      const clearButton = el(`editSkuNameClear_${index}`);
+      if (clearButton) clearButton.style.display = String(value || "").trim() ? "" : "none";
+      if (!box) return;
+      box.innerHTML = editSkuSuggestionsHtml(index, false);
+      box.classList.add("open");
+    }
+    function clearEditSkuName(index){
+      const item = editRecordState.skuItems[index];
+      if (!item) return;
+      item.name = "";
+      const input = el(`editSkuName_${index}`);
+      if (input) input.value = "";
+      const clearButton = el(`editSkuNameClear_${index}`);
+      if (clearButton) clearButton.style.display = "none";
+      focusEditSku(index);
+    }
+    function chooseEditSku(index, key){
+      const item = editRecordState.skuItems[index];
+      const match = skuComboOptions("vtd").find(row => row.key === String(key));
+      if (!item || !match) return;
+      item.name = match.name;
+      item.type = match.raw.type || match.raw.loai || match.raw["Loại"] || item.type || "";
+      const input = el(`editSkuName_${index}`);
+      if (input) input.value = item.name;
+      const clearButton = el(`editSkuNameClear_${index}`);
+      if (clearButton) clearButton.style.display = item.name ? "" : "none";
+      const box = editSkuSuggestionBox(index);
+      if (box) box.classList.remove("open");
+      renderEditRecordKeepPosition();
+    }
+    function chooseEditSkuCustom(index){
+      const box = editSkuSuggestionBox(index);
+      if (box) box.classList.remove("open");
+      const input = el(`editSkuName_${index}`);
+      if (input) input.focus();
+    }
     function addEditSku(){
       editRecordState.skuItems.push({name:"", type:"", qty:"1", status:"Bình thường", lot:"", serial:"", note:""});
       renderEditRecordKeepPosition();
@@ -2126,9 +2189,15 @@
       const typeOptions = ["", "Quà/đồ chơi", "Sữa"].map(x => `<option value="${html(x)}">${html(x || "Chọn type")}</option>`).join("");
       const statusOptions = ["Bình thường","Móp, lỗi, hỏng sản phẩm","Sai/thiếu sản phẩm"].map(x => `<option value="${html(x)}">${html(x)}</option>`).join("");
       if (!editRecordState.skuItems.length) return `<div class="edit-muted">Chưa có SKU. Bấm thêm SKU nếu đơn hoàn là sản phẩm/thu hồi.</div>`;
-      const options = skuComboOptions("vtd").map(item => `<option value="${html(item.name)}"></option>`).join("");
       return editRecordState.skuItems.map((item, index) => `<div class="edit-sku-row">
-        <label>Tên sản phẩm<input list="editSkuMasterList" value="${html(item.name || "")}" data-edit-field="sku-name-${index}" oninput="applyEditSkuName(${index}, this.value)" placeholder="Nhập tên SKU để tìm"></label>
+        <label>Tên sản phẩm
+          <div class="sku-search-wrap">
+            <input id="editSkuName_${index}" class="sku-search-input" value="${html(item.name || "")}" data-edit-field="sku-name-${index}" autocomplete="off" onfocus="focusEditSku(${index})" onclick="focusEditSku(${index})" oninput="updateEditSkuName(${index}, this.value)" placeholder="Nhập tên SKU để tìm">
+            <button id="editSkuNameClear_${index}" type="button" class="sku-search-clear" style="${String(item.name || "").trim() ? "" : "display:none"}" title="Xóa tên SKU" aria-label="Xóa tên SKU" onclick="clearEditSkuName(${index})">×</button>
+            <span class="sku-search-caret" aria-hidden="true"></span>
+            <div id="editSkuSuggestions_${index}" class="sku-suggestions">${editSkuSuggestionsHtml(index, false)}</div>
+          </div>
+        </label>
         <div class="grid cols-2">
           <label>Type<select onchange="updateEditSku(${index}, 'type', this.value)">${typeOptions.replace(`value="${html(item.type || "")}"`, `value="${html(item.type || "")}" selected`)}</select></label>
           <label>Số lượng<input type="number" min="1" value="${html(item.qty || "")}" oninput="updateEditSku(${index}, 'qty', this.value)" placeholder="SL"></label>
@@ -2141,7 +2210,7 @@
         <label>Ghi chú<input value="${html(item.note || "")}" oninput="updateEditSku(${index}, 'note', this.value)"></label>
         ${item.imagePath ? `<div class="edit-muted">Ảnh sản phẩm hiện có: ${html(item.imagePath)}</div>` : ""}
         <div class="edit-inline-actions"><button type="button" class="edit-danger" onclick="removeEditSku(${index})">Xóa SKU</button></div>
-      </div>`).join("") + `<datalist id="editSkuMasterList">${options}</datalist>`;
+      </div>`).join("");
     }
     function renderEditRecord(){
       const r = editRecordState.record || {};
@@ -2157,6 +2226,7 @@
           <button class="success" type="button" onclick="saveEditRecord()" ${editRecordState.saving ? "disabled" : ""}>${editRecordState.saving ? "Đang lưu..." : "Lưu sửa"}</button>
         </div>
         <div class="lookup"><strong>Đơn đang sửa</strong><span>${html(r.ma || "-")} · RAW_ID ${html(r.id || "-")}</span></div>
+        <label>Mã đơn GHTK<input value="${html(r.ma || "")}" data-edit-field="ma" oninput="updateEditRecordField('ma', this.value)" placeholder="Mã đơn"></label>
         <div class="grid cols-2">
           <label>SLOG<select onchange="updateEditRecordField('slog', this.value)">${["O1B1","O1B3","O1BH","Ecom"].map(x => `<option value="${x}" ${x===r.slog?"selected":""}>${x}</option>`).join("")}</select></label>
           <label>Loại hoàn<select onchange="updateEditRecordField('loai', this.value)">${loaiOptions.map(x => `<option value="${html(x)}" ${x===r.loai?"selected":""}>${html(x)}</option>`).join("")}</select></label>
@@ -2220,7 +2290,7 @@
         };
         const res = await api("updateRecord", params);
         if (!res || res.ok === false) throw new Error(res && (res.message || res.error) || "Không lưu được chỉnh sửa");
-        const merged = mergeRecordInfo(original, {slog:r.slog, loai:r.loai, xacThuc:r.xacThuc, po:r.po, tinhTrang:r.tinhTrang, note:r.note, skuItems:cleanSku, st:"Đang đồng bộ"});
+        const merged = mergeRecordInfo(original, {ma:r.ma || original.ma, slog:r.slog, loai:r.loai, xacThuc:r.xacThuc, po:r.po, tinhTrang:r.tinhTrang, note:r.note, skuItems:cleanSku, st:"Đang đồng bộ"});
         merged.needSync = "Running";
         detailRows[editRecordState.index] = merged;
         const globalIndex = rows.findIndex(x => (x.id && x.id === merged.id) || (x.ma && x.ma === merged.ma && x.gio === merged.gio));
@@ -3900,14 +3970,14 @@
       if (scope === "returnth") return returnThState.productSearch || returnThState.product || "";
       return skuState.productSearch || currentProductLabel();
     }
-    function skuComboRows(scope, limit = 2000){
-      const query = skuSearchText(skuComboValue(scope));
+    function skuComboRows(scope, limit = 2000, forceAll = false){
+      const query = forceAll ? "" : skuSearchText(skuComboValue(scope));
       return skuComboOptions(scope)
         .filter(item => !query || skuSearchText(item.name).includes(query))
         .slice(0, limit);
     }
-    function skuComboSuggestionsHtml(scope){
-      const rows = skuComboRows(scope);
+    function skuComboSuggestionsHtml(scope, forceAll = false){
+      const rows = skuComboRows(scope, 2000, forceAll);
       if (!rows.length) {
         return `<button type="button" class="sku-suggestion" onclick="chooseNewSkuCombo('${scope}')">Không thấy SKU phù hợp - tạo mới</button>`;
       }
@@ -3919,7 +3989,7 @@
       const boxId = scope === "returnth" ? "returnThSkuSuggestions" : "skuSuggestions";
       const hasValue = !!String(skuComboValue(scope) || "").trim();
       return `<div class="sku-search-wrap">
-        <input id="${id}" class="sku-search-input" value="${html(skuComboValue(scope))}" placeholder="${html(options.placeholder || "Nhập tên SKU để tìm")}" autocomplete="off" onfocus="focusSkuCombo('${scope}')" oninput="updateSkuCombo('${scope}', this.value)">
+        <input id="${id}" class="sku-search-input" value="${html(skuComboValue(scope))}" placeholder="${html(options.placeholder || "Nhập tên SKU để tìm")}" autocomplete="off" onfocus="focusSkuCombo('${scope}')" onclick="focusSkuCombo('${scope}')" oninput="updateSkuCombo('${scope}', this.value)">
         <button id="${id}Clear" type="button" class="sku-search-clear" style="${hasValue ? "" : "display:none"}" title="Xóa tên SKU" aria-label="Xóa tên SKU" onclick="clearSkuCombo('${scope}')">×</button>
         <span class="sku-search-caret" aria-hidden="true"></span>
         <div id="${boxId}" class="sku-suggestions">${skuComboSuggestionsHtml(scope)}</div>
@@ -3932,7 +4002,7 @@
     function focusSkuCombo(scope){
       const box = skuComboBox(scope);
       if (!box) return;
-      box.innerHTML = skuComboSuggestionsHtml(scope);
+      box.innerHTML = skuComboSuggestionsHtml(scope, true);
       box.classList.add("open");
     }
     document.addEventListener("click", event => {
