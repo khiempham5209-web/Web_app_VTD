@@ -100,6 +100,8 @@
     body.theme-dark .settings-root,
     body.theme-dark .sku-card,
     body.theme-dark .sku-form,
+    body.theme-dark .edit-sku-row,
+    body.theme-dark .edit-image-row,
     body.theme-dark .preview-item,
     body.theme-dark .form-sheet { background: var(--surface); color: var(--text); border-color: var(--line); }
     body.theme-dark th { background: #0b1220; }
@@ -246,6 +248,7 @@
     .mini-icon-btn svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
     .mini-icon-btn.danger { color: var(--err); border-color: #fecaca; }
     .mini-icon-btn.warn { color: #9a6700; border-color: #f6d78b; }
+    .inline-actions { display: inline-flex; align-items: center; gap: 6px; }
     .user-perms { display: grid; gap: 6px; padding-top: 4px; border-top: 1px solid #edf2f7; }
     .perm-line { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 6px; align-items: start; }
     .perm-line .muted { font-size: 12px; font-weight: 800; padding-top: 4px; }
@@ -389,6 +392,15 @@
     .store-day-types { display: flex; flex-wrap: wrap; gap: 5px 10px; color: var(--muted); font-size: 13px; }
     .error-retry { margin-top: 9px; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-color: #fca5a5; color: var(--err); background: #fff; }
     .error-retry svg { width: 17px; height: 17px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .detail-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+    .edit-form { display: grid; gap: 14px; }
+    .edit-inline-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+    .edit-image-list, .edit-sku-list { display: grid; gap: 8px; }
+    .edit-image-row { display: grid; grid-template-columns: 48px minmax(0,1fr) auto; gap: 8px; align-items: center; border-bottom: 1px solid var(--line); padding: 7px 0; }
+    .edit-image-row img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--soft); }
+    .edit-sku-row { border: 1px solid var(--line); border-radius: 8px; padding: 9px; display: grid; gap: 8px; }
+    .edit-danger { color: var(--err); border-color: #fecaca; background: var(--surface) !important; }
+    .edit-muted { color: var(--muted); font-size: 13px; line-height: 1.35; }
     .modal-overlay { position: fixed; inset: 0; z-index: 90; display: none; align-items: center; justify-content: center; padding: 14px; background: rgba(15, 23, 42, .38); }
     .modal-overlay.active { display: flex; }
     .modal-card { width: min(100%, 430px); background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 16px; display: grid; gap: 12px; }
@@ -838,6 +850,8 @@
     body.theme-dark.vtd-flat .product-row,
     body.theme-dark.vtd-flat .sku-card,
     body.theme-dark.vtd-flat .sku-form,
+    body.theme-dark.vtd-flat .edit-sku-row,
+    body.theme-dark.vtd-flat .edit-image-row,
     body.theme-dark.vtd-flat .preview-item,
     body.theme-dark.vtd-flat .login-card,
     body.theme-dark.vtd-flat .settings-menu details,
@@ -1364,6 +1378,7 @@
     let editingUserIndex = -1;
     let detailRows = rows;
     const navState = {fromView:"home", scrollY:0, detailIndex:0, detailKey:""};
+    const editRecordState = {active:false, index:-1, record:null, docFiles:[], skuItems:[], removedImages:{}, saving:false};
     const settingsUiState = {scrollY:0, openDetails:[]};
     const expandedSku = {};
     var dynamicState = {rows:{}, loaded:{}, loading:{}, query:{}, detail:{}};
@@ -1580,7 +1595,13 @@
         return [m, totalMap[m] ?? fixed[m] ?? localTotal ?? 0];
       });
     }
+    const SYSTEM_OWNER_EMAILS = ["khiempham5209@gmail.com"];
+    function isSystemOwner(){
+      const email = typeof currentEmail === "function" ? currentEmail() : "";
+      return SYSTEM_OWNER_EMAILS.includes(String(email || "").toLowerCase());
+    }
     function isAdminUser(){
+      if (isSystemOwner()) return true;
       const role = (typeof live !== "undefined" && live.user && live.user.role) || "";
       const email = typeof currentEmail === "function" ? currentEmail() : "";
       const cfgUser = appConfig.users.find(u => String(u.email).toLowerCase() === String(email).toLowerCase());
@@ -1603,14 +1624,37 @@
       }
       return appConfig.users.find(u => String(u.email).toLowerCase() === String(email).toLowerCase()) || null;
     }
+    function userActionList(){
+      const cfgUser = currentUserConfig();
+      return Array.isArray(cfgUser && cfgUser.actions) ? cfgUser.actions : [];
+    }
+    function canAction(action){
+      if (isSystemOwner()) return true;
+      return userActionList().includes(action);
+    }
+    function canAdminUsers(){
+      return isSystemOwner() || canAction("manageUsers");
+    }
+    function canAdminConfig(){
+      return isSystemOwner() || canAction("manageConfig") || canAction("adminConfig");
+    }
+    function canViewSyncOps(){
+      return isSystemOwner() || canAction("viewSync") || canAction("retrySync") || canAction("runCommand");
+    }
+    function canRetryRemoteSync(){
+      return isSystemOwner() || canAction("retrySync");
+    }
+    function canOpenAdminArea(){
+      return isSystemOwner() || canAdminUsers() || canAdminConfig();
+    }
     function allowedScreens(){
       const cfgUser = currentUserConfig();
       const baseScreens = allScreenDefs();
-      const allowed = cfgUser ? [...(cfgUser.screens || [])] : (isAdminUser() ? baseScreens.map(s => s[0]) : ["home","search","input","store","settings"]);
+      const allowed = cfgUser ? [...(cfgUser.screens || [])] : (isSystemOwner() ? baseScreens.map(s => s[0]) : ["home","search","input","store","settings"]);
       if (!allowed.includes("settings")) allowed.push("settings");
-      if (!allowed.includes("returnth")) allowed.push("returnth");
-      if (isAdminUser() && !allowed.includes("admin")) allowed.push("admin");
-      return baseScreens.filter(s => allowed.includes(s[0]) && (s[0] !== "admin" || isAdminUser()));
+      if (isSystemOwner() && !allowed.includes("returnth")) allowed.push("returnth");
+      if (isSystemOwner() && !allowed.includes("admin")) allowed.push("admin");
+      return baseScreens.filter(s => allowed.includes(s[0]) && (s[0] !== "admin" || canOpenAdminArea()));
     }
     function mobileScreens(){
       const personal = appConfig.personal || defaultAppConfig.personal;
@@ -1823,15 +1867,18 @@
     }
     function recordImages(r){
       const list = [];
-      const raw = r.images || r.imageLinks || r.links || r.files || [];
+      const raw = r.images || r.imageLinks || r.links || r.files || r.anhLinks || r.driveLinks || [];
       if (Array.isArray(raw)) {
         raw.forEach((x, i) => {
           if (!x) return;
           if (typeof x === "string") list.push({url:x, label:`Ảnh ${i + 1}`});
-          else if (x.url || x.link || x.driveUrl) list.push({url:x.url || x.link || x.driveUrl, label:x.label || x.name || x.fileName || `Ảnh ${i + 1}`});
+          else {
+            const url = x.url || x.link || x.driveUrl || x.fileUrl || x.folderUrl || x.rawPath || x.path || x.imagePath;
+            if (url) list.push({url:url, label:x.label || x.name || x.fileName || x.rawPath || x.path || `Ảnh ${i + 1}`});
+          }
         });
       }
-      ["imageUrl","anhChungTu","linkAnh","driveFileUrl","fileUrl"].forEach(k => { if (r[k]) list.push({url:r[k], label:k}); });
+      ["imageUrl","anhChungTu","linkAnh","driveFileUrl","fileUrl","folderUrl","rawPath","imagePath","anh","hinhAnh","Ảnh","Hình ảnh"].forEach(k => { if (r[k]) list.push({url:r[k], label:k}); });
       return list.filter(x => x.url);
     }
     function recordSkuItems(r){
@@ -1846,7 +1893,8 @@
             serial:x.serial || x.maSerial || x.maQr || x.qr || x["Mã serial"] || "",
             lot:x.loHsd || x.maLoHsd || x.lot || x.hsd || x["Mã lô/HSD"] || "",
             status:x.tinhTrang || x.tinhTrangSku || x.status || x.trangThai || x["Tình trạng"] || "",
-            note:x.ghiChu || x.ghiChuSku || x.note || x.thongTin || x["Ghi chú"] || ""
+            note:x.ghiChu || x.ghiChuSku || x.note || x.thongTin || x["Ghi chú"] || "",
+            imagePath:x.anhSanPham || x.imagePath || x.imageUrl || x.image || x.fileUrl || x.folderUrl || x.rawPath || x.path || x.link || x.url || x.driveUrl || x["Ảnh sản phẩm"] || ""
           });
     }
     function compactValue(value){
@@ -1872,7 +1920,7 @@
     function mergeRecordInfo(base, next){
       base = Object.assign({}, base || {});
       next = next || {};
-      ["customer","od","invoice","po","storeType","loaiSt","month","tinhTrang","note","user","slog","loai","xacThuc","ngay","gio","st"].forEach(key => {
+      ["customer","od","invoice","po","storeType","loaiSt","month","tinhTrang","note","user","slog","loai","xacThuc","ngay","gio","st","rawId"].forEach(key => {
         if (compactValue(next[key])) base[key] = next[key];
       });
       if (!base.ma && compactValue(next.ma)) base.ma = next.ma;
@@ -1973,6 +2021,219 @@
       const count = recordImages(r).length;
       return count ? `<span class="tag on">${count} ảnh/link</span>` : "";
     }
+    function canEditRecord(r){
+      if (!r || !canAction("updateRecord")) return false;
+      const day = dateTextDdMmYyyy(r.ngay || r.dateText || r.date || "");
+      return !!(day && day === todayApiDateText() && (r.id || r.rowNumber || r.sourceRow));
+    }
+    function editImageKey(img, index){
+      return String((img && (img.id || img.url || img.link || img.path || img.label)) || `img_${index}`);
+    }
+    function startEditRecord(index){
+      let r = detailRows[index] || rows[index] || rows[0];
+      const cacheKeys = [
+        navState.detailKey,
+        r && r.id,
+        r && r.rawId,
+        r && r.ma,
+        r && `${r.ma || ""}_${r.gio || ""}`,
+        `${index}`
+      ].filter(Boolean);
+      cacheKeys.forEach(cacheKey => {
+        if (live.detailCache[cacheKey]) r = mergeRecordInfo(r, live.detailCache[cacheKey]);
+      });
+      if (!canEditRecord(r)) {
+        toast("Bạn không có quyền sửa đơn này hoặc đơn không thuộc ngày hôm nay.", "err");
+        return;
+      }
+      editRecordState.active = true;
+      editRecordState.index = index;
+      editRecordState.record = JSON.parse(JSON.stringify(r || {}));
+      editRecordState.docFiles = [];
+      editRecordState.skuItems = recordSkuItems(r).map(x => Object.assign({}, x));
+      editRecordState.removedImages = {};
+      editRecordState.saving = false;
+      renderEditRecord();
+    }
+    function cancelEditRecord(){
+      editRecordState.active = false;
+      detail(editRecordState.index >= 0 ? editRecordState.index : navState.detailIndex, true);
+    }
+    function renderEditRecordKeepPosition(){
+      const y = window.scrollY || document.documentElement.scrollTop || 0;
+      const active = document.activeElement;
+      const activeId = active && active.id;
+      const activeName = active && active.getAttribute && active.getAttribute("data-edit-field");
+      const start = active && typeof active.selectionStart === "number" ? active.selectionStart : null;
+      const end = active && typeof active.selectionEnd === "number" ? active.selectionEnd : null;
+      renderEditRecord();
+      setTimeout(() => {
+        const next = activeId ? el(activeId) : (activeName ? document.querySelector(`[data-edit-field="${activeName}"]`) : null);
+        if (next) {
+          next.focus();
+          if (start != null && typeof next.setSelectionRange === "function") {
+            try { next.setSelectionRange(start, end == null ? start : end); } catch (err) {}
+          }
+        }
+        window.scrollTo(0, y);
+      }, 0);
+    }
+    function updateEditRecordField(key, value){
+      if (!editRecordState.record) return;
+      editRecordState.record[key] = value;
+      if (key === "slog") {
+        const opts = loaiBySlog[value] || [];
+        if (opts.length && !opts.includes(editRecordState.record.loai)) editRecordState.record.loai = opts[0];
+      }
+      if (key === "slog" || key === "loai") renderEditRecordKeepPosition();
+    }
+    function toggleEditImageRemove(key){
+      editRecordState.removedImages[key] = !editRecordState.removedImages[key];
+      renderEditRecordKeepPosition();
+    }
+    function toggleEditImageRemoveAt(index){
+      const img = recordImages(editRecordState.record || {})[index];
+      toggleEditImageRemove(editImageKey(img, index));
+    }
+    function captureEditRecordFiles(input){
+      editRecordState.docFiles = Array.from(input.files || []);
+      renderEditRecordKeepPosition();
+    }
+    function updateEditSku(index, key, value){
+      const item = editRecordState.skuItems[index];
+      if (!item) return;
+      item[key] = value;
+    }
+    function applyEditSkuName(index, value){
+      updateEditSku(index, "name", value);
+      const norm = skuSearchText(value);
+      if (!norm) return;
+      const match = skuComboOptions("vtd").find(row => skuSearchText(row.name) === norm);
+      if (!match || !match.raw) return;
+      const item = editRecordState.skuItems[index];
+      item.name = match.name;
+      item.type = match.raw.type || match.raw.loai || match.raw["Loại"] || item.type || "";
+    }
+    function addEditSku(){
+      editRecordState.skuItems.push({name:"", type:"", qty:"1", status:"Bình thường", lot:"", serial:"", note:""});
+      renderEditRecordKeepPosition();
+    }
+    function removeEditSku(index){
+      editRecordState.skuItems.splice(index, 1);
+      renderEditRecordKeepPosition();
+    }
+    function editSkuRowsHtml(){
+      const typeOptions = ["", "Quà/đồ chơi", "Sữa"].map(x => `<option value="${html(x)}">${html(x || "Chọn type")}</option>`).join("");
+      const statusOptions = ["Bình thường","Móp, lỗi, hỏng sản phẩm","Sai/thiếu sản phẩm"].map(x => `<option value="${html(x)}">${html(x)}</option>`).join("");
+      if (!editRecordState.skuItems.length) return `<div class="edit-muted">Chưa có SKU. Bấm thêm SKU nếu đơn hoàn là sản phẩm/thu hồi.</div>`;
+      const options = skuComboOptions("vtd").map(item => `<option value="${html(item.name)}"></option>`).join("");
+      return editRecordState.skuItems.map((item, index) => `<div class="edit-sku-row">
+        <label>Tên sản phẩm<input list="editSkuMasterList" value="${html(item.name || "")}" data-edit-field="sku-name-${index}" oninput="applyEditSkuName(${index}, this.value)" placeholder="Nhập tên SKU để tìm"></label>
+        <div class="grid cols-2">
+          <label>Type<select onchange="updateEditSku(${index}, 'type', this.value)">${typeOptions.replace(`value="${html(item.type || "")}"`, `value="${html(item.type || "")}" selected`)}</select></label>
+          <label>Số lượng<input type="number" min="1" value="${html(item.qty || "")}" oninput="updateEditSku(${index}, 'qty', this.value)" placeholder="SL"></label>
+        </div>
+        <label>Tình trạng<select onchange="updateEditSku(${index}, 'status', this.value)">${statusOptions.replace(`value="${html(item.status || "Bình thường")}"`, `value="${html(item.status || "Bình thường")}" selected`)}</select></label>
+        <div class="grid cols-2">
+          <label>Mã lô/HSD<input value="${html(item.lot || "")}" oninput="updateEditSku(${index}, 'lot', this.value)"></label>
+          <label>Mã serial<input value="${html(item.serial || "")}" oninput="updateEditSku(${index}, 'serial', this.value)"></label>
+        </div>
+        <label>Ghi chú<input value="${html(item.note || "")}" oninput="updateEditSku(${index}, 'note', this.value)"></label>
+        ${item.imagePath ? `<div class="edit-muted">Ảnh sản phẩm hiện có: ${html(item.imagePath)}</div>` : ""}
+        <div class="edit-inline-actions"><button type="button" class="edit-danger" onclick="removeEditSku(${index})">Xóa SKU</button></div>
+      </div>`).join("") + `<datalist id="editSkuMasterList">${options}</datalist>`;
+    }
+    function renderEditRecord(){
+      const r = editRecordState.record || {};
+      view = "detailEdit";
+      const loaiOptions = loaiBySlog[r.slog] || ["Chứng từ","Sản phẩm","Thu hồi"];
+      const isDoc = String(r.loai || "").toLowerCase().includes("chứng từ") || String(r.loai || "").toLowerCase().includes("chung tu");
+      const images = recordImages(r);
+      el("title").textContent = "Sửa đơn";
+      el("view").className = "content";
+      el("view").innerHTML = `<section class="section detail edit-form">
+        <div class="detail-actions">
+          <button type="button" onclick="cancelEditRecord()">← Quay lại</button>
+          <button class="success" type="button" onclick="saveEditRecord()" ${editRecordState.saving ? "disabled" : ""}>${editRecordState.saving ? "Đang lưu..." : "Lưu sửa"}</button>
+        </div>
+        <div class="lookup"><strong>Đơn đang sửa</strong><span>${html(r.ma || "-")} · RAW_ID ${html(r.id || "-")}</span></div>
+        <div class="grid cols-2">
+          <label>SLOG<select onchange="updateEditRecordField('slog', this.value)">${["O1B1","O1B3","O1BH","Ecom"].map(x => `<option value="${x}" ${x===r.slog?"selected":""}>${x}</option>`).join("")}</select></label>
+          <label>Loại hoàn<select onchange="updateEditRecordField('loai', this.value)">${loaiOptions.map(x => `<option value="${html(x)}" ${x===r.loai?"selected":""}>${html(x)}</option>`).join("")}</select></label>
+        </div>
+        ${isDoc ? `<label>Xác thực chứng từ<select onchange="updateEditRecordField('xacThuc', this.value)">${["Đã nhận chứng từ","Chưa nhận chứng từ"].map(x => `<option value="${html(x)}" ${x===r.xacThuc?"selected":""}>${html(x)}</option>`).join("")}</select></label>` : ""}
+        <label>Mã PO chứng từ hoàn<input value="${html(r.po || "")}" data-edit-field="po" oninput="updateEditRecordField('po', this.value)" placeholder="Mã PO"></label>
+        <label>Tình trạng<select onchange="updateEditRecordField('tinhTrang', this.value)">${["Bình thường","Khác (điền thông tin bên dưới)","Thiếu chứng từ","Sai/thiếu thông tin","Móp, lỗi, hỏng sản phẩm"].map(x => `<option value="${html(x)}" ${x===(r.tinhTrang || "Bình thường")?"selected":""}>${html(x)}</option>`).join("")}</select></label>
+        <label>Ghi chú<textarea data-edit-field="note" oninput="updateEditRecordField('note', this.value)" placeholder="Ghi chú nếu có">${html(r.note || "")}</textarea></label>
+        <div>
+          <h2>Ảnh / link</h2>
+          <div class="edit-image-list">${images.length ? images.map((img, index) => {
+            const key = editImageKey(img, index);
+            const removed = !!editRecordState.removedImages[key];
+            return `<div class="edit-image-row" style="${removed ? "opacity:.45;text-decoration:line-through" : ""}"><img src="${html(img.url)}" onerror="this.style.display='none'"><span>${html(img.label || img.url)}</span><button type="button" class="edit-danger" onclick="toggleEditImageRemoveAt(${index})">${removed ? "Giữ lại" : "Xóa"}</button></div>`;
+          }).join("") : `<div class="edit-muted">Đơn chưa có ảnh/link.</div>`}</div>
+          <div class="file-actions" style="margin-top:10px">
+            <button type="button" onclick="openFilePicker('editDocCamera')">Chụp thêm ảnh</button>
+            <button type="button" onclick="openFilePicker('editDocLibrary')">Chọn thêm ảnh</button>
+          </div>
+          <input id="editDocCamera" class="hidden-file" type="file" accept="image/*" capture="environment" multiple onchange="captureEditRecordFiles(this)">
+          <input id="editDocLibrary" class="hidden-file" type="file" accept="image/*" multiple onchange="captureEditRecordFiles(this)">
+          ${editRecordState.docFiles.length ? `<div class="edit-muted">${editRecordState.docFiles.length} ảnh mới sẽ được thêm khi lưu.</div>` : ""}
+        </div>
+        <div>
+          <div class="detail-actions"><h2>SKU / sản phẩm</h2><button type="button" onclick="addEditSku()">+ Thêm SKU</button></div>
+          <div class="edit-sku-list">${editSkuRowsHtml()}</div>
+        </div>
+      </section>`;
+    }
+    async function saveEditRecord(){
+      const original = detailRows[editRecordState.index] || rows[editRecordState.index] || {};
+      const r = editRecordState.record || {};
+      if (!canEditRecord(original)) {
+        toast("Bạn không có quyền sửa đơn này.", "err");
+        return;
+      }
+      const cleanSku = editRecordState.skuItems
+        .map(x => ({name:String(x.name || "").trim(), type:String(x.type || "").trim(), qty:String(x.qty || "").trim(), status:String(x.status || "").trim(), lot:String(x.lot || "").trim(), serial:String(x.serial || "").trim(), note:String(x.note || "").trim(), imagePath:String(x.imagePath || "").trim()}))
+        .filter(x => x.name || x.type || x.qty || x.lot || x.serial || x.note);
+      editRecordState.saving = true;
+      renderEditRecord();
+      try {
+        const newImages = await imagePayloadsForFiles(editRecordState.docFiles, {imageType:"document", edit:true});
+        const removedImageKeys = recordImages(r).map((img, index) => editImageKey(img, index)).filter(key => editRecordState.removedImages[key]);
+        const params = {
+          id: original.rawId || r.rawId || original.id || r.id,
+          rawId: original.rawId || r.rawId || original.id || r.id,
+          rowNumber: original.rowNumber || original.sourceRow || r.rowNumber || r.sourceRow,
+          maDon: r.ma || original.ma,
+          slog: r.slog,
+          loaiHoan: r.loai,
+          xacThucChungTu: r.xacThuc,
+          xacThucHoaDon: r.xacThuc,
+          po: r.po,
+          tinhTrang: r.tinhTrang,
+          ghiChu: r.note,
+          skuItems: cleanSku,
+          images: newImages,
+          removeImages: removedImageKeys,
+          needSync: "Yes"
+        };
+        const res = await api("updateRecord", params);
+        if (!res || res.ok === false) throw new Error(res && (res.message || res.error) || "Không lưu được chỉnh sửa");
+        const merged = mergeRecordInfo(original, {slog:r.slog, loai:r.loai, xacThuc:r.xacThuc, po:r.po, tinhTrang:r.tinhTrang, note:r.note, skuItems:cleanSku, st:"Đang đồng bộ"});
+        merged.needSync = "Running";
+        detailRows[editRecordState.index] = merged;
+        const globalIndex = rows.findIndex(x => (x.id && x.id === merged.id) || (x.ma && x.ma === merged.ma && x.gio === merged.gio));
+        if (globalIndex >= 0) rows[globalIndex] = merged;
+        editRecordState.active = false;
+        toast("Đã lưu sửa đơn. Hệ thống sẽ chạy lại đồng bộ.", "ok");
+        detail(editRecordState.index, true);
+      } catch (err) {
+        toast(err && err.message ? err.message : String(err), "err");
+        editRecordState.saving = false;
+        renderEditRecord();
+      }
+    }
     function search(){
       el("view").className = "content";
       el("view").innerHTML = `
@@ -2020,11 +2281,12 @@
         ["Ghi chú", r.note],
         ["Đồng bộ", r.st, pill(r.st)]
       ]);
+      view = "detail";
       el("view").className = "content";
       el("title").textContent = "Chi tiết";
       el("view").innerHTML = `<section class="section detail">
         <div>
-          <button onclick="backToList()">← Quay lại</button>
+          <div class="detail-actions"><button onclick="backToList()">← Quay lại</button>${canEditRecord(r) ? `<button class="primary" onclick="startEditRecord(${i})">Sửa</button>` : ""}</div>
           <h2 style="margin-top:14px">${r.loai}</h2>
           <div class="kv">${detailKv}</div>
           ${customerKv ? `<h2 style="margin-top:16px">Thông tin khách hàng</h2><div class="kv">${customerKv}</div>` : ""}
@@ -2051,6 +2313,10 @@
         }
         if (view === "detail") {
           backToList();
+          return true;
+        }
+        if (view === "detailEdit") {
+          cancelEditRecord();
           return true;
         }
         if (view === "admin") {
@@ -2212,12 +2478,16 @@
       return `${renderStoreChart(chartData, (appConfig.storeCharts || {}).production || "line", false)}<div class="store-day-list">${filteredDays.map(day => `<div class="store-day-row"><div class="store-day-head"><strong>${html(displayStoreDate(day.date))}</strong><strong>${Number(day.total || 0).toLocaleString("vi-VN")} đơn</strong></div><div class="store-day-types">${day.stores.map(item => `<span>${html(item.key)}: <strong>${Number(item.value || 0).toLocaleString("vi-VN")}</strong></span>`).join("")}</div></div>`).join("")}</div>`;
     }
     function admin(){
-      if (!isAdminUser()) {
+      if (!canOpenAdminArea()) {
         setView("home");
         return;
       }
       el("view").className = "content admin-page";
       if (adminTab === "users") {
+        if (!canAdminUsers()) {
+          adminTab = canAdminConfig() ? "menu" : "users";
+          if (!canAdminUsers()) return admin();
+        }
         el("view").innerHTML = `<section class="section">
           <div class="config-title">
             <div><h2>Config user (phân quyền)</h2><div class="muted">Thêm tài khoản, sửa vai trò, màn được sử dụng và thao tác được phép.</div></div>
@@ -2237,6 +2507,14 @@
         ["export","Export config"]
       ];
       if (adminTab === "menu") {
+        if (!canAdminConfig()) {
+          if (canAdminUsers()) {
+            adminTab = "users";
+            return admin();
+          }
+          setView("settings");
+          return;
+        }
         el("view").innerHTML = `<section class="section">
           <div class="config-title">
             <div><h2>Cấu hình</h2><div class="muted">Chọn riêng từng nhóm cấu hình cần chỉnh sửa.</div></div>
@@ -2246,6 +2524,10 @@
             ${tabs.map(item => `<button onclick="setAdminTab('${item[0]}')"><span>${html(item[1])}</span><span>›</span></button>`).join("")}
           </div>
         </section>`;
+        return;
+      }
+      if (!canAdminConfig()) {
+        setAdminTab(canAdminUsers() ? "users" : "menu");
         return;
       }
       const activeTab = tabs.find(item => item[0] === adminTab) || tabs[0];
@@ -2677,9 +2959,9 @@
       el("view").className = "content settings-page";
       const p = appConfig.personal || defaultAppConfig.personal;
       const tabOptions = allScreenDefs().filter(s => s[0] !== "admin").map(s => [s[0], s[2]]);
-      const adminCache = isAdminUser() ? adminLookupCachePanel() : "";
-      const adminQueueErrors = isAdminUser() ? adminQueueErrorPanel() : "";
-      const adminForgotPass = isAdminUser() ? adminForgotPassPanel() : "";
+      const adminCache = canViewSyncOps() ? adminLookupCachePanel() : "";
+      const adminQueueErrors = canViewSyncOps() ? adminQueueErrorPanel() : "";
+      const adminForgotPass = canAdminUsers() ? adminForgotPassPanel() : "";
       const queuePanel = localQueuePanel();
       const role = (live.user && live.user.role) || (isAdminUser() ? "admin" : "staff");
       const selectedTheme = p.theme || "Theo hệ thống";
@@ -2722,33 +3004,34 @@
         ${checkGroup("personalTabs", tabOptions, p.bottomTabs || [])}
         <div class="config-actions" style="margin-top:12px"><button onclick="clearLocalQueueConfirm()">Xóa queue máy này</button><button class="primary" onclick="savePersonalSettings()">Lưu cài đặt</button></div>
       </section>`;
-      const adminPanel = isAdminUser() ? `<section class="section"><h2>Quản lý admin</h2>
+      const adminPanel = canOpenAdminArea() ? `<section class="section"><h2>Quản lý admin</h2>
         <div class="settings-action-list">
-          <button onclick="openAdminSection('users')"><span>Config user (phân quyền)</span><span>›</span></button>
-          <button onclick="openAdminSection('menu')"><span>Cấu hình</span><span>›</span></button>
+          ${canAdminUsers() ? `<button onclick="openAdminSection('users')"><span>Config user (phân quyền)</span><span>›</span></button>` : ""}
+          ${canAdminConfig() ? `<button onclick="openAdminSection('menu')"><span>Cấu hình</span><span>›</span></button>` : ""}
         </div>
       </section>` : "";
       const activeProfile = (appConfig.sheetProfiles || []).find(x => x.active) || {};
-      const apiEntries = Object.entries(activeProfile).filter(([key]) => isAdminUser() || key !== "apiUrl");
-      const returnThApiControl = isAdminUser() ? `<div style="margin-top:12px"><label>API Nhập TH<input value="${html((appConfig.sync && appConfig.sync.returnThApiUrl) || "")}" placeholder="Dán link /exec của SCP Nhập TH" onchange="saveReturnThApiConfig(this.value)"></label><div class="muted">API này tách riêng với API chứng từ VTD, dùng cho màn Nhập TH.</div></div>` : "";
+      const apiEntries = Object.entries(activeProfile).filter(([key]) => canAdminConfig() || key !== "apiUrl");
+      const returnThApiControl = canAdminConfig() ? `<div style="margin-top:12px"><label>API Nhập TH<input value="${html((appConfig.sync && appConfig.sync.returnThApiUrl) || "")}" placeholder="Dán link /exec của SCP Nhập TH" onchange="saveReturnThApiConfig(this.value)"></label><div class="muted">API này tách riêng với API chứng từ VTD, dùng cho màn Nhập TH.</div></div>` : "";
       const apiPanel = `<section class="section"><h2>API hệ thống đang dùng</h2>${smallTable(apiEntries)}${returnThApiControl}</section>`;
-      const devicePanel = isAdminUser() ? adminCache : "";
-      const opsPanel = isAdminUser() ? `${queuePanel}${adminQueueErrors}${adminForgotPass}` : "";
+      const devicePanel = canViewSyncOps() ? adminCache : "";
+      const opsPanel = canViewSyncOps() ? `${queuePanel}${adminQueueErrors}` : "";
       el("view").innerHTML = `${accountPanel}
       <section class="section">
         <details class="settings-root"><summary><h2>Cài đặt khác</h2></summary>
           <div class="settings-menu">
             ${settingsFold("Cài đặt cá nhân", personalPanel, false)}
-            ${isAdminUser() ? settingsFold("Quản lý admin", adminPanel, false) : ""}
-            ${isAdminUser() ? settingsFold("Quản lý thiết bị", devicePanel, false) : ""}
-            ${isAdminUser() ? settingsFold("Quản lý vận hành", opsPanel, false) : ""}
+            ${canOpenAdminArea() ? settingsFold("Quản lý admin", adminPanel, false) : ""}
+            ${canViewSyncOps() ? settingsFold("Quản lý thiết bị", devicePanel, false) : ""}
+            ${canViewSyncOps() ? settingsFold("Quản lý vận hành", opsPanel, false) : ""}
+            ${canAdminUsers() ? settingsFold("Reset Pass", adminForgotPass, false) : ""}
             ${settingsFold("API hệ thống", apiPanel, false)}
           </div>
         </details>
       </section>`;
-      if (isAdminUser() && !live.lookupCacheStatusLoaded) setTimeout(loadLookupCacheStatus, 0);
-      if (isAdminUser() && !live.queueErrorsLoaded) setTimeout(loadQueueErrors, 0);
-      if (isAdminUser() && !live.forgotPassRequestsLoaded) setTimeout(loadForgotPassRequests, 0);
+      if (canViewSyncOps() && !live.lookupCacheStatusLoaded) setTimeout(loadLookupCacheStatus, 0);
+      if (canViewSyncOps() && !live.queueErrorsLoaded) setTimeout(loadQueueErrors, 0);
+      if (canAdminUsers() && !live.forgotPassRequestsLoaded) setTimeout(loadForgotPassRequests, 0);
       if (!live.accountStatsLoaded && !live.accountStatsLoading) setTimeout(loadAccountStats, 0);
       restoreSettingsUiState();
     }
@@ -2813,7 +3096,7 @@
         <div class="table-wrap"><table><thead><tr><th>User</th><th>Máy</th><th>Cache</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead><tbody>${body}</tbody></table></div></section>`;
     }
     async function loadLookupCacheStatus(force){
-      if (!isAdminUser()) return;
+      if (!canViewSyncOps()) return;
       if (live.lookupCacheStatusLoaded && !force) return;
       const res = await api("lookupCacheStatus", {_silent:!force});
       if (res.ok) {
@@ -2836,14 +3119,14 @@
     }
     function adminQueueErrorPanel(){
       const rows = live.queueErrors || [];
-      const body = rows.length ? rows.map((r, i) => `<tr><td>${html(r.email || "-")}</td><td>${html(shortDevice(r.deviceId))}</td><td>${html(r.maDon || "-")}</td><td>${html(r.slog || "-")}</td><td>${html(r.loaiHoan || "-")}</td><td><strong>${html(r.step || "-")}</strong><div class="muted tiny">${html(r.status || "-")} · lần ${html(r.attempts || 0)} · ảnh ${html(r.imageIndex || "-")}/${html(r.imageCount || 0)}</div></td><td>${html(r.lastError || "-")}<div class="muted tiny">${html(r.updatedAt || "")}</div></td><td><button class="mini-icon-btn danger" title="Xóa lỗi" aria-label="Xóa lỗi" onclick="deleteQueueError(${i})"><svg viewBox="0 0 24 24"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg></button></td></tr>`).join("") : `<tr><td colspan="8" class="muted">Chưa có đơn lỗi được báo về.</td></tr>`;
+      const body = rows.length ? rows.map((r, i) => `<tr><td>${html(r.email || "-")}</td><td>${html(shortDevice(r.deviceId))}</td><td>${html(r.maDon || "-")}</td><td>${html(r.slog || "-")}</td><td>${html(r.loaiHoan || "-")}</td><td><strong>${html(r.step || "-")}</strong><div class="muted tiny">${html(r.status || "-")} · lần ${html(r.attempts || 0)} · ảnh ${html(r.imageIndex || "-")}/${html(r.imageCount || 0)}</div></td><td>${html(r.lastError || "-")}<div class="muted tiny">${html(r.updatedAt || "")}</div></td><td><div class="inline-actions">${canRetryRemoteSync() ? `<button class="mini-icon-btn" title="Yêu cầu máy user retry" aria-label="Yêu cầu máy user retry" onclick="requestRemoteQueueRetry(${i})"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 4v6h-6"></path></svg></button>` : ""}<button class="mini-icon-btn danger" title="Xóa lỗi" aria-label="Xóa lỗi" onclick="deleteQueueError(${i})"><svg viewBox="0 0 24 24"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg></button></div></td></tr>`).join("") : `<tr><td colspan="8" class="muted">Chưa có đơn lỗi được báo về.</td></tr>`;
       return `<section class="section"><h2>Đơn lỗi sync</h2>
         <div class="config-actions" style="margin-bottom:8px"><button onclick="loadQueueErrors(true)">Tải lại lỗi</button></div>
         <div class="table-wrap"><table><thead><tr><th>User</th><th>Máy</th><th>Mã đơn</th><th>SLOG</th><th>Loại</th><th>Bước</th><th>Lỗi</th><th></th></tr></thead><tbody>${body}</tbody></table></div>
       </section>`;
     }
     async function loadQueueErrors(force){
-      if (!isAdminUser()) return;
+      if (!canViewSyncOps()) return;
       if (live.queueErrorsLoaded && !force) return;
       const res = await api("queueErrors", {_silent:!force});
       if (res.ok) {
@@ -2856,11 +3139,36 @@
       }
     }
     async function deleteQueueError(index){
+      if (!canViewSyncOps()) return toast("Bạn không có quyền xóa lỗi sync.", "err");
       const row = (live.queueErrors || [])[index];
       if (!row) return;
       const res = await api("deleteQueueError", {email: row.email, deviceId: row.deviceId, localId: row.localId});
       if (!res.ok) return toast(res.message || "Xóa lỗi sync không được", "err");
       toast("Đã xóa dòng lỗi sync.", "ok");
+      await loadQueueErrors(true);
+    }
+    async function requestRemoteQueueRetry(index){
+      if (!canRetryRemoteSync()) return toast("Bạn không có quyền yêu cầu retry.", "err");
+      const row = (live.queueErrors || [])[index];
+      if (!row) return;
+      if (String(row.deviceId || "") === deviceId()) {
+        const ok = retryQueueItemFromRequest(row);
+        if (ok) {
+          toast("Đã mở khóa và chạy lại sync trên máy này.", "ok");
+          await loadQueueErrors(true);
+          return;
+        }
+      }
+      const res = await api("requestQueueRetry", {
+        email: row.email || "",
+        deviceId: row.deviceId || "",
+        localId: row.localId || "",
+        maDon: row.maDon || "",
+        step: row.step || "",
+        _silent: false
+      });
+      if (!res.ok) return toast(res.message || "Chưa gửi được yêu cầu retry. Cần deploy Code.gs có action requestQueueRetry.", "err");
+      toast("Đã gửi yêu cầu retry về máy user.", "ok");
       await loadQueueErrors(true);
     }
     function adminForgotPassPanel(){
@@ -2882,7 +3190,7 @@
       </section>`;
     }
     async function loadForgotPassRequests(force){
-      if (!isAdminUser()) return;
+      if (!canAdminUsers()) return;
       if (live.forgotPassRequestsLoaded && !force) return;
       const res = await api("forgotPassRequests", {_silent:!force});
       if (res.ok) {
@@ -2895,6 +3203,7 @@
       }
     }
     async function resetForgotPassRequest(index){
+      if (!canAdminUsers()) return toast("Bạn không có quyền reset Pass.", "err");
       const row = (live.forgotPassRequests || [])[index];
       if (!row || !row.email) return;
       const newPass = prompt(`Nhập Pass mới cho ${row.email}\nBỏ trống để hệ thống tự tạo Pass 6 số:`, "");
@@ -3166,7 +3475,7 @@
       saveAppConfig(false);
     }
     async function loadAdminPermissions(showToast){
-      if (!isAdminUser()) return;
+      if (!canAdminUsers()) return;
       live.adminPermissionsLoading = true;
       if (view === "admin" && adminTab === "users") admin();
       const res = await api("adminConfig", {_silent: !showToast});
@@ -3192,6 +3501,10 @@
       };
     }
     async function saveConfigUserToServer(user, silent){
+      if (!canAdminUsers()) {
+        toast("Bạn không có quyền quản lý user.", "err");
+        return false;
+      }
       const res = await api("savePermission", Object.assign({_silent: !!silent}, permissionPayload(user)));
       if (!res.ok) {
         toast(res.message || "Không lưu được quyền user.", "err");
@@ -3202,6 +3515,7 @@
       return true;
     }
     async function addConfigUser(){
+      if (!canAdminUsers()) return toast("Bạn không có quyền quản lý user.", "err");
       const email = el("cfgEmail").value.trim();
       if (!email) return;
       const current = editingUserIndex >= 0 ? appConfig.users[editingUserIndex] : null;
@@ -3229,6 +3543,7 @@
       admin();
     }
     async function deleteLookupCacheStatus(index){
+      if (!canViewSyncOps()) return toast("Bạn không có quyền xóa báo cáo cache.", "err");
       const row = (live.lookupCacheStatus || [])[index];
       if (!row) return;
       const res = await api("deleteLookupCacheStatus", {email: row.email, deviceId: row.deviceId, cacheType: row.cacheType});
@@ -3237,6 +3552,7 @@
       await loadLookupCacheStatus(true);
     }
     async function deleteConfigUser(index){
+      if (!canAdminUsers()) return toast("Bạn không có quyền quản lý user.", "err");
       const user = appConfig.users[index];
       if (!user) return;
       if (!confirm(`Xóa tài khoản ${user.email}?`)) return;
@@ -3250,6 +3566,7 @@
       await loadAdminPermissions(false);
     }
     async function toggleUser(index){
+      if (!canAdminUsers()) return toast("Bạn không có quyền quản lý user.", "err");
       const user = appConfig.users[index];
       if (!user) return;
       const previous = user.active !== false;
@@ -3340,7 +3657,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "2.2";
+    const APP_VERSION = "2.3";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const nativeImagePickerMap = {
@@ -3950,6 +4267,8 @@
       lookupCacheStatusLoaded: false,
       queueErrors: [],
       queueErrorsLoaded: false,
+      remoteRetryBusy: false,
+      remoteRetryUnsupported: false,
       forgotPassRequests: [],
       forgotPassRequestsLoaded: false,
       passChangeRequired: false,
@@ -4110,7 +4429,8 @@
       const userValue = r.userEmail || r.user_email || r.User_email || r["User_email"] || r["user_email"] || r["User email"] || r["user email"] || r.email || r.user || r.createdBy || r.created_by || r.nguoiNhap || r.nguoi_nhap || r["User thao tác"] || r["User thao tac"] || r["Email"] || (demoMatch && demoMatch.user) || "";
       return {
         ma: r.maDon || r.ma || r.id || "",
-        id: r.id || "",
+        id: r.id || r.rawId || "",
+        rawId: r.rawId || r.RAW_ID || r.raw_id || r.id || "",
         source: r.source || "",
         rowNumber: r.rowNumber || "",
         slog: r.slog || "",
@@ -4129,7 +4449,7 @@
         st: cleanStatusLabel(r.syncLabel || r.syncState || "Chờ đồng bộ"),
         tinhTrang: r.tinhTrang || r.tinhTrangChungTu || r.status || "",
         note: r.thongTin || r.thongTinChungTu || r.note || r.ghiChu || "",
-        images: r.images || r.imageLinks || r.links || r.anhLinks || r.driveLinks || [],
+        images: r.images || r.imageLinks || r.links || r.anhLinks || r.driveLinks || [r.imageUrl, r.anhChungTu, r.linkAnh, r.driveFileUrl, r.fileUrl, r.folderUrl, r.rawPath, r.imagePath, r.anh, r.hinhAnh, r["Ảnh"], r["Hình ảnh"]].filter(Boolean),
         skuItems: r.skuItems || r.sku || r.skus || r.products || r.sanPham || []
       };
     }
@@ -5311,7 +5631,7 @@
       if (live.queueReportTimer) clearTimeout(live.queueReportTimer);
       live.queueReportTimer = setTimeout(() => {
         live.queueReportTimer = null;
-        reportLocalQueueStatus(false);
+        reportLocalQueueStatus(false).finally(() => pullRemoteRetryRequests(false));
       }, delay);
     }
     function startQueueWatchdog(){
@@ -5392,6 +5712,69 @@
       settings();
       scheduleSyncQueue(0);
     }
+    function retryQueueItemFromRequest(req){
+      if (!req) return false;
+      const reqLocalId = String(req.localId || req.clientId || "").trim();
+      const reqMaDon = String(req.maDon || req.orderCode || "").trim();
+      const queue = localQueue();
+      let changed = false;
+      const item = queue.find(q => {
+        if (!q || q.status === "done") return false;
+        const p = q.payload || {};
+        const maDon = String(p.maDon || p.ma_don || p.orderCode || p["Mã đơn"] || "").trim();
+        return (reqLocalId && String(q.localId || "") === reqLocalId) || (reqMaDon && maDon === reqMaDon);
+      });
+      if (!item) return false;
+      item.status = item.remoteId && item.images && item.images.length && !item.imagesUploaded ? "pendingImage" : "pending";
+      item.lastError = "Admin yêu cầu chạy lại sync từ xa.";
+      item.lastStep = "remoteRetry";
+      item.lastTryAt = 0;
+      changed = true;
+      if (changed) {
+        saveLocalQueue(queue);
+        live.syncRunning = false;
+        live.syncStartedAt = 0;
+        refreshLocalRows();
+        updateInputSyncBadge();
+        scheduleQueueReport(0);
+        scheduleSyncQueue(0);
+        if (view === "home") home();
+        if (view === "settings") settings();
+      }
+      return true;
+    }
+    async function pullRemoteRetryRequests(force){
+      if (!live.token || live.remoteRetryBusy || (live.remoteRetryUnsupported && !force)) return;
+      live.remoteRetryBusy = true;
+      try {
+        const res = await api("queueRetryRequests", {
+          deviceId: deviceId(),
+          email: currentEmail(),
+          _silent: true
+        });
+        if (!res || !res.ok) {
+          const msg = String((res && res.message) || "");
+          if (/queueRetryRequests|action khong hop le|action không hợp lệ/i.test(msg)) live.remoteRetryUnsupported = true;
+          return;
+        }
+        live.remoteRetryUnsupported = false;
+        const rows = Array.isArray(res.rows) ? res.rows : (Array.isArray(res.requests) ? res.requests : []);
+        const ackIds = [];
+        rows.forEach(row => {
+          if (retryQueueItemFromRequest(row)) ackIds.push(row.id || row.requestId || row.localId || row.clientId || row.maDon || "");
+        });
+        if (ackIds.length) {
+          await api("ackQueueRetryRequests", {
+            ids: ackIds.filter(Boolean),
+            deviceId: deviceId(),
+            email: currentEmail(),
+            _silent: true
+          });
+        }
+      } finally {
+        live.remoteRetryBusy = false;
+      }
+    }
     async function clearLocalQueueConfirm(){
       const queue = localQueue();
       const active = queue.filter(item => item && item.status !== "done");
@@ -5430,6 +5813,28 @@
     }
     function timeText(){
       return new Date().toLocaleTimeString("vi-VN", {timeZone:"Asia/Ho_Chi_Minh", hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false});
+    }
+    function normalizeDedupPart(value){
+      return String(value == null ? "" : value).trim().replace(/\s+/g, " ").toLowerCase();
+    }
+    function vtdDedupKeyFromPayload(payload, fallbackDate){
+      const p = payload || {};
+      const dateText = dateTextDdMmYyyy(p.dateText || p.ngayHoanTra || p.ngay || fallbackDate || todayText());
+      const maDon = normalizeDedupPart(p.maDon || p.ma_don || p.orderCode || p["Mã đơn"]);
+      const slog = normalizeDedupPart(p.slog);
+      const loaiHoan = normalizeDedupPart(p.loaiHoan || p.loai || p["Loại hoàn"]);
+      if (!maDon || !slog || !loaiHoan) return "";
+      return ["vtd", dateText, maDon, slog, loaiHoan].join("|");
+    }
+    function findDuplicateVtdQueueItem(payload){
+      const key = vtdDedupKeyFromPayload(payload);
+      if (!key) return null;
+      return localQueue().find(item => {
+        if (!item || item.kind === "returnTh") return false;
+        const p = item.payload || {};
+        const itemKey = p.clientDedupKey || item.clientDedupKey || vtdDedupKeyFromPayload(p, item.dateText);
+        return itemKey === key;
+      }) || null;
     }
     function localRecordFromQueue(item){
       const p = item.payload || {};
@@ -5559,7 +5964,7 @@
     function returnThTodayRecords(){
       const today = todayApiDateText();
       const localRows = localQueue()
-        .filter(item => item && item.kind === "returnTh" && dateTextDdMmYyyy(item.dateText) === today)
+        .filter(item => item && item.kind === "returnTh" && item.status !== "done" && dateTextDdMmYyyy(item.dateText) === today)
         .map(localReturnThRecord);
       return returnThMergeRows(returnThCachedRowsForDay(today), live.returnThTodayRows || [], localRows)
         .filter(row => dateTextDdMmYyyy(row.date) === today)
@@ -5823,13 +6228,22 @@
       payload.ma_don = maDon;
       payload.orderCode = maDon;
       payload["Mã đơn"] = maDon;
+      payload.dateText = payload.dateText || todayText();
+      const clientDedupKey = vtdDedupKeyFromPayload(payload);
+      payload.clientDedupKey = payload.clientDedupKey || clientDedupKey;
+      const duplicateItem = findDuplicateVtdQueueItem(payload);
+      if (duplicateItem) {
+        toast("Đơn này đã có trong queue hoặc đã đồng bộ trên máy, app không lưu trùng.", "err");
+        return duplicateItem;
+      }
       const itemLocalId = localId();
       payload.clientId = payload.clientId || itemLocalId;
       payload.clientBatchId = payload.clientBatchId || itemLocalId;
-      payload.idempotencyKey = payload.idempotencyKey || itemLocalId;
+      payload.idempotencyKey = payload.idempotencyKey || clientDedupKey || itemLocalId;
       const imageRefs = await persistQueueImages(itemLocalId, imagePayloads || []);
       const item = {
         localId: itemLocalId,
+        clientDedupKey,
         createdAt: Date.now(),
         dateText: todayText(),
         timeText: timeText(),
