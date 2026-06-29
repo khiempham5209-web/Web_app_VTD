@@ -1618,8 +1618,8 @@
           role: String(liveUser.role || local.role || "Staff").toLowerCase() === "admin" ? "Admin" : "Staff",
           pass: local.pass || "",
           active: liveUser.active !== false,
-          screens: Array.isArray(liveUser.screens) && liveUser.screens.length ? liveUser.screens : (local.screens || []),
-          actions: Array.isArray(liveUser.actions) && liveUser.actions.length ? liveUser.actions : (local.actions || [])
+          screens: Array.isArray(liveUser.screens) ? liveUser.screens : (local.screens || []),
+          actions: Array.isArray(liveUser.actions) ? liveUser.actions : (local.actions || [])
         };
       }
       return appConfig.users.find(u => String(u.email).toLowerCase() === String(email).toLowerCase()) || null;
@@ -1627,6 +1627,14 @@
     function userActionList(){
       const cfgUser = currentUserConfig();
       return Array.isArray(cfgUser && cfgUser.actions) ? cfgUser.actions : [];
+    }
+    function userScreenList(){
+      const cfgUser = currentUserConfig();
+      return Array.isArray(cfgUser && cfgUser.screens) ? cfgUser.screens : [];
+    }
+    function canScreen(screen){
+      if (isSystemOwner()) return true;
+      return userScreenList().includes(screen);
     }
     function canAction(action){
       if (isSystemOwner()) return true;
@@ -1636,24 +1644,33 @@
       return userActionList().includes(action);
     }
     function canAdminUsers(){
-      return isSystemOwner() || canAction("manageUsers");
+      return isSystemOwner() || (canScreen("admin") && canAction("manageUsers"));
     }
     function canAdminConfig(){
-      return isSystemOwner() || canAction("manageConfig") || canAction("adminConfig");
+      return isSystemOwner() || (canScreen("admin") && (canAction("manageConfig") || canAction("adminConfig")));
+    }
+    function canViewDeviceArea(){
+      return isSystemOwner() || canAction("viewDevice") || canAction("viewCache") || canAction("viewSync");
+    }
+    function canViewOpsArea(){
+      return isSystemOwner() || canAction("viewOps") || canAction("retrySync") || canAction("runCommand");
+    }
+    function canViewApiArea(){
+      return isSystemOwner() || canAction("viewApi") || canAdminConfig();
     }
     function canViewSyncOps(){
-      return isSystemOwner() || canAction("viewSync") || canAction("retrySync") || canAction("runCommand");
+      return canViewDeviceArea() || canViewOpsArea();
     }
     function canRetryRemoteSync(){
       return isSystemOwner() || canAction("retrySync");
     }
     function canOpenAdminArea(){
-      return isSystemOwner() || canAdminUsers() || canAdminConfig();
+      return isSystemOwner() || (canScreen("admin") && (canAdminUsers() || canAdminConfig()));
     }
     function allowedScreens(){
       const cfgUser = currentUserConfig();
       const baseScreens = allScreenDefs();
-      const allowed = cfgUser ? [...(cfgUser.screens || [])] : (isSystemOwner() ? baseScreens.map(s => s[0]) : ["home","search","input","store","settings"]);
+      const allowed = isSystemOwner() ? baseScreens.map(s => s[0]) : (cfgUser ? [...(cfgUser.screens || [])] : ["settings"]);
       if (!allowed.includes("settings")) allowed.push("settings");
       if (isSystemOwner() && !allowed.includes("returnth")) allowed.push("returnth");
       if (isSystemOwner() && !allowed.includes("admin")) allowed.push("admin");
@@ -2636,8 +2653,14 @@
         ["queueRecord","Queue offline"],
         ["storeInfo","Thông tin ST"],
         ["changePass","Đổi Pass"],
+        ["manageUsers","Quản lý user"],
+        ["manageConfig","Cấu hình admin"],
+        ["viewDevice","Quản lý thiết bị"],
+        ["viewOps","Quản lý vận hành"],
+        ["viewApi","API hệ thống"],
         ["runCommand","Chạy lệnh sync"],
-        ["adminConfig","Admin cấu hình"]
+        ["retrySync","Chạy lại sync"],
+        ["adminConfig","Cấu hình admin"]
       ];
       const allActions = Array.from(new Map([...coreActions, ...appConfig.actions.map(a => [a.id, a.name])]).entries());
       const editUser = editingUserIndex >= 0 ? appConfig.users[editingUserIndex] : null;
@@ -3029,10 +3052,10 @@
       el("view").className = "content settings-page";
       const p = appConfig.personal || defaultAppConfig.personal;
       const tabOptions = allScreenDefs().filter(s => s[0] !== "admin").map(s => [s[0], s[2]]);
-      const adminCache = canViewSyncOps() ? adminLookupCachePanel() : "";
-      const adminQueueErrors = canViewSyncOps() ? adminQueueErrorPanel() : "";
+      const adminCache = canViewDeviceArea() ? adminLookupCachePanel() : "";
+      const adminQueueErrors = canViewOpsArea() ? adminQueueErrorPanel() : "";
       const adminForgotPass = canAdminUsers() ? adminForgotPassPanel() : "";
-      const queuePanel = localQueuePanel();
+      const queuePanel = canViewOpsArea() ? localQueuePanel() : "";
       const role = (live.user && live.user.role) || (isAdminUser() ? "admin" : "staff");
       const selectedTheme = p.theme || "Theo hệ thống";
       const selectedDisplay = p.displayMode || "Chuyên nghiệp";
@@ -3081,26 +3104,26 @@
         </div>
       </section>` : "";
       const activeProfile = (appConfig.sheetProfiles || []).find(x => x.active) || {};
-      const apiEntries = Object.entries(activeProfile).filter(([key]) => canAdminConfig() || key !== "apiUrl");
+      const apiEntries = canViewApiArea() ? Object.entries(activeProfile).filter(([key]) => canAdminConfig() || key !== "apiUrl") : [];
       const returnThApiControl = canAdminConfig() ? `<div style="margin-top:12px"><label>API Nhập TH<input value="${html((appConfig.sync && appConfig.sync.returnThApiUrl) || "")}" placeholder="Dán link /exec của SCP Nhập TH" onchange="saveReturnThApiConfig(this.value)"></label><div class="muted">API này tách riêng với API chứng từ VTD, dùng cho màn Nhập TH.</div></div>` : "";
-      const apiPanel = `<section class="section"><h2>API hệ thống đang dùng</h2>${smallTable(apiEntries)}${returnThApiControl}</section>`;
-      const devicePanel = canViewSyncOps() ? adminCache : "";
-      const opsPanel = canViewSyncOps() ? `${queuePanel}${adminQueueErrors}` : "";
+      const apiPanel = canViewApiArea() ? `<section class="section"><h2>API hệ thống đang dùng</h2>${smallTable(apiEntries)}${returnThApiControl}</section>` : "";
+      const devicePanel = canViewDeviceArea() ? adminCache : "";
+      const opsPanel = canViewOpsArea() ? `${queuePanel}${adminQueueErrors}` : "";
       el("view").innerHTML = `${accountPanel}
       <section class="section">
         <details class="settings-root"><summary><h2>Cài đặt khác</h2></summary>
           <div class="settings-menu">
             ${settingsFold("Cài đặt cá nhân", personalPanel, false)}
             ${canOpenAdminArea() ? settingsFold("Quản lý admin", adminPanel, false) : ""}
-            ${canViewSyncOps() ? settingsFold("Quản lý thiết bị", devicePanel, false) : ""}
-            ${canViewSyncOps() ? settingsFold("Quản lý vận hành", opsPanel, false) : ""}
+            ${canViewDeviceArea() ? settingsFold("Quản lý thiết bị", devicePanel, false) : ""}
+            ${canViewOpsArea() ? settingsFold("Quản lý vận hành", opsPanel, false) : ""}
             ${canAdminUsers() ? settingsFold("Reset Pass", adminForgotPass, false) : ""}
-            ${settingsFold("API hệ thống", apiPanel, false)}
+            ${canViewApiArea() ? settingsFold("API hệ thống", apiPanel, false) : ""}
           </div>
         </details>
       </section>`;
-      if (canViewSyncOps() && !live.lookupCacheStatusLoaded) setTimeout(loadLookupCacheStatus, 0);
-      if (canViewSyncOps() && !live.queueErrorsLoaded) setTimeout(loadQueueErrors, 0);
+      if (canViewDeviceArea() && !live.lookupCacheStatusLoaded) setTimeout(loadLookupCacheStatus, 0);
+      if (canViewOpsArea() && !live.queueErrorsLoaded) setTimeout(loadQueueErrors, 0);
       if (canAdminUsers() && !live.forgotPassRequestsLoaded) setTimeout(loadForgotPassRequests, 0);
       if (!live.accountStatsLoaded && !live.accountStatsLoading) setTimeout(loadAccountStats, 0);
       restoreSettingsUiState();
@@ -3727,7 +3750,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "2.3";
+    const APP_VERSION = "2.4";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const nativeImagePickerMap = {
