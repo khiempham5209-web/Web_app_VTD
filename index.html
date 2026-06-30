@@ -4923,7 +4923,7 @@
         tx.onerror = () => resolve(count);
       });
     }
-    async function purgeOldOrderCache(retentionDays = 200){
+    async function purgeOldOrderCache(retentionDays = 400){
       const db = await orderLookupDb();
       if (!db) return 0;
       const cutoff = new Date();
@@ -4975,12 +4975,17 @@
           await reportOrderCacheProgress(Object.assign(progress, {status:"error", lastError:manifest.message || "Không lấy được manifest"}));
           return;
         }
-        await purgeOldOrderCache(Number(manifest.retentionDays || 200));
+        const retentionDays = Number(manifest.retentionDays || 400);
+        const retentionChanged = Number(progress.retentionDays || 0) !== retentionDays;
+        await purgeOldOrderCache(retentionDays);
         const today = new Date().toLocaleDateString("sv-SE", {timeZone:"Asia/Ho_Chi_Minh"});
-        const fullDone = !!progress.fullDone;
+        const rebuildFull = !!force || retentionChanged || Number(progress.lastRow || 0) > Number(manifest.lastRow || 0);
+        const fullDone = !!progress.fullDone && !rebuildFull;
         const shouldDailyRefresh = progress.lastDailyKey !== today || Number(progress.lastRow || 0) < Number(manifest.lastRow || 0);
         if (fullDone && !shouldDailyRefresh) {
-          await reportOrderCacheProgress(Object.assign(progress, {status:"done", total:progress.total || manifest.lastRow || 0, downloaded:progress.downloaded || 0, lastError:""}));
+          const doneProgress = Object.assign(progress, {status:"done", retentionDays, total:progress.total || manifest.lastRow || 0, downloaded:progress.downloaded || 0, lastError:""});
+          saveOrderCacheProgress(doneProgress);
+          await reportOrderCacheProgress(doneProgress);
           return;
         }
         const startRow = fullDone ? Number(manifest.refreshStartRow || 2) : 2;
@@ -4989,7 +4994,7 @@
         if (nextRow < startRow || nextRow > endRow) nextRow = startRow;
         const total = Math.max(0, endRow - startRow + 1);
         let downloaded = Math.max(0, nextRow - startRow);
-        await reportOrderCacheProgress({status:"downloading", downloaded, total, startRow, endRow, nextRow, lastError:""});
+        await reportOrderCacheProgress({status:"downloading", retentionDays, downloaded, total, startRow, endRow, nextRow, lastError:""});
         while (nextRow <= endRow && live.token) {
           const page = await api("lookupOrderPage", {startRow: nextRow, endRow, pageSize: 2000, _silent:true});
           if (!page.ok) {
@@ -5005,6 +5010,7 @@
             fullDone: !fullDone ? !!page.done : true,
             lastDailyKey: page.done ? today : progress.lastDailyKey,
             lastRow: endRow,
+            retentionDays,
             startRow,
             endRow,
             nextRow,
