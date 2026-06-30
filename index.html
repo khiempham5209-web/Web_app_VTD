@@ -3185,7 +3185,7 @@
       const localRows = localCacheSummaryRows();
       return `<section class="section"><h2>Cache chứng từ trên máy user</h2>
         <div class="config-actions" style="margin-bottom:8px"><button onclick="loadLookupCacheStatus(true)">Tải lại báo cáo</button><button onclick="runLookupCacheNow()">Chạy cache máy này</button></div>
-        <div class="lookup" style="margin-bottom:8px">${localRows.map(r => `<div style="display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:4px 0"><span>${html(r.label)}</span><strong>${html(r.status)} · ${html(r.progress)}</strong></div>`).join("")}</div>
+        <div class="lookup" style="margin-bottom:8px">${localRows.map(r => `<div data-local-cache-row="${html(r.key)}" style="display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:4px 0"><span>${html(r.label)}</span><strong>${html(r.status)} · ${html(r.progress)}</strong></div>`).join("")}</div>
         <div class="table-wrap"><table><thead><tr><th>User</th><th>Máy</th><th>Cache</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead><tbody>${body}</tbody></table></div></section>`;
     }
     async function loadLookupCacheStatus(force){
@@ -4653,6 +4653,16 @@
     }
     function saveOrderCacheProgress(progress){
       localStorage.setItem(ORDER_LOOKUP_PROGRESS_KEY, JSON.stringify(progress || {}));
+      refreshLocalCacheProgressUi();
+    }
+    function refreshLocalCacheProgressUi(){
+      try {
+        if (view !== "settings" && view !== "admin") return;
+        localCacheSummaryRows().forEach(row => {
+          const node = document.querySelector(`[data-local-cache-row="${row.key}"] strong`);
+          if (node) node.textContent = `${row.status} · ${row.progress}`;
+        });
+      } catch (err) {}
     }
     function orderLookupDb(){
       return new Promise((resolve, reject) => {
@@ -4979,27 +4989,50 @@
         const retentionChanged = Number(progress.retentionDays || 0) !== retentionDays;
         await purgeOldOrderCache(retentionDays);
         const today = new Date().toLocaleDateString("sv-SE", {timeZone:"Asia/Ho_Chi_Minh"});
-        const rebuildFull = !!force || retentionChanged || Number(progress.lastRow || 0) > Number(manifest.lastRow || 0);
+        const manifestLastRow = Number(manifest.lastRow || 1);
+        const canResume = Number(progress.nextRow || 0) > 1
+          && Number(progress.endRow || 0) <= manifestLastRow
+          && !retentionChanged
+          && String(progress.status || "") !== "done";
+        const rebuildFull = retentionChanged || Number(progress.lastRow || 0) > manifestLastRow;
         const fullDone = !!progress.fullDone && !rebuildFull;
-        const shouldDailyRefresh = progress.lastDailyKey !== today || Number(progress.lastRow || 0) < Number(manifest.lastRow || 0);
+        const shouldDailyRefresh = progress.lastDailyKey !== today || Number(progress.lastRow || 0) < manifestLastRow;
         if (fullDone && !shouldDailyRefresh) {
           const doneProgress = Object.assign(progress, {status:"done", retentionDays, total:progress.total || manifest.lastRow || 0, downloaded:progress.downloaded || 0, lastError:""});
           saveOrderCacheProgress(doneProgress);
           await reportOrderCacheProgress(doneProgress);
           return;
         }
-        const startRow = fullDone ? Number(manifest.refreshStartRow || 2) : 2;
-        const endRow = Number(manifest.lastRow || 1);
-        let nextRow = Number(progress.status === "downloading" && progress.endRow === endRow && progress.nextRow ? progress.nextRow : startRow);
+        const startRow = fullDone && !canResume ? Number(manifest.refreshStartRow || 2) : 2;
+        const endRow = manifestLastRow;
+        let nextRow = canResume ? Number(progress.nextRow) : startRow;
         if (nextRow < startRow || nextRow > endRow) nextRow = startRow;
         const total = Math.max(0, endRow - startRow + 1);
         let downloaded = Math.max(0, nextRow - startRow);
-        await reportOrderCacheProgress({status:"downloading", retentionDays, downloaded, total, startRow, endRow, nextRow, lastError:""});
+        const firstProgress = {status:"downloading", retentionDays, downloaded, total, startRow, endRow, nextRow, lastError:""};
+        saveOrderCacheProgress(firstProgress);
+        queueOrderCacheProgressReport(firstProgress);
+        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+        const loadPageWithRetry = async (row) => {
+          let lastMessage = "";
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            const page = await api("lookupOrderPage", {startRow: row, endRow, pageSize: 2000, _silent:true});
+            if (page && page.ok) return page;
+            lastMessage = (page && page.message) || "Tải batch lỗi";
+            const retryProgress = {status:"downloading", retentionDays, downloaded, total, startRow, endRow, nextRow: row, lastError:`${lastMessage} · thử lại ${attempt}/3`};
+            saveOrderCacheProgress(retryProgress);
+            queueOrderCacheProgressReport(retryProgress);
+            await sleep(800 * attempt);
+          }
+          return {ok:false, message:lastMessage || "Tải batch lỗi"};
+        };
         while (nextRow <= endRow && live.token) {
-          const page = await api("lookupOrderPage", {startRow: nextRow, endRow, pageSize: 2000, _silent:true});
+          const page = await loadPageWithRetry(nextRow);
           if (!page.ok) {
-            saveOrderCacheProgress(Object.assign(progress, {status:"error", startRow, endRow, nextRow, total, downloaded, lastError:page.message || "Tải batch lỗi"}));
-            await reportOrderCacheProgress(orderCacheProgress());
+            const errorProgress = {status:"error", fullDone:!!fullDone, lastDailyKey:progress.lastDailyKey, lastRow:endRow, retentionDays, startRow, endRow, nextRow, total, downloaded, lastError:(page.message || "Tải batch lỗi") + " · bấm chạy lại sẽ tiếp tục từ batch này"};
+            saveOrderCacheProgress(errorProgress);
+            await reportOrderCacheProgress(errorProgress);
+            if (live.token) setTimeout(() => warmOrderLookupCache(false), 15000);
             return;
           }
           await orderCachePutMany(page.orders || []);
@@ -5023,15 +5056,24 @@
             await reportOrderCacheProgress(nextProgress);
             break;
           }
-          await reportOrderCacheProgress(nextProgress);
+          queueOrderCacheProgressReport(nextProgress);
           await new Promise(resolve => setTimeout(resolve, 250));
         }
       } catch (err) {
-        const nextProgress = Object.assign(progress, {status:"error", lastError:String(err && err.message || err)});
+        const latestProgress = orderCacheProgress();
+        const nextProgress = Object.assign({}, latestProgress, {
+          status: "error",
+          lastError: String(err && err.message || err) + " · app sẽ tự thử tải tiếp"
+        });
         saveOrderCacheProgress(nextProgress);
         await reportOrderCacheProgress(nextProgress);
+        if (live.token) setTimeout(() => warmOrderLookupCache(false), 15000);
       } finally {
         warmOrderLookupCache.running = false;
+        const current = orderCacheProgress();
+        if (live.token && String(current.status || "") === "downloading" && Number(current.nextRow || 0) <= Number(current.endRow || 0)) {
+          setTimeout(() => warmOrderLookupCache(false), 2000);
+        }
       }
     }
     async function reportOrderCacheProgress(progress){
@@ -5044,12 +5086,16 @@
         _silent: true
       }));
     }
+    function queueOrderCacheProgressReport(progress){
+      reportOrderCacheProgress(progress).catch(() => {});
+    }
     function dataCacheProgress(){
       try { return JSON.parse(localStorage.getItem(DATA_CACHE_PROGRESS_KEY) || "{}") || {}; }
       catch (err) { return {}; }
     }
     function saveDataCacheProgress(allProgress){
       localStorage.setItem(DATA_CACHE_PROGRESS_KEY, JSON.stringify(allProgress || {}));
+      refreshLocalCacheProgressUi();
     }
     function oneDataCacheProgress(type){
       const all = dataCacheProgress();
@@ -5142,14 +5188,14 @@
       const q = queueStats();
       const qTotal = Number(q.pending || 0) + Number(q.pendingImage || 0) + Number(q.syncing || 0) + Number(q.error || 0);
       return [
-        {label:"Khách hàng", status:cacheStatusLabel(order.status), progress:(Number(order.downloaded || 0) + "/" + Number(order.total || 0))},
+        {key:"customerLookup", label:"Khách hàng", status:cacheStatusLabel(order.status), progress:(Number(order.downloaded || 0) + "/" + Number(order.total || 0))},
         ...Object.keys(DATA_CACHE_TYPES).map(type => {
           const p = data[type] || {};
-          return {label:DATA_CACHE_TYPES[type].label, status:cacheStatusLabel(p.status), progress:(Number(p.downloaded || 0) + "/" + Number(p.total || 0))};
+          return {key:type, label:DATA_CACHE_TYPES[type].label, status:cacheStatusLabel(p.status), progress:(Number(p.downloaded || 0) + "/" + Number(p.total || 0))};
         }),
-        {label:"Master SKU", status:cacheStatusLabel(masterSku.status), progress:(Number(masterSku.downloaded || 0) + "/" + Number(masterSku.total || 0))},
-        {label:"TH Truemilk hôm nay", status:cacheStatusLabel(returnTh.status), progress:(Number(returnTh.downloaded || 0) + "/" + Number(returnTh.total || 0))},
-        {label:"Queue sync", status:qTotal ? (q.error ? "Lỗi" : q.syncing ? "Đang sync" : "Đang chờ") : "Đã đủ", progress:`${qTotal} đơn`}
+        {key:"masterSku", label:"Master SKU", status:cacheStatusLabel(masterSku.status), progress:(Number(masterSku.downloaded || 0) + "/" + Number(masterSku.total || 0))},
+        {key:"returnThToday", label:"TH Truemilk hôm nay", status:cacheStatusLabel(returnTh.status), progress:(Number(returnTh.downloaded || 0) + "/" + Number(returnTh.total || 0))},
+        {key:"queueSync", label:"Queue sync", status:qTotal ? (q.error ? "Lỗi" : q.syncing ? "Đang sync" : "Đang chờ") : "Đã đủ", progress:`${qTotal} đơn`}
       ];
     }
     function dataCacheDb(){
