@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="vi">
 <head>
   <meta charset="utf-8">
@@ -381,6 +381,39 @@
     .chart-column strong { color: var(--text); font-size: 11px; }
     .chart-column i { display: block; width: min(70%, 34px); min-height: 4px; margin: 0 auto; border-radius: 4px 4px 0 0; background: var(--brand); }
     .chart-column span { overflow: hidden; overflow-wrap: anywhere; }
+    .average-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); width: min(100%, 100%); margin: 0 auto 10px; gap: 10px; }
+    .average-stats .stat { text-align: center; display: grid; align-content: center; min-height: 64px; padding: 9px 12px; }
+    .average-stats .stat span { font-size: 12px; line-height: 1.2; }
+    .average-stats .stat strong { font-size: 24px; line-height: 1.1; }
+    .average-combo { margin-top: 8px; }
+    .average-combo svg { display: block; width: 100%; height: auto; aspect-ratio: 640 / 260; overflow: visible; }
+    .average-combo-axis { color: var(--muted); font-size: 10px; }
+    .average-combo-legend { display: flex; justify-content: center; gap: 16px; margin-top: 7px; color: var(--muted); font-size: 12px; }
+    .average-combo-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .average-combo-legend i { width: 18px; height: 8px; border-radius: 99px; display: inline-block; }
+    .average-horizontal { margin-top: 10px; }
+    .average-horizontal svg { display: block; width: 100%; height: auto; overflow: visible; }
+    .average-horizontal-axis { color: var(--muted); font-size: 11px; }
+    .average-horizontal-label { fill: var(--muted); font-size: 12px; }
+    .average-horizontal-value { fill: var(--text); font-size: 11px; font-weight: 800; }
+    .average-horizontal-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 14px; margin-top: 8px; color: var(--muted); font-size: 13px; }
+    .average-horizontal-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .average-horizontal-legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .average-rank { display: grid; gap: 8px; margin-top: 10px; }
+    .average-rank-row { display: grid; gap: 5px; padding: 8px 0; border-top: 1px solid var(--line); }
+    .average-rank-row:first-child { border-top: 0; }
+    .average-rank-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .average-rank-name { min-width: 0; font-weight: 800; color: var(--text); line-height: 1.15; overflow: hidden; text-overflow: ellipsis; }
+    .average-rank-meta { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .average-rank-total { color: var(--text); font-weight: 800; }
+    .average-rank-avg { border: 1px solid rgba(20,184,166,.25); background: rgba(20,184,166,.1); color: #047857; border-radius: 999px; padding: 2px 7px; font-weight: 800; }
+    .average-rank-track { height: 10px; border-radius: 999px; background: #e8eef6; overflow: hidden; }
+    .average-rank-fill { height: 100%; min-width: 3px; border-radius: inherit; background: linear-gradient(90deg, #14b8a6, #3b82f6); }
+    .average-table { margin-top: 10px; }
+    .average-table table { font-size: .9em; }
+    .average-table th, .average-table td { padding: 6px 7px; }
+    body.theme-dark .average-rank-avg { background: rgba(45,212,191,.14); border-color: rgba(45,212,191,.28); color: #5eead4; }
+    body.theme-dark .average-rank-track { background: #243044; }
     .chart-rank-list { display: grid; margin-top: 10px; }
     .chart-rank-row { display: grid; grid-template-columns: 26px minmax(0,1fr) auto; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); cursor: pointer; }
     .chart-rank-row:first-child { border-top: 0; }
@@ -1452,7 +1485,12 @@
       storeCharts: {
         summary:"bar",
         production:"line",
-        storeType:"table"
+        storeType:"table",
+        average:"horizontal",
+        averageMetricA:"totalStore",
+        averageMetricB:"avgStorePerDay",
+        averageColorA:"#60a5fa",
+        averageColorB:"#22c55e"
       },
       dynamic: {
         version: 1,
@@ -2495,10 +2533,218 @@
     function monthlySummaryChart(){
       const data = monthSummary();
       const selectedTotal = Number((data.find(x => x[0] === storeMonth) || [storeMonth, 0])[1] || 0);
-      return `<div class="stats">${stat(`Tổng đơn ${storeMonth}`, selectedTotal.toLocaleString("vi-VN"))}${stat("Số tháng có dữ liệu", data.length.toLocaleString("vi-VN"))}</div>${renderStoreChart(data, (appConfig.storeCharts || {}).summary || "bar", true)}`;
+      return `<div class="stats">${stat(`Tổng đơn ${shortMonthLabel(storeMonth)}`, selectedTotal.toLocaleString("vi-VN"))}${stat("Số tháng có dữ liệu", data.length.toLocaleString("vi-VN"))}</div>${renderStoreChart(data, (appConfig.storeCharts || {}).summary || "bar", true)}`;
     }
     function storeBarChart(data, total, max){
       return renderStoreChart(data, (appConfig.storeCharts || {}).production || "bar", false);
+    }
+    function shortMonthLabel(value){
+      const text = String(value || "");
+      const match = text.match(/^(\d{1,2})\/(\d{4})$/);
+      return match ? `${match[1].padStart(2, "0")}/${match[2].slice(-2)}` : text;
+    }
+    function chartLabel(value, isMonth){
+      return isMonth ? shortMonthLabel(value) : value;
+    }
+    function storeAverageLabel(total, days){
+      const count = Number(total || 0);
+      const activeDays = Math.max(1, Number(days || 0));
+      if (!count) return "0 đơn/ngày";
+      const perDay = count / activeDays;
+      if (perDay >= 1) {
+        const value = perDay >= 10 ? Math.round(perDay) : Math.round(perDay * 10) / 10;
+        return `${value.toLocaleString("vi-VN")} đơn/ngày`;
+      }
+      const perWeek = perDay * 7;
+      if (perWeek >= 1) {
+        const value = perWeek >= 10 ? Math.round(perWeek) : Math.round(perWeek * 10) / 10;
+        return `${value.toLocaleString("vi-VN")} đơn/tuần`;
+      }
+      const weeksPerOrder = Math.max(1, Math.round(1 / perWeek));
+      return `1 đơn/${weeksPerOrder} tuần`;
+    }
+    function storeAverageStats(){
+      const selectedMonth = storeMonth;
+      const info = live.storeInfoByMonth[selectedMonth] || (live.storeInfoMonth === selectedMonth ? live.storeInfo : null);
+      const days = info && Array.isArray(info.dailyStores) ? info.dailyStores : [];
+      const activeDays = days.filter(day => Number(day.total || 0) > 0).length;
+      if (!activeDays) return `<div class="muted" style="margin-top:10px">Chưa có dữ liệu trung bình của ${html(selectedMonth)}.</div>`;
+      const totals = new Map();
+      const storeDays = new Map();
+      let distinctTotal = 0;
+      let monthTotal = 0;
+      days.forEach(day => {
+        if (Number(day.total || 0) <= 0) return;
+        const stores = Array.isArray(day.stores) ? day.stores : [];
+        const visibleStores = storeType === "Tất cả" ? stores : stores.filter(item => item.key === storeType);
+        const positiveStores = visibleStores.filter(item => Number(item.value || 0) > 0);
+        monthTotal += positiveStores.reduce((sum, item) => sum + Number(item.value || 0), 0);
+        distinctTotal += positiveStores.length;
+        positiveStores.forEach(item => {
+          const key = String(item.key || "").trim() || "Khác";
+          totals.set(key, (totals.get(key) || 0) + Number(item.value || 0));
+          storeDays.set(key, (storeDays.get(key) || 0) + 1);
+        });
+      });
+      const rows = Array.from(totals.entries()).sort((a,b) => b[1] - a[1]);
+      const distinctAvg = distinctTotal / activeDays;
+      const chartRows = rows
+        .map(([key, value]) => ({key, total: Number(value || 0), avg: Number(value || 0) / activeDays, days: Number(storeDays.get(key) || 0)}))
+        .sort((a, b) => String(a.key || "").localeCompare(String(b.key || ""), "vi", {sensitivity: "base"}));
+      const chart = renderStoreAverageView(chartRows, activeDays, distinctAvg, monthTotal);
+      const detailRows = rows.length ? rows.map(([key, value]) => `<tr><td>${html(key)}</td><td>${storeAverageLabel(value, activeDays)}</td><td>${Number(value || 0).toLocaleString("vi-VN")}</td></tr>`).join("") : `<tr><td colspan="3">Không có dữ liệu cho bộ lọc này.</td></tr>`;
+      const avgAllOrders = monthTotal / Math.max(1, activeDays);
+      const avgAllOrdersText = (Math.round(avgAllOrders * 100) / 100).toLocaleString("vi-VN", {maximumFractionDigits:2}) + " đơn";
+      return `<div class="stats average-stats">${stat("Tổng số ngày có đơn", activeDays.toLocaleString("vi-VN"))}${stat("Số siêu thị/1ngày", `${(Math.round(distinctAvg * 10) / 10).toLocaleString("vi-VN")} ST`)}${stat("SL trung bình/ngày", avgAllOrdersText)}</div>${chart}<div class="table-wrap average-table"><table><thead><tr><th>Loại ST</th><th>Trung bình</th><th>Tổng đơn</th></tr></thead><tbody>${detailRows}</tbody></table></div>`;
+    }
+    function storeAverageMetricOptions(){
+      return [
+        ["totalStore", "Tổng đơn ST"],
+        ["avgStorePerDay", "Số đơn TB/ngày"],
+        ["avgDistinctStores", "Số siêu thị/1ngày"],
+        ["avgAllOrdersPerDay", "Tổng đơn/ngày"],
+        ["activeStoreDays", "Tổng số ngày có đơn"]
+      ];
+    }
+    function storeAverageMetricDefs(activeDays, distinctAvg, monthTotal){
+      return {
+        totalStore: {label:"Tổng đơn", unit:"đơn", decimals:0, value: row => Number(row.total || 0)},
+        avgStorePerDay: {label:"TB đơn/ngày", unit:"đơn/ngày", decimals:1, value: row => Number(row.avg || 0)},
+        avgDistinctStores: {label:"Số siêu thị/1ngày", unit:"ST/ngày", decimals:1, value: () => Number(distinctAvg || 0)},
+        avgAllOrdersPerDay: {label:"Tổng đơn/ngày", unit:"đơn/ngày", decimals:1, value: () => Number(monthTotal || 0) / Math.max(1, Number(activeDays || 0))},
+        activeStoreDays: {label:"Ngày có đơn", unit:"ngày", decimals:0, value: row => Number(row.days || 0)}
+      };
+    }
+    function storeAverageMetricFormat(value, decimals){
+      const n = Number(value || 0);
+      const rounded = decimals ? Math.round(n * Math.pow(10, decimals)) / Math.pow(10, decimals) : Math.round(n);
+      return rounded.toLocaleString("vi-VN", {maximumFractionDigits: decimals || 0});
+    }
+    function renderStoreAverageView(rows, activeDays, distinctAvg, monthTotal){
+      const cfg = appConfig.storeCharts || {};
+      const type = cfg.average || "horizontal";
+      if (type === "combo") return renderStoreAverageCombo(rows);
+      if (type === "table") return "";
+      const defs = storeAverageMetricDefs(activeDays, distinctAvg, monthTotal);
+      const metricA = defs[cfg.averageMetricA] ? cfg.averageMetricA : "totalStore";
+      const metricB = defs[cfg.averageMetricB] ? cfg.averageMetricB : "avgStorePerDay";
+      return renderStoreAverageHorizontal(rows, defs, metricA, metricB, cfg.averageColorA || "#60a5fa", cfg.averageColorB || "#22c55e");
+    }
+    function renderStoreAverageHorizontal(rows, defs, metricA, metricB, colorA, colorB){
+      rows = (rows || []).filter(row => row && row.key);
+      if (!rows.length) return `<div class="muted" style="margin-top:10px">Không có dữ liệu.</div>`;
+      const a = defs[metricA] || defs.totalStore;
+      const b = defs[metricB] || defs.avgStorePerDay;
+      const data = rows.slice(0, 12).map(row => ({
+        key: row.key,
+        a: Number(a.value(row) || 0),
+        b: Number(b.value(row) || 0)
+      }));
+      const width = 640;
+      const height = 350;
+      const left = 44;
+      const right = 22;
+      const top = 30;
+      const bottom = 118;
+      const plotW = width - left - right;
+      const plotH = height - top - bottom;
+      const aMax = Math.max(...data.map(row => row.a), 1);
+      const bMax = Math.max(...data.map(row => row.b), 1);
+      const niceA = aMax <= 10 ? Math.ceil(aMax) : Math.ceil(aMax / 10) * 10;
+      const niceB = bMax <= 10 ? Math.ceil(bMax) : Math.ceil(bMax * 10) / 10;
+      const groupW = plotW / Math.max(1, data.length);
+      const barW = Math.max(8, Math.min(18, groupW * .24));
+      const baseY = top + plotH;
+      const labelY = baseY + 42;
+      const barH = (value, max) => Math.max(value > 0 ? 2 : 0, Number(value || 0) / Math.max(1, max) * plotH);
+      const ticks = [0, .25, .5, .75, 1].map(rate => {
+        const y = baseY - plotH * rate;
+        return `<g class="average-horizontal-axis">
+          <line x1="${left}" y1="${y}" x2="${width - right}" y2="${y}" stroke="var(--line)" stroke-dasharray="4 4"></line>
+          <text x="${left - 8}" y="${y + 4}" text-anchor="end" fill="currentColor">${storeAverageMetricFormat(niceA * rate, niceA <= 10 ? 1 : 0)}</text>
+        </g>`;
+      }).join("");
+      const rowsSvg = data.map((row, index) => {
+        const center = left + groupW * index + groupW / 2;
+        const aH = barH(row.a, niceA);
+        const bH = barH(row.b, niceB);
+        const aX = center - barW - 2;
+        const bX = center + 2;
+        const label = String(row.key || "");
+        return `<g>
+          <rect x="${aX}" y="${baseY - aH}" width="${barW}" height="${aH}" rx="5" fill="${html(colorA)}" opacity=".88"></rect>
+          <rect x="${bX}" y="${baseY - bH}" width="${barW}" height="${bH}" rx="5" fill="${html(colorB)}" opacity=".82"></rect>
+          <text class="average-horizontal-value" x="${aX + barW / 2}" y="${baseY - aH - 6}" text-anchor="middle">${storeAverageMetricFormat(row.a, a.decimals)}</text>
+          <text class="average-horizontal-value" x="${bX + barW / 2}" y="${baseY - bH - 6}" text-anchor="middle">${storeAverageMetricFormat(row.b, b.decimals)}</text>
+          <text class="average-horizontal-label" x="${center}" y="${labelY}" text-anchor="end" transform="rotate(-72 ${center} ${labelY})">${html(label)}</text>
+        </g>`;
+      }).join("");
+      return `<div class="average-horizontal"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">
+        ${ticks}<line x1="${left}" y1="${baseY}" x2="${width - right}" y2="${baseY}" stroke="var(--line)"></line>${rowsSvg}
+      </svg><div class="average-horizontal-legend"><span><i style="background:${html(colorA)}"></i>${html(a.label)}</span><span><i style="background:${html(colorB)}"></i>${html(b.label)}</span></div></div>`;
+    }
+    function renderStoreAverageCombo(rows){
+      rows = (rows || []).filter(row => row && row.key);
+      if (!rows.length) return `<div class="muted" style="margin-top:10px">Không có dữ liệu.</div>`;
+      const data = rows.slice(0, 12);
+      const width = 640;
+      const height = 250;
+      const left = 46;
+      const right = 46;
+      const top = 24;
+      const bottom = 52;
+      const plotW = width - left - right;
+      const plotH = height - top - bottom;
+      const baseY = top + plotH;
+      const maxTotal = Math.max(...data.map(x => Number(x.total || 0)), 1);
+      const maxAvg = Math.max(...data.map(x => Number(x.avg || 0)), 1);
+      const step = plotW / data.length;
+      const barW = Math.max(12, Math.min(28, step * .42));
+      const yTotal = value => baseY - (Number(value || 0) / maxTotal * plotH);
+      const yAvg = value => baseY - (Number(value || 0) / maxAvg * plotH);
+      const formatAvg = value => (Math.round(Number(value || 0) * 10) / 10).toLocaleString("vi-VN");
+      const grid = [0, .25, .5, .75, 1].map(rate => {
+        const y = baseY - rate * plotH;
+        const totalTick = Math.round(maxTotal * rate).toLocaleString("vi-VN");
+        const avgTick = formatAvg(maxAvg * rate);
+        return `<g class="average-combo-axis">
+          <line x1="${left}" y1="${y}" x2="${width - right}" y2="${y}" stroke="var(--line)" stroke-width="1"></line>
+          <text x="${left - 8}" y="${y + 3}" text-anchor="end" fill="currentColor">${totalTick}</text>
+          <text x="${width - right + 8}" y="${y + 3}" text-anchor="start" fill="currentColor">${avgTick}</text>
+        </g>`;
+      }).join("");
+      const bars = data.map((row, index) => {
+        const total = Number(row.total || 0);
+        const cx = left + step * index + step / 2;
+        const y = yTotal(total);
+        const h = Math.max(3, baseY - y);
+        return `<g>
+          <rect x="${cx - barW / 2}" y="${y}" width="${barW}" height="${h}" rx="3" fill="#9ca3af"></rect>
+          <text x="${cx}" y="${Math.max(12, y - 5)}" text-anchor="middle" font-size="9.5" font-weight="800" fill="var(--text)">${total.toLocaleString("vi-VN")}</text>
+        </g>`;
+      }).join("");
+      const points = data.map((row, index) => {
+        const cx = left + step * index + step / 2;
+        return [cx, yAvg(row.avg), Number(row.avg || 0)];
+      });
+      const linePath = points.map((point, index) => `${index ? "L" : "M"} ${point[0]} ${point[1]}`).join(" ");
+      const line = points.length ? `<path d="${linePath}" fill="none" stroke="#f97316" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>${points.map(point => `<g>
+        <circle cx="${point[0]}" cy="${point[1]}" r="4" fill="#f97316"></circle>
+        <text x="${point[0]}" y="${Math.max(10, point[1] - 9)}" text-anchor="middle" font-size="9.5" font-weight="800" fill="#f97316">${formatAvg(point[2])}</text>
+      </g>`).join("")}` : "";
+      const labels = data.map((row, index) => {
+        const cx = left + step * index + step / 2;
+        const label = String(row.key || "");
+        const parts = label.length > 8 && label.includes(" ") ? label.split(/\s+/).slice(0, 2) : [label];
+        return `<text x="${cx}" y="${baseY + 18}" text-anchor="middle" font-size="10" fill="var(--muted)">${parts.map((part, partIndex) => `<tspan x="${cx}" dy="${partIndex ? 11 : 0}">${html(part)}</tspan>`).join("")}</text>`;
+      }).join("");
+      return `<div class="average-combo"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">
+        <text x="${left}" y="11" text-anchor="start" font-size="10" fill="var(--muted)">Tổng đơn</text>
+        <text x="${width - right}" y="11" text-anchor="end" font-size="10" fill="var(--muted)">TB/ngày</text>
+        ${grid}
+        <line x1="${left}" y1="${baseY}" x2="${width - right}" y2="${baseY}" stroke="var(--line)" stroke-width="1.2"></line>
+        ${bars}${line}${labels}
+      </svg><div class="average-combo-legend"><span><i style="background:#9ca3af"></i>Tổng đơn</span><span><i style="background:#f97316"></i>TB/ngày</span></div></div>`;
     }
     function chartColor(index){
       return ["#14b8a6","#3b82f6","#f59e0b","#ef4444","#8b5cf6","#06b6d4","#84cc16","#ec4899","#64748b","#f97316"][index % 10];
@@ -2510,7 +2756,7 @@
       const total = data.reduce((sum, x) => sum + x[1], 0) || 1;
       const action = label => monthClickable ? ` onclick="selectStoreSummaryMonth('${html(label)}')"` : "";
       if (type === "table") {
-        return `<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Nội dung</th><th>Số đơn</th><th>%</th></tr></thead><tbody>${data.map(x => `<tr class="${x[0]===storeMonth?"active":""}"${action(x[0])}><td>${html(x[0])}</td><td>${x[1].toLocaleString("vi-VN")}</td><td>${Math.round(x[1]/total*100)}%</td></tr>`).join("")}</tbody></table></div>`;
+        return `<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Nội dung</th><th>Số đơn</th><th>%</th></tr></thead><tbody>${data.map(x => `<tr class="${x[0]===storeMonth?"active":""}"${action(x[0])}><td>${html(chartLabel(x[0], monthClickable))}</td><td>${x[1].toLocaleString("vi-VN")}</td><td>${Math.round(x[1]/total*100)}%</td></tr>`).join("")}</tbody></table></div>`;
       }
       if (type === "donut") {
         let cursor = 0;
@@ -2519,7 +2765,7 @@
           cursor += x[1] / total * 100;
           return `${chartColor(index)} ${start}% ${cursor}%`;
         }).join(",");
-        return `<div class="chart-donut-wrap" style="margin-top:12px"><div class="chart-donut" style="background:conic-gradient(${stops})"></div><div class="chart-legend">${data.map((x,index) => `<button type="button"${action(x[0])}><i class="chart-dot" style="background:${chartColor(index)}"></i><span>${html(x[0])}</span><strong>${x[1].toLocaleString("vi-VN")}</strong></button>`).join("")}</div></div>`;
+        return `<div class="chart-donut-wrap" style="margin-top:12px"><div class="chart-donut" style="background:conic-gradient(${stops})"></div><div class="chart-legend">${data.map((x,index) => `<button type="button"${action(x[0])}><i class="chart-dot" style="background:${chartColor(index)}"></i><span>${html(chartLabel(x[0], monthClickable))}</span><strong>${x[1].toLocaleString("vi-VN")}</strong></button>`).join("")}</div></div>`;
       }
       if (type === "line" || type === "area") {
         const width = 640;
@@ -2529,15 +2775,15 @@
           return {x:px,y:py,label:x[0],value:x[1]};
         });
         const polygon = type === "area" && points.length ? `<polygon points="22,152 ${points.map(p=>`${p.x},${p.y}`).join(" ")} ${width-22},152" fill="var(--brand)" opacity=".16"></polygon>` : "";
-        return `<div style="margin-top:10px"><svg class="chart-line" viewBox="0 0 ${width} 176" preserveAspectRatio="xMidYMid meet"><line x1="20" y1="152" x2="${width-20}" y2="152" stroke="var(--line)"></line>${polygon}<polyline fill="none" stroke="var(--brand)" stroke-width="4" vector-effect="non-scaling-stroke" points="${points.map(p=>`${p.x},${p.y}`).join(" ")}"></polyline>${points.map((p,index) => `<g${action(p.label)} style="cursor:pointer"><circle cx="${p.x}" cy="${p.y}" r="5" fill="${chartColor(index)}"></circle><text x="${p.x}" y="${Math.max(13,p.y-10)}" fill="currentColor" text-anchor="middle" font-size="11">${p.value.toLocaleString("vi-VN")}</text></g>`).join("")}</svg><div class="chart-line-labels" style="grid-template-columns:repeat(${data.length},minmax(0,1fr))">${data.map(x => `<span>${html(x[0])}</span>`).join("")}</div></div>`;
+        return `<div style="margin-top:10px"><svg class="chart-line" viewBox="0 0 ${width} 176" preserveAspectRatio="xMidYMid meet"><line x1="20" y1="152" x2="${width-20}" y2="152" stroke="var(--line)"></line>${polygon}<polyline fill="none" stroke="var(--brand)" stroke-width="4" vector-effect="non-scaling-stroke" points="${points.map(p=>`${p.x},${p.y}`).join(" ")}"></polyline>${points.map((p,index) => `<g${action(p.label)} style="cursor:pointer"><circle cx="${p.x}" cy="${p.y}" r="5" fill="${chartColor(index)}"></circle><text x="${p.x}" y="${Math.max(13,p.y-10)}" fill="currentColor" text-anchor="middle" font-size="11">${p.value.toLocaleString("vi-VN")}</text></g>`).join("")}</svg><div class="chart-line-labels" style="grid-template-columns:repeat(${data.length},minmax(0,1fr))">${data.map(x => `<span>${html(chartLabel(x[0], monthClickable))}</span>`).join("")}</div></div>`;
       }
       if (type === "column") {
-        return `<div class="chart-columns" style="grid-template-columns:repeat(${data.length},minmax(0,1fr))">${data.map((x,index) => `<div class="chart-column"${action(x[0])}><strong>${x[1].toLocaleString("vi-VN")}</strong><i style="height:${Math.max(4,Math.round(x[1]/max*132))}px;background:${chartColor(index)}"></i><span>${html(x[0])}</span></div>`).join("")}</div>`;
+        return `<div class="chart-columns" style="grid-template-columns:repeat(${data.length},minmax(0,1fr))">${data.map((x,index) => `<div class="chart-column"${action(x[0])}><strong>${x[1].toLocaleString("vi-VN")}</strong><i style="height:${Math.max(4,Math.round(x[1]/max*132))}px;background:${chartColor(index)}"></i><span>${html(chartLabel(x[0], monthClickable))}</span></div>`).join("")}</div>`;
       }
       if (type === "list") {
-        return `<div class="chart-rank-list">${data.map((x,index) => `<div class="chart-rank-row"${action(x[0])}><i>${index+1}</i><span>${html(x[0])}</span><strong>${x[1].toLocaleString("vi-VN")}</strong></div>`).join("")}</div>`;
+        return `<div class="chart-rank-list">${data.map((x,index) => `<div class="chart-rank-row"${action(x[0])}><i>${index+1}</i><span>${html(chartLabel(x[0], monthClickable))}</span><strong>${x[1].toLocaleString("vi-VN")}</strong></div>`).join("")}</div>`;
       }
-      return `<div class="bar-list chart-grid" style="margin-top:12px">${data.map(x => `<div class="bar-row chart-item ${x[0]===storeMonth?"active":""}"${action(x[0])}><strong>${html(x[0])}</strong><div class="bar-track"><div class="bar-fill" style="width:${Math.round(x[1]/max*100)}%"></div></div><span>${x[1].toLocaleString("vi-VN")} đơn</span></div>`).join("")}</div>`;
+      return `<div class="bar-list chart-grid" style="margin-top:12px">${data.map(x => `<div class="bar-row chart-item ${x[0]===storeMonth?"active":""}"${action(x[0])}><strong>${html(chartLabel(x[0], monthClickable))}</strong><div class="bar-track"><div class="bar-fill" style="width:${Math.round(x[1]/max*100)}%"></div></div><span>${x[1].toLocaleString("vi-VN")} đơn</span></div>`).join("")}</div>`;
     }
     function selectStoreSummaryMonth(month){
       storeMonth = normalizeMonth(month);
@@ -2952,6 +3198,9 @@
       const cfg = appConfig.storeCharts || {};
       const options = [["bar","Biểu đồ thanh ngang"],["column","Biểu đồ cột dọc"],["line","Biểu đồ đường"],["area","Biểu đồ vùng"],["donut","Biểu đồ tròn"],["list","Danh sách xếp hạng"],["table","Bảng số liệu"]];
       const select = (id, value) => `<select id="${id}">${options.map(item => `<option value="${item[0]}" ${item[0]===value?"selected":""}>${item[1]}</option>`).join("")}</select>`;
+      const avgOptions = [["horizontal","Thanh ngang 2 chỉ số"],["combo","Cột + đường cũ"],["table","Chỉ bảng số liệu"]];
+      const avgSelect = (id, value) => `<select id="${id}">${avgOptions.map(item => `<option value="${item[0]}" ${item[0]===value?"selected":""}>${item[1]}</option>`).join("")}</select>`;
+      const metricSelect = (id, value) => `<select id="${id}">${storeAverageMetricOptions().map(item => `<option value="${item[0]}" ${item[0]===value?"selected":""}>${item[1]}</option>`).join("")}</select>`;
       return `<section class="section">
         <h2>Cấu hình biểu đồ Thông tin ST</h2>
         <div class="muted">Cấu hình này áp dụng cho toàn bộ user sau khi lưu lên hệ thống.</div>
@@ -2959,6 +3208,11 @@
           <label>Thông tin tổng hợp theo tháng${select("cfgChartSummary", cfg.summary || "bar")}</label>
           <label>Dữ liệu đơn theo ngày${select("cfgChartProduction", cfg.production || "line")}</label>
           <label>Số lượng đơn theo loại siêu thị${select("cfgChartStoreType", cfg.storeType || "table")}</label>
+          <label>Thống kê trung bình${avgSelect("cfgChartAverage", cfg.average || "horizontal")}</label>
+          <label>Nội dung 1${metricSelect("cfgChartAverageMetricA", cfg.averageMetricA || "totalStore")}</label>
+          <label>Nội dung 2${metricSelect("cfgChartAverageMetricB", cfg.averageMetricB || "avgStorePerDay")}</label>
+          <label>Màu nội dung 1<input id="cfgChartAverageColorA" type="color" value="${html(cfg.averageColorA || "#60a5fa")}"></label>
+          <label>Màu nội dung 2<input id="cfgChartAverageColorB" type="color" value="${html(cfg.averageColorB || "#22c55e")}"></label>
         </div>
         <div class="config-actions" style="margin-top:12px"><button class="primary" onclick="saveStoreChartConfig()">Lưu cấu hình biểu đồ</button></div>
       </section>`;
@@ -2967,7 +3221,12 @@
       appConfig.storeCharts = {
         summary: el("cfgChartSummary")?.value || "bar",
         production: el("cfgChartProduction")?.value || "bar",
-        storeType: el("cfgChartStoreType")?.value || "table"
+        storeType: el("cfgChartStoreType")?.value || "table",
+        average: el("cfgChartAverage")?.value || "horizontal",
+        averageMetricA: el("cfgChartAverageMetricA")?.value || "totalStore",
+        averageMetricB: el("cfgChartAverageMetricB")?.value || "avgStorePerDay",
+        averageColorA: el("cfgChartAverageColorA")?.value || "#60a5fa",
+        averageColorB: el("cfgChartAverageColorB")?.value || "#22c55e"
       };
       saveAppConfig(false);
       const res = await api("saveSystemConfig", {config:{uiConfig:{views:appConfig.views, storeCharts:appConfig.storeCharts}}, _silent:true});
@@ -3055,6 +3314,7 @@
       const adminCache = canViewDeviceArea() ? adminLookupCachePanel() : "";
       const adminQueueErrors = canViewOpsArea() ? adminQueueErrorPanel() : "";
       const adminForgotPass = canAdminUsers() ? adminForgotPassPanel() : "";
+      const adminLoginReport = isSystemOwner() ? adminLoginReportPanel() : "";
       const queuePanel = canViewOpsArea() ? localQueuePanel() : "";
       const role = (live.user && live.user.role) || (isAdminUser() ? "admin" : "staff");
       const selectedTheme = p.theme || "Theo hệ thống";
@@ -3117,6 +3377,7 @@
             ${canOpenAdminArea() ? settingsFold("Quản lý admin", adminPanel, false) : ""}
             ${canViewDeviceArea() ? settingsFold("Quản lý thiết bị", devicePanel, false) : ""}
             ${canViewOpsArea() ? settingsFold("Quản lý vận hành", opsPanel, false) : ""}
+            ${isSystemOwner() ? settingsFold("Báo cáo đăng nhập", adminLoginReport, false) : ""}
             ${canAdminUsers() ? settingsFold("Reset Pass", adminForgotPass, false) : ""}
             ${canViewApiArea() ? settingsFold("API hệ thống", apiPanel, false) : ""}
           </div>
@@ -3125,6 +3386,7 @@
       if (canViewDeviceArea() && !live.lookupCacheStatusLoaded) setTimeout(loadLookupCacheStatus, 0);
       if (canViewOpsArea() && !live.queueErrorsLoaded) setTimeout(loadQueueErrors, 0);
       if (canAdminUsers() && !live.forgotPassRequestsLoaded) setTimeout(loadForgotPassRequests, 0);
+      if (isSystemOwner() && !live.loginReportLoaded && !live.loginReportLoading) setTimeout(loadLoginReport, 0);
       if (!live.accountStatsLoaded && !live.accountStatsLoading) setTimeout(loadAccountStats, 0);
       restoreSettingsUiState();
     }
@@ -3168,6 +3430,65 @@
         live.accountStatsLoading = false;
         if (view === "settings") settings();
       }
+    }
+    function todayInputValue(){
+      const d = new Date();
+      const y = d.toLocaleString("en-CA", {timeZone:"Asia/Ho_Chi_Minh", year:"numeric"});
+      const m = d.toLocaleString("en-CA", {timeZone:"Asia/Ho_Chi_Minh", month:"2-digit"});
+      const day = d.toLocaleString("en-CA", {timeZone:"Asia/Ho_Chi_Minh", day:"2-digit"});
+      return `${y}-${m}-${day}`;
+    }
+    function formatActivitySeconds(seconds){
+      const n = Math.max(0, Number(seconds || 0));
+      const h = Math.floor(n / 3600);
+      const m = Math.floor((n % 3600) / 60);
+      if (h) return `${h}h ${String(m).padStart(2,"0")}p`;
+      return `${m}p`;
+    }
+    function adminLoginReportPanel(){
+      const date = live.loginReportDate || todayInputValue();
+      const data = live.loginReport || {rows:[]};
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const body = live.loginReportLoading ? `<tr><td colspan="5" class="muted">Đang tải...</td></tr>` : (rows.length ? rows.map(r => `<tr><td>${html(r.date || "-")}</td><td>${html(r.user || "-")}</td><td><strong>${Number(r.loginCount || 0).toLocaleString("vi-VN")}</strong></td><td>${html(r.loginTimes || "-")}</td><td>${html(formatActivitySeconds(r.activeSeconds))}</td></tr>`).join("") : `<tr><td colspan="5" class="muted">Chưa có dữ liệu đăng nhập ngày này.</td></tr>`);
+      return `<section class="section"><h2>Báo cáo đăng nhập app</h2>
+        <div class="grid cols-2" style="margin-bottom:8px"><label>Chọn ngày<input id="loginReportDate" type="date" value="${html(date)}" onchange="loadLoginReport(true)"></label><label>&nbsp;<button onclick="loadLoginReport(true)">Tải lại realtime</button></label></div>
+        <div class="table-wrap"><table><thead><tr><th>Ngày</th><th>User</th><th>Số lần đăng nhập</th><th>Mốc thời gian đăng nhập</th><th>Thời gian hoạt động app</th></tr></thead><tbody>${body}</tbody></table></div>
+      </section>`;
+    }
+    async function loadLoginReport(force){
+      if (!isSystemOwner() || live.loginReportLoading) return;
+      const input = el("loginReportDate");
+      const date = (input && input.value) || live.loginReportDate || todayInputValue();
+      live.loginReportDate = date;
+      live.loginReportLoading = true;
+      if (view === "settings" && force) settings();
+      try {
+        const res = await api("loginReport", {date, _silent:true});
+        live.loginReport = res.ok ? {rows: res.rows || []} : {rows: [], error: res.message || "Lỗi tải báo cáo"};
+      } catch (err) {
+        live.loginReport = {rows: [], error: String(err && err.message || err)};
+      } finally {
+        live.loginReportLoaded = true;
+        live.loginReportLoading = false;
+        if (view === "settings") settings();
+      }
+    }
+    function startActivityReporter(){
+      if (!live.token) return;
+      live.activityStartedAt = live.activityStartedAt || Date.now();
+      const send = () => {
+        if (!live.token || document.hidden) return;
+        const seconds = Math.max(0, Math.round((Date.now() - live.activityStartedAt) / 1000));
+        live.activityLastReportAt = Date.now();
+        api("activityPing", {activeSeconds: seconds, deviceId: deviceId(), _silent:true}).then(() => {
+          if (isSystemOwner() && view === "settings" && (live.loginReportDate || todayInputValue()) === todayInputValue()) loadLoginReport(false);
+        }).catch(() => {});
+      };
+      send();
+      if (live.activityTimer) clearInterval(live.activityTimer);
+      live.activityTimer = setInterval(send, 60000);
+      window.addEventListener("beforeunload", send);
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) send(); });
     }
     function openAdminSection(tab){
       captureSettingsUiState();
@@ -3750,7 +4071,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "2.4";
+    const APP_VERSION = "2.5";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const nativeImagePickerMap = {
@@ -4371,6 +4692,13 @@
       accountStats: null,
       accountStatsLoaded: false,
       accountStatsLoading: false,
+      loginReport: null,
+      loginReportDate: "",
+      loginReportLoaded: false,
+      loginReportLoading: false,
+      activityTimer: null,
+      activityStartedAt: 0,
+      activityLastReportAt: 0,
       inputSaving: false,
       queueReportTimer: null,
       queueWatchdogTimer: null,
@@ -6706,6 +7034,7 @@
       refreshSessionAuth();
       dynamicLoadConfig(false);
       startQueueWatchdog();
+      startActivityReporter();
       scheduleQueueReport(1500);
       warmLiveData();
       startBackgroundTasks();
@@ -6737,7 +7066,7 @@
       const email = inputs[0] ? inputs[0].value.trim() : "";
       const pin = inputs[1] ? inputs[1].value.trim() : "";
       el("loginError").classList.add("hidden");
-      const res = await api("login", {email, pin});
+      const res = await api("login", {email, pin, deviceId: deviceId()});
       if (!res.ok) {
         el("loginError").textContent = normalizeLoginMessage(res.message || "Email hoặc Pass không đúng.");
         el("loginError").classList.remove("hidden");
@@ -7634,6 +7963,20 @@
       const dataUrl = await readFileAsDataUrl(file);
       return normalizeImagePayload(dataUrl, file.name || ("VTD_" + Date.now() + ".jpg"), file.type || "image/jpeg", meta);
     }
+    function storeTypeTotals(month, info){
+      const selectedMonth = normalizeMonth(month);
+      const source = info && Array.isArray(info.byStore) ? info.byStore : null;
+      let rows = source
+        ? source.map(x => [String(x.key || x.store || "").trim() || "ST khác", Number(x.value ?? x.total ?? x.count ?? 0)])
+        : (storeByMonth[selectedMonth] || []).map(x => [x[0], Number(x[1] || 0)]);
+      rows = rows.filter(x => x[0] && Number(x[1] || 0) > 0)
+        .sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0));
+      if (!rows.length) {
+        const fixedTotal = fixedMonthTotals()[selectedMonth] || 0;
+        if (fixedTotal) rows = [["Tổng tháng đã chốt", fixedTotal]];
+      }
+      return rows;
+    }
     async function store(){
       el("view").className = "content";
       const monthOptions = liveMonthOptions();
@@ -7652,19 +7995,12 @@
         loadStoreInfo(storeMonth);
       }
       const info = cachedInfo || (live.storeInfoMonth === storeMonth ? live.storeInfo : null);
-      const apiRows = info && (info.byStore || info.byDate);
-      let fullData = Array.isArray(apiRows) ? apiRows.map(x => [x.key, x.value]) : (storeByMonth[storeMonth] || []);
-      if (!fullData.length) {
-        const fixedTotal = fixedMonthTotals()[storeMonth] || 0;
-        if (fixedTotal) fullData = [["Tổng tháng đã chốt", fixedTotal]];
-      }
+      const fullData = storeTypeTotals(storeMonth, info);
       const data = storeType === "Tất cả" ? fullData : fullData.filter(x => x[0] === storeType);
-      const total = data.reduce((s, x) => s + Number(x[1] || 0), 0) || 1;
-      const max = Math.max(...data.map(x => Number(x[1] || 0)), 1);
-      const bars = data.length ? data.map(x => `<tr><td>${html(x[0])}</td><td><strong>${Number(x[1]).toLocaleString("vi-VN")}</strong></td><td><div style="height:18px;background:#e8f1ff;border-radius:999px;overflow:hidden"><div style="height:100%;width:${Math.round(Number(x[1])/max*100)}%;background:#12b8a6"></div></div></td><td>${Math.round(Number(x[1])/total*100)}%</td></tr>`).join("") : `<tr><td colspan="4">Không có dữ liệu cho bộ lọc này.</td></tr>`;
       el("view").innerHTML = `<section class="section"><h2>Thông tin ST</h2><div class="search-filter-row"><label>Tháng<select onchange="storeMonth=this.value; store()">${monthOptions.map(m => `<option ${m===storeMonth?"selected":""}>${m}</option>`).join("")}</select></label><label>Loại ST<select onchange="storeType=this.value; store()">${allStoreTypes().map(x => `<option ${x===storeType?"selected":""}>${html(x)}</option>`).join("")}</select></label></div></section>
       <section class="section"><h2>Thông tin tổng hợp theo tháng</h2>${monthlySummaryChart()}</section>
       <section class="section"><h2>Số lượng đơn theo loại siêu thị</h2>${renderStoreChart(data, (appConfig.storeCharts || {}).storeType || "table", false)}</section>
+      <section class="section"><h2>Thống kê trung bình</h2>${storeAverageStats()}</section>
       <section class="section"><h2>Dữ liệu đơn theo ngày ${html(storeMonth)}</h2>${storeDayDetails()}</section>`;
     }
     function logout(){
