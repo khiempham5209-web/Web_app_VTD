@@ -3473,22 +3473,77 @@
         if (view === "settings") settings();
       }
     }
+    function activityReporterCanRun(){
+      return !!live.token && document.visibilityState === "visible" && !document.hidden;
+    }
+    function activityReporterTick(){
+      const now = Date.now();
+      const last = Number(live.activityLastTickAt || now);
+      live.activityLastTickAt = now;
+      if (!activityReporterCanRun()) return;
+      const elapsedMs = Math.max(0, now - last);
+      const seconds = Math.floor(elapsedMs / 1000);
+      if (seconds > 0) live.activityAccumulatedSeconds = Number(live.activityAccumulatedSeconds || 0) + seconds;
+    }
+    function flushActivityReporter(allowHidden){
+      if (!live.token) return Promise.resolve();
+      if (document.hidden && !allowHidden) return Promise.resolve();
+      activityReporterTick();
+      const total = Math.max(0, Number(live.activityAccumulatedSeconds || 0));
+      const sent = Math.max(0, Number(live.activityReportedSeconds || 0));
+      const delta = Math.max(0, total - sent);
+      if (!delta) return Promise.resolve();
+      live.activityReportedSeconds = total;
+      return api("activityPing", {activeSeconds: delta, deviceId: deviceId(), _silent:true}).then(() => {
+        if (isSystemOwner() && view === "settings" && (live.loginReportDate || todayInputValue()) === todayInputValue()) loadLoginReport(false);
+      }).catch(() => {
+        live.activityReportedSeconds = sent;
+      });
+    }
+    function stopActivityReporter(flush){
+      if (live.activityTickTimer) clearInterval(live.activityTickTimer);
+      if (live.activityTimer) clearInterval(live.activityTimer);
+      live.activityTickTimer = null;
+      live.activityTimer = null;
+      if (flush) return flushActivityReporter(true);
+      return Promise.resolve();
+    }
+    function resetActivityReporterState(){
+      live.activityAccumulatedSeconds = 0;
+      live.activityReportedSeconds = 0;
+      live.activityLastTickAt = 0;
+    }
     function startActivityReporter(){
       if (!live.token) return;
-      live.activityStartedAt = live.activityStartedAt || Date.now();
-      const send = () => {
-        if (!live.token || document.hidden) return;
-        const seconds = Math.max(0, Math.round((Date.now() - live.activityStartedAt) / 1000));
-        live.activityLastReportAt = Date.now();
-        api("activityPing", {activeSeconds: seconds, deviceId: deviceId(), _silent:true}).then(() => {
-          if (isSystemOwner() && view === "settings" && (live.loginReportDate || todayInputValue()) === todayInputValue()) loadLoginReport(false);
-        }).catch(() => {});
-      };
-      send();
+      if (live.activityTickTimer) clearInterval(live.activityTickTimer);
       if (live.activityTimer) clearInterval(live.activityTimer);
-      live.activityTimer = setInterval(send, 60000);
-      window.addEventListener("beforeunload", send);
-      document.addEventListener("visibilitychange", () => { if (!document.hidden) send(); });
+      live.activityAccumulatedSeconds = Math.max(0, Number(live.activityAccumulatedSeconds || 0));
+      live.activityReportedSeconds = Math.max(0, Number(live.activityReportedSeconds || 0));
+      live.activityLastTickAt = Date.now();
+      live.activityTickTimer = setInterval(activityReporterTick, 1000);
+      live.activityTimer = setInterval(() => {
+        activityReporterTick();
+        flushActivityReporter(false);
+      }, 60000);
+      if (!live.activityLifecycleBound) {
+        live.activityLifecycleBound = true;
+        window.addEventListener("beforeunload", () => {
+          activityReporterTick();
+          flushActivityReporter(true);
+        });
+        window.addEventListener("pagehide", () => {
+          activityReporterTick();
+          flushActivityReporter(true);
+        });
+        document.addEventListener("visibilitychange", () => {
+          if (document.hidden) {
+            activityReporterTick();
+            flushActivityReporter(true);
+            return;
+          }
+          live.activityLastTickAt = Date.now();
+        });
+      }
     }
     function openAdminSection(tab){
       captureSettingsUiState();
@@ -4071,7 +4126,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "2.5";
+    const APP_VERSION = "2.6";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const nativeImagePickerMap = {
@@ -4697,8 +4752,11 @@
       loginReportLoaded: false,
       loginReportLoading: false,
       activityTimer: null,
-      activityStartedAt: 0,
-      activityLastReportAt: 0,
+      activityTickTimer: null,
+      activityLifecycleBound: false,
+      activityAccumulatedSeconds: 0,
+      activityReportedSeconds: 0,
+      activityLastTickAt: 0,
       inputSaving: false,
       queueReportTimer: null,
       queueWatchdogTimer: null,
@@ -4773,6 +4831,8 @@
     function handleApiResponse(action, res) {
       const msg = String((res && res.message) || "");
       if (action !== "login" && res && res.ok === false && /dang nhap|đăng nhập/i.test(msg)) {
+        stopActivityReporter(true);
+        resetActivityReporterState();
         localStorage.removeItem("vtd_session_day");
         localStorage.removeItem("vtd_token");
         localStorage.removeItem("vtd_user");
@@ -7052,6 +7112,8 @@
       }
       const msg = normalizeLoginMessage(res.message || "");
       if (/quyền|đăng nhập|không đúng/i.test(msg)) {
+        stopActivityReporter(true);
+        resetActivityReporterState();
         localStorage.removeItem("vtd_session_day");
         localStorage.removeItem("vtd_token");
         localStorage.removeItem("vtd_user");
@@ -7074,6 +7136,7 @@
       }
       live.token = res.token || "";
       live.user = res.auth || {email: res.user, role: "staff"};
+      resetActivityReporterState();
       live.passwordPolicy = res.passwordPolicy || (live.user && live.user.passwordPolicy) || null;
       localStorage.setItem("vtd_token", live.token);
       localStorage.setItem("vtd_user", JSON.stringify(live.user));
@@ -8005,6 +8068,8 @@
     }
     function logout(){
       clearLoading();
+      stopActivityReporter(true);
+      resetActivityReporterState();
       localStorage.removeItem("vtd_session_day");
       localStorage.removeItem("vtd_token");
       localStorage.removeItem("vtd_user");
@@ -8029,4 +8094,3 @@
   </script>
 </body>
 </html>
-
