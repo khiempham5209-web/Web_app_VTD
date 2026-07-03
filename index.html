@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-  <title>VTD App Prototype</title>
+  <title>Chứng từ FF</title>
   <script>
     (() => {
       const query = new URLSearchParams(location.search);
       const desktopPath = /(?:^|\/)(?:desktop-web\/|desktop\.html$)/i.test(location.pathname);
       if (query.get("layout") === "desktop" || desktopPath) {
         document.documentElement.classList.add("desktop");
-        document.title = "Chứng từ VTD - Desktop";
+        document.title = "Chứng từ FF - Desktop";
       }
     })();
   </script>
@@ -1332,7 +1332,7 @@
   <div id="login" class="login-page">
     <section class="login-card">
       <div class="logo">V</div>
-      <h1>Chứng từ VTD</h1>
+      <h1>Chứng từ FF</h1>
       <p style="margin:0;color:var(--muted)">Đăng nhập bằng email và Pass được cấp.</p>
       <div id="loginError" class="error-box hidden">Email hoặc Pass không đúng.</div>
       <label>Email<input autocomplete="username" placeholder="Nhập email được cấp quyền"></label>
@@ -1348,7 +1348,7 @@
     <aside class="side">
       <div class="brand">
         <div class="logo">V</div>
-        <div><strong>Chứng từ VTD</strong><span id="sideAccount">Tài khoản</span></div>
+        <div><strong>Chứng từ FF</strong><span id="sideAccount">Tài khoản</span></div>
       </div>
       <nav class="nav" id="nav"></nav>
     </aside>
@@ -3711,6 +3711,7 @@
       if (res.ok) {
         live.queueErrors = Array.isArray(res.rows) ? res.rows : [];
         live.queueErrorsLoaded = true;
+        notifyAdminQueueErrors(live.queueErrors);
         if (view === "settings") settings();
         if (force) toast(`Đã tải lỗi sync: ${live.queueErrors.length} dòng`, "ok");
       } else if (force) {
@@ -4236,7 +4237,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "2.6";
+    const APP_VERSION = "2.7";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const nativeImagePickerMap = {
@@ -6074,6 +6075,70 @@
     function saveLocalQueue(queue){
       localStorage.setItem(LOCAL_QUEUE_KEY, JSON.stringify(compactQueueForStorage(queue)));
     }
+    function queueItemOrderCode(item){
+      const p = item && item.payload || {};
+      return p.maDon || p.ma_don || p.orderCode || p["Mã đơn"] || p["MÃ£ Ä‘Æ¡n"] || "";
+    }
+    function notifyDevice(title, message, route, key){
+      try {
+        if (key) {
+          const seenKey = `vtd_notify_seen_${key}`;
+          if (localStorage.getItem(seenKey)) return;
+          localStorage.setItem(seenKey, String(Date.now()));
+        }
+        const safeTitle = String(title || "VTD");
+        const safeMessage = String(message || "");
+        if (window.VTDNative && typeof window.VTDNative.notify === "function") {
+          window.VTDNative.notify(safeTitle, safeMessage, String(route || ""));
+          return;
+        }
+        if ("Notification" in window) {
+          if (Notification.permission === "granted") {
+            new Notification(safeTitle, {body: safeMessage});
+          }
+        }
+      } catch (err) {}
+    }
+    function notifyQueueItemError(item){
+      if (!item || item.notifiedErrorAt) return;
+      const code = queueItemOrderCode(item);
+      const message = code
+        ? `Đơn ${code} chưa hoàn tất đồng bộ hệ thống. Vui lòng bạn thực hiện lại.`
+        : "Có 1 đơn chưa hoàn tất đồng bộ hệ thống. Vui lòng bạn thực hiện lại.";
+      item.notifiedErrorAt = Date.now();
+      notifyDevice("Đơn lỗi sync", message, "#settings", `user_error_${item.localId || code || item.createdAt || Date.now()}`);
+    }
+    function notifyQueueItemDone(item){
+      if (!item || !item.notifiedErrorAt || item.notifiedDoneAt) return;
+      const code = queueItemOrderCode(item);
+      const message = code
+        ? `Đơn ${code} đã được đồng bộ thành công. Cảm ơn bạn.`
+        : "Đơn lỗi đã được đồng bộ thành công. Cảm ơn bạn.";
+      item.notifiedDoneAt = Date.now();
+      notifyDevice("Đồng bộ thành công", message, "#home", `user_done_${item.localId || code || item.syncedAt || Date.now()}`);
+    }
+    function notifyAdminQueueErrors(rows){
+      if (!Array.isArray(rows) || !rows.length) return;
+      let seen = {};
+      try { seen = JSON.parse(localStorage.getItem("vtd_admin_notified_queue_errors_v1") || "{}") || {}; } catch (err) { seen = {}; }
+      let changed = false;
+      rows.slice(0, 20).forEach(row => {
+        const key = row.localId || [row.email, row.deviceId, row.maDon, row.step, row.updatedAt].filter(Boolean).join("|");
+        if (!key || seen[key]) return;
+        seen[key] = Date.now();
+        changed = true;
+        const user = row.email || row.user || "user";
+        const code = row.maDon || "";
+        const message = code
+          ? `Đơn ${code} chưa hoàn thành đồng bộ bởi ${user}. Vui lòng báo người thực hiện check lại.`
+          : `Có 1 đơn chưa hoàn thành đồng bộ bởi ${user}. Vui lòng báo người thực hiện check lại.`;
+        notifyDevice("Đơn lỗi sync", message, "#settings", `admin_error_${key}`);
+      });
+      if (changed) {
+        const entries = Object.entries(seen).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 300);
+        localStorage.setItem("vtd_admin_notified_queue_errors_v1", JSON.stringify(Object.fromEntries(entries)));
+      }
+    }
     function queueImageDb(){
       return new Promise((resolve, reject) => {
         if (!window.indexedDB) {
@@ -6305,6 +6370,7 @@
             item.status = "error";
             item.lastError = item.lastError || "Quá 3 phút không có phản hồi, app đã nhả queue.";
             item.lastStep = item.lastStep || "unknown";
+            notifyQueueItemError(item);
             changed = true;
           }
         });
@@ -7015,6 +7081,7 @@
                 updated.status = "error";
                 updated.lastError = String(err && err.message || err);
                 updated.lastStep = "readReturnThImage";
+                notifyQueueItemError(updated);
                 saveLocalQueue(queue);
                 updateInputSyncBadge();
                 scheduleQueueReport();
@@ -7040,6 +7107,7 @@
               updated.status = "error";
               updated.lastError = res.message || "Sync Nhập TH lỗi";
               updated.lastStep = "saveReturnTh";
+              notifyQueueItemError(updated);
               saveLocalQueue(queue);
               updateInputSyncBadge();
               scheduleQueueReport();
@@ -7051,6 +7119,7 @@
             updated.syncedAt = Date.now();
             updated.lastError = "";
             updated.lastStep = "done";
+            notifyQueueItemDone(updated);
             saveLocalQueue(queue);
             updateInputSyncBadge();
             scheduleQueueReport();
@@ -7080,6 +7149,7 @@
             updated.status = "error";
             updated.lastError = res.message || "Sync lỗi";
             updated.lastStep = "saveRaw";
+            notifyQueueItemError(updated);
             saveLocalQueue(queue);
             updateInputSyncBadge();
             scheduleQueueReport();
@@ -7096,6 +7166,7 @@
             updated.status = "done";
             updated.syncedAt = Date.now();
             updated.lastStep = "done";
+            notifyQueueItemDone(updated);
           }
           saveLocalQueue(queue);
           refreshLocalRows();
@@ -7132,6 +7203,7 @@
               updated.imageIndex = imageIndex;
               updated.lastError = String(err && err.message || err);
               updated.lastStep = "readImage";
+              notifyQueueItemError(updated);
               saveLocalQueue(queue);
               updateInputSyncBadge();
               scheduleQueueReport();
@@ -7152,6 +7224,7 @@
             updated.imageIndex = imageIndex;
             updated.lastError = `Ảnh ${imageIndex + 1}/${(updated.images || []).length || 0}: ${imgRes.message || "Upload ảnh lỗi"}`;
             updated.lastStep = "uploadImages";
+            notifyQueueItemError(updated);
             saveLocalQueue(queue);
             updateInputSyncBadge();
             scheduleQueueReport();
@@ -7168,6 +7241,7 @@
             updated.syncedAt = Date.now();
             updated.imageSyncedAt = Date.now();
             updated.lastStep = "done";
+            notifyQueueItemDone(updated);
           }
           updated.lastError = "";
           saveLocalQueue(queue);
