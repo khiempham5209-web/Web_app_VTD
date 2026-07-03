@@ -419,10 +419,40 @@
     .chart-rank-row:first-child { border-top: 0; }
     .chart-rank-row i { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--soft); color: var(--brand); font-style: normal; font-size: 11px; font-weight: 700; }
     .store-day-list { display: grid; gap: 7px; margin-top: 12px; }
-    .store-day-row { border-top: 1px solid var(--line); padding: 9px 0 2px; display: grid; gap: 5px; }
+    .store-day-row { border-top: 1px solid var(--line); padding: 9px 0 2px; display: grid; gap: 5px; cursor: pointer; }
     .store-day-row:first-child { border-top: 0; }
     .store-day-head { display: flex; justify-content: space-between; gap: 10px; }
     .store-day-types { display: flex; flex-wrap: wrap; gap: 5px 10px; color: var(--muted); font-size: 13px; }
+    .store-day-modal-overlay { position: fixed; inset: 0; z-index: 95; display: none; align-items: center; justify-content: center; padding: 12px; background: rgba(15, 23, 42, .42); }
+    .store-day-modal-overlay.active { display: flex; }
+    .store-day-modal { width: min(calc(100vw - 24px), 710px); height: min(75vh, 620px); max-height: calc(100vh - 24px); background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 16px 34px rgba(15, 23, 42, .24); display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+    .store-day-modal-top { padding: 14px 18px 8px; display: grid; gap: 7px; }
+    .store-day-modal-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 23px; font-weight: 900; }
+    .store-day-modal-sub { color: var(--muted); font-size: 14px; }
+    .store-day-modal-types { display: flex; flex-wrap: wrap; gap: 8px; }
+    .store-day-chip { display: inline-flex; align-items: center; min-height: 24px; padding: 0 16px; border-radius: 999px; background: var(--brand-soft); color: var(--brand); font-size: 13px; font-weight: 900; }
+    .store-order-list { min-height: 0; overflow-y: auto; overflow-x: hidden; border-top: 1px solid var(--line); }
+    .store-order-grid { display: grid; grid-template-columns: 12% minmax(0, 38%) 25% 9% 16%; align-items: center; column-gap: 0; width: 100%; min-width: 0; }
+    .store-order-head { position: sticky; top: 0; z-index: 1; background: #f8fafc; color: var(--muted); font-size: 11px; font-weight: 900; text-align: center; border-bottom: 1px solid var(--line); }
+    .store-order-head > span { padding: 9px 3px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .store-order-row { min-height: 43px; padding: 0 12px; border-bottom: 1px solid var(--line); font-size: 10px; }
+    .store-order-row > span { overflow: hidden; text-overflow: clip; white-space: nowrap; padding: 0 3px; }
+    @media (max-width: 520px) {
+      .store-day-modal { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
+      .store-day-modal-overlay { padding: 8px; }
+      .store-day-modal-top { padding: 12px 12px 7px; gap: 6px; }
+      .store-day-modal-title { font-size: 21px; }
+      .store-day-chip { min-height: 22px; padding: 0 12px; font-size: 12px; }
+      .store-order-grid { grid-template-columns: 14% minmax(0, 35%) 26% 9% 16%; }
+      .store-order-row { padding: 0 7px; font-size: 8.8px; min-height: 40px; }
+      .store-order-head { font-size: 10px; }
+      .store-order-head > span,
+      .store-order-row > span { padding: 0 2px; }
+    }
+    .store-order-empty { padding: 18px 20px; color: var(--muted); font-weight: 700; }
+    body.theme-dark .store-day-modal,
+    body.theme-dark .store-order-head { background: var(--surface); color: var(--text); border-color: var(--line); }
+    body.theme-dark .store-day-modal-overlay { background: rgba(2, 6, 23, .72); }
     .error-retry { margin-top: 9px; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-color: #fca5a5; color: var(--err); background: #fff; }
     .error-retry svg { width: 17px; height: 17px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
     .detail-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
@@ -1407,6 +1437,7 @@
     let storeMonth = "";
     let storeType = "Tất cả";
     let storeDrillMonth = "";
+    let storeDayModalDate = "";
     let adminTab = "users";
     let editingUserIndex = -1;
     let detailRows = rows;
@@ -2795,20 +2826,95 @@
       const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
       return match ? `${match[3]}/${match[2]}/${match[1]}` : text;
     }
+    function storeDayStores(day){
+      return (Array.isArray(day && day.stores) ? day.stores : [])
+        .map(item => ({key:String(item.key || item.store || "").trim() || "Khác", value:Number(item.value ?? item.total ?? item.count ?? 0)}))
+        .filter(item => item.value > 0)
+        .sort((a,b)=>a.value-b.value || String(a.key).localeCompare(String(b.key), "vi"));
+    }
+    function storeDayOrders(day, stores){
+      const storeRank = {};
+      (stores || []).forEach((item, index) => {
+        storeRank[item.key] = {index, value:Number(item.value || 0)};
+      });
+      return (Array.isArray(day && day.orders) ? day.orders : [])
+        .filter(order => storeType === "Tất cả" || String(order.storeType || "") === storeType)
+        .sort((a,b) => {
+          const ar = storeRank[a.storeType] || {index:9999, value:999999};
+          const br = storeRank[b.storeType] || {index:9999, value:999999};
+          return ar.value - br.value || ar.index - br.index || String(a.customer || "").localeCompare(String(b.customer || ""), "vi") || String(a.maDon || "").localeCompare(String(b.maDon || ""), "vi");
+        });
+    }
+    function currentStoreDayInfo(date){
+      const selectedMonth = storeMonth;
+      const info = live.storeInfoByMonth[selectedMonth] || (live.storeInfoMonth === selectedMonth ? live.storeInfo : null);
+      const days = info && Array.isArray(info.dailyStores) ? info.dailyStores : [];
+      return days.find(day => String(day.date || "") === String(date || "")) || null;
+    }
+    function closeStoreDayModal(){
+      storeDayModalDate = "";
+      const root = el("storeDayModalRoot");
+      if (root) root.classList.remove("active");
+    }
+    async function openStoreDayModal(date){
+      let day = currentStoreDayInfo(date);
+      if (!day) return;
+      storeDayModalDate = String(date || "");
+      let stores = storeDayStores(day).filter(item => storeType === "Tất cả" || item.key === storeType);
+      let total = storeType === "Tất cả" ? Number(day.total || 0) : stores.reduce((sum,item)=>sum+Number(item.value || 0),0);
+      let orders = storeDayOrders(day, stores);
+      if (!orders.length && typeof loadStoreInfoFromDevice === "function") {
+        const rebuilt = await loadStoreInfoFromDevice(storeMonth);
+        if (rebuilt) {
+          day = currentStoreDayInfo(date) || day;
+          stores = storeDayStores(day).filter(item => storeType === "Tất cả" || item.key === storeType);
+          total = storeType === "Tất cả" ? Number(day.total || 0) : stores.reduce((sum,item)=>sum+Number(item.value || 0),0);
+          orders = storeDayOrders(day, stores);
+          if (view === "store") store();
+        }
+      }
+      let root = el("storeDayModalRoot");
+      if (!root) {
+        root = document.createElement("div");
+        root.id = "storeDayModalRoot";
+        root.className = "store-day-modal-overlay";
+        document.body.appendChild(root);
+      }
+      const rows = orders.length ? orders.map(order => `<div class="store-order-grid store-order-row">
+        <span>${html(order.od || "-")}</span>
+        <span>${html(order.customer || "-")}</span>
+        <span>${html(order.po || "-")}</span>
+        <span>${html(order.invoice || "-")}</span>
+        <span>${html(order.maDon || "-")}</span>
+      </div>`).join("") : `<div class="store-order-empty">Máy này chưa có cache danh sách đơn chi tiết cho ngày này.</div>`;
+      root.innerHTML = `<div class="store-day-modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
+        <div class="store-day-modal-top">
+          <div class="store-day-modal-title"><span>${html(displayStoreDate(day.date))}</span><span>${Number(total || 0).toLocaleString("vi-VN")} đơn</span></div>
+          <div class="store-day-modal-sub">Danh sách đơn siêu thị trong ngày</div>
+          <div class="store-day-modal-types">${stores.map(item => `<span class="store-day-chip">${html(item.key)} ${Number(item.value || 0).toLocaleString("vi-VN")}</span>`).join("")}</div>
+        </div>
+        <div class="store-order-list">
+          <div class="store-order-grid store-order-head"><span>OD</span><span>Tên khách hàng</span><span>PO</span><span>Số HĐ</span><span>Mã đơn</span></div>
+          ${rows}
+        </div>
+      </div>`;
+      root.onclick = closeStoreDayModal;
+      root.classList.add("active");
+    }
     function storeDayDetails(){
       const selectedMonth = storeMonth;
       const info = live.storeInfoByMonth[selectedMonth] || (live.storeInfoMonth === selectedMonth ? live.storeInfo : null);
       const days = info && Array.isArray(info.dailyStores) ? info.dailyStores : [];
       if (!days.length) return `<div class="muted" style="margin-top:10px">Chưa có dữ liệu đơn theo ngày của ${html(selectedMonth)}.</div>`;
       const filteredDays = days.map(day => {
-        const stores = Array.isArray(day.stores) ? day.stores : [];
+        const stores = storeDayStores(day);
         const visibleStores = storeType === "Tất cả" ? stores : stores.filter(item => item.key === storeType);
         const total = storeType === "Tất cả" ? Number(day.total || 0) : visibleStores.reduce((sum,item) => sum + Number(item.value || 0), 0);
         return {date:day.date, total:total, stores:visibleStores};
       }).filter(day => day.total > 0);
       if (!filteredDays.length) return `<div class="muted" style="margin-top:10px">Không có dữ liệu ${html(storeType)} theo ngày trong ${html(selectedMonth)}.</div>`;
       const chartData = filteredDays.map(day => [displayStoreDate(day.date).slice(0,2), day.total]);
-      return `${renderStoreChart(chartData, (appConfig.storeCharts || {}).production || "line", false)}<div class="store-day-list">${filteredDays.map(day => `<div class="store-day-row"><div class="store-day-head"><strong>${html(displayStoreDate(day.date))}</strong><strong>${Number(day.total || 0).toLocaleString("vi-VN")} đơn</strong></div><div class="store-day-types">${day.stores.map(item => `<span>${html(item.key)}: <strong>${Number(item.value || 0).toLocaleString("vi-VN")}</strong></span>`).join("")}</div></div>`).join("")}</div>`;
+      return `${renderStoreChart(chartData, (appConfig.storeCharts || {}).production || "line", false)}<div class="store-day-list">${filteredDays.map(day => `<div class="store-day-row" onclick="openStoreDayModal('${html(day.date)}')"><div class="store-day-head"><strong>${html(displayStoreDate(day.date))}</strong><strong>${Number(day.total || 0).toLocaleString("vi-VN")} đơn</strong></div><div class="store-day-types">${day.stores.map(item => `<span>${html(item.key)}: <strong>${Number(item.value || 0).toLocaleString("vi-VN")}</strong></span>`).join("")}</div></div>`).join("")}</div>`;
     }
     function admin(){
       if (!canOpenAdminArea()) {
@@ -5068,6 +5174,17 @@
         req.onerror = () => reject(req.error);
       });
     }
+    function storeOrderFromRecord(record, storeType){
+      record = record || {};
+      return {
+        od: String(record.od || "").trim(),
+        customer: String(record.customer || record.khachHang || "").trim(),
+        po: String(record.po || "").trim(),
+        invoice: String(record.invoice || record.soHoaDon || "").trim(),
+        maDon: String(record.maDon || record.orderCode || record.key || "").trim(),
+        storeType: String(storeType || record.storeType || record.loaiSt || "").trim()
+      };
+    }
     async function buildStoreInfoFromOrderCache(month){
       const selectedMonth = normalizeMonth(month);
       if (!selectedMonth) return null;
@@ -5094,8 +5211,9 @@
               byStore:Object.keys(byStore).map(key=>({key,value:byStore[key]})).sort((a,b)=>b.value-a.value),
               dailyStores:Object.keys(dailyStores).sort().map(date => ({
                 date,
-                total:Object.keys(dailyStores[date]).reduce((sum,key)=>sum+Number(dailyStores[date][key]||0),0),
-                stores:Object.keys(dailyStores[date]).map(key=>({key,value:dailyStores[date][key]})).sort((a,b)=>b.value-a.value)
+                total:Object.keys(dailyStores[date].stores).reduce((sum,key)=>sum+Number(dailyStores[date].stores[key]||0),0),
+                stores:Object.keys(dailyStores[date].stores).map(key=>({key,value:dailyStores[date].stores[key]})).sort((a,b)=>a.value-b.value || String(a.key).localeCompare(String(b.key), "vi")),
+                orders:dailyStores[date].orders || []
               })),
               _month:selectedMonth,
               _cachedAt:Date.now(),
@@ -5115,8 +5233,9 @@
               const storeType = String(record.storeType || record.loaiSt || "Khác").trim() || "Khác";
               byStore[storeType] = (byStore[storeType] || 0) + 1;
               if (dateKey) {
-                if (!dailyStores[dateKey]) dailyStores[dateKey] = {};
-                dailyStores[dateKey][storeType] = (dailyStores[dateKey][storeType] || 0) + 1;
+                if (!dailyStores[dateKey]) dailyStores[dateKey] = {stores:{}, orders:[]};
+                dailyStores[dateKey].stores[storeType] = (dailyStores[dateKey].stores[storeType] || 0) + 1;
+                dailyStores[dateKey].orders.push(storeOrderFromRecord(record, storeType));
               }
               total++;
             }
@@ -5168,8 +5287,9 @@
               const storeType = String(record.storeType || record.loaiSt || "Khác").trim() || "Khác";
               bucket.byStore[storeType] = (bucket.byStore[storeType] || 0) + 1;
               if (dateKey) {
-                if (!bucket.daily[dateKey]) bucket.daily[dateKey] = {};
-                bucket.daily[dateKey][storeType] = (bucket.daily[dateKey][storeType] || 0) + 1;
+                if (!bucket.daily[dateKey]) bucket.daily[dateKey] = {stores:{}, orders:[]};
+                bucket.daily[dateKey].stores[storeType] = (bucket.daily[dateKey].stores[storeType] || 0) + 1;
+                bucket.daily[dateKey].orders.push(storeOrderFromRecord(record, storeType));
               }
             }
           }
@@ -5190,8 +5310,9 @@
           byStore:Object.keys(bucket.byStore).map(key=>({key,value:bucket.byStore[key]})).sort((a,b)=>b.value-a.value),
           dailyStores:Object.keys(bucket.daily).sort().map(date => ({
             date,
-            total:Object.keys(bucket.daily[date]).reduce((sum,key)=>sum+Number(bucket.daily[date][key]||0),0),
-            stores:Object.keys(bucket.daily[date]).map(key=>({key,value:bucket.daily[date][key]})).sort((a,b)=>b.value-a.value)
+            total:Object.keys(bucket.daily[date].stores).reduce((sum,key)=>sum+Number(bucket.daily[date].stores[key]||0),0),
+            stores:Object.keys(bucket.daily[date].stores).map(key=>({key,value:bucket.daily[date].stores[key]})).sort((a,b)=>a.value-b.value || String(a.key).localeCompare(String(b.key), "vi")),
+            orders:bucket.daily[date].orders || []
           })),
           _month:month,
           _cachedAt:Date.now(),
