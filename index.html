@@ -425,26 +425,29 @@
     .store-day-types { display: flex; flex-wrap: wrap; gap: 5px 10px; color: var(--muted); font-size: 13px; }
     .store-day-modal-overlay { position: fixed; inset: 0; z-index: 95; display: none; align-items: center; justify-content: center; padding: 12px; background: rgba(15, 23, 42, .42); }
     .store-day-modal-overlay.active { display: flex; }
-    .store-day-modal { width: min(calc(100vw - 24px), 710px); height: min(75vh, 620px); max-height: calc(100vh - 24px); background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 16px 34px rgba(15, 23, 42, .24); display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+    .store-day-modal { position: relative; width: min(calc(100vw - 24px), 710px); height: min(75vh, 620px); max-height: calc(100vh - 24px); background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 16px 34px rgba(15, 23, 42, .24); display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: visible; }
     .store-day-modal-top { padding: 14px 18px 8px; display: grid; gap: 7px; }
     .store-day-modal-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 23px; font-weight: 900; }
+    .store-day-modal-close { position: absolute; top: -16px; right: 8px; z-index: 2; width: 30px; min-height: 30px; height: 30px; padding: 0; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.94); color: var(--text); display: grid; place-items: center; font-size: 18px; line-height: 1; font-weight: 900; box-shadow: 0 4px 12px rgba(15,23,42,.12); }
+    .store-day-modal-close:hover { background: var(--brand-soft); color: var(--brand); }
     .store-day-modal-sub { color: var(--muted); font-size: 14px; }
     .store-day-modal-types { display: flex; flex-wrap: wrap; gap: 8px; }
     .store-day-chip { display: inline-flex; align-items: center; min-height: 24px; padding: 0 16px; border-radius: 999px; background: var(--brand-soft); color: var(--brand); font-size: 13px; font-weight: 900; }
-    .store-order-list { min-height: 0; overflow-y: auto; overflow-x: hidden; border-top: 1px solid var(--line); }
+    .store-order-list { min-height: 0; overflow-y: auto; overflow-x: hidden; border-top: 1px solid var(--line); border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; background: var(--surface); }
     .store-order-grid { display: grid; grid-template-columns: 12% minmax(0, 38%) 25% 9% 16%; align-items: center; column-gap: 0; width: 100%; min-width: 0; }
     .store-order-head { position: sticky; top: 0; z-index: 1; background: #f8fafc; color: var(--muted); font-size: 11px; font-weight: 900; text-align: center; border-bottom: 1px solid var(--line); }
     .store-order-head > span { padding: 9px 3px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .store-order-row { min-height: 43px; padding: 0 12px; border-bottom: 1px solid var(--line); font-size: 10px; }
-    .store-order-row > span { overflow: hidden; text-overflow: clip; white-space: nowrap; padding: 0 3px; }
+    .store-order-row { min-height: 0; padding: 6px 12px; border-bottom: 1px solid var(--line); font-size: 10px; line-height: 1.18; }
+    .store-order-row > span { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; word-break: break-word; padding: 0 3px; }
     @media (max-width: 520px) {
       .store-day-modal { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
       .store-day-modal-overlay { padding: 8px; }
       .store-day-modal-top { padding: 12px 12px 7px; gap: 6px; }
       .store-day-modal-title { font-size: 21px; }
+      .store-day-modal-close { top: -14px; right: 6px; width: 28px; height: 28px; min-height: 28px; font-size: 17px; }
       .store-day-chip { min-height: 22px; padding: 0 12px; font-size: 12px; }
       .store-order-grid { grid-template-columns: 14% minmax(0, 35%) 26% 9% 16%; }
-      .store-order-row { padding: 0 7px; font-size: 8.8px; min-height: 40px; }
+      .store-order-row { padding: 5px 7px; font-size: 8.8px; min-height: 0; line-height: 1.16; }
       .store-order-head { font-size: 10px; }
       .store-order-head > span,
       .store-order-row > span { padding: 0 2px; }
@@ -2888,6 +2891,7 @@
         <span>${html(order.maDon || "-")}</span>
       </div>`).join("") : `<div class="store-order-empty">Máy này chưa có cache danh sách đơn chi tiết cho ngày này.</div>`;
       root.innerHTML = `<div class="store-day-modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
+        <button class="store-day-modal-close" type="button" title="Đóng" aria-label="Đóng" onclick="closeStoreDayModal(); event.stopPropagation()">×</button>
         <div class="store-day-modal-top">
           <div class="store-day-modal-title"><span>${html(displayStoreDate(day.date))}</span><span>${Number(total || 0).toLocaleString("vi-VN")} đơn</span></div>
           <div class="store-day-modal-sub">Danh sách đơn siêu thị trong ngày</div>
