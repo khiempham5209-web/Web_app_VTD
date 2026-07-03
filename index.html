@@ -1503,6 +1503,12 @@
         returnThApiUrl: "",
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
+      update: {
+        latestVersion: "2.9",
+        apkUrl: "",
+        folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
+        note: "Bản mới của Chứng từ FF đã sẵn sàng."
+      },
       sheetProfiles: [
         {name:"Mặc định VTD", apiUrl:"https://script.google.com/macros/s/AKfycbwGcF7yM8MOqx7OwUaU2ut5xiBPkRbtuEljzw5QnUXWiv_5ukR-CkdnGyCWwuo956ig/exec", chungTuSheet:"FFHN | Chung tu VTD", hangHoanSheet:"FFHN | Hoan VITA", lookupSheet:"Full das chung tu VTD", active:true},
         {name:"Cá nhân / chi nhánh khác", apiUrl:"", chungTuSheet:"", hangHoanSheet:"", lookupSheet:"", active:false}
@@ -3455,6 +3461,25 @@
         </div>
         <div class="account-actions"><button onclick="changePass()">Thay đổi Pass</button><button onclick="logout()">Đăng xuất</button></div>
       </section>`;
+      const updateCfg = appUpdateConfig();
+      const updateAvailable = hasNewAppVersion();
+      const updatePanel = `<section class="section"><h2>Cập nhật app</h2>
+        <div class="account-info">
+          <div class="line"><span class="label">Bản đang dùng</span><span class="value">${html(APP_VERSION)}</span></div>
+          <div class="line"><span class="label">Bản mới nhất</span><span class="value">${html(updateCfg.latestVersion || "-")}</span></div>
+          <div class="line"><span class="label">Trạng thái</span><span class="value">${updateAvailable ? "Có bản mới" : "Đã mới nhất"}</span></div>
+        </div>
+        ${updateAvailable ? `<div class="lookup" style="border-color:#bfdbfe;background:#eff6ff"><strong>Có bản ${html(updateCfg.latestVersion)} sẵn sàng.</strong><span>${html(updateCfg.note || "Bạn có thể tải và cài bản mới.")}</span><button class="primary" onclick="installLatestAppUpdate()">Tải và cài bản mới</button></div>` : `<div class="lookup">Máy này đang dùng bản mới nhất theo cấu hình hiện tại.</div>`}
+        <div class="config-actions" style="margin-top:10px"><button onclick="checkAppUpdate(true)">Kiểm tra cập nhật</button></div>
+        ${canAdminConfig() ? `<h2 style="margin-top:14px">Cấu hình cập nhật</h2>
+          <div class="grid">
+            <label>Bản mới nhất<input id="updateLatestVersion" value="${html(updateCfg.latestVersion || "")}" placeholder="2.9"></label>
+            <label>Link APK trực tiếp<input id="updateApkUrl" value="${html(updateCfg.apkUrl || "")}" placeholder="Dán link file APK trực tiếp để tự tải/cài"></label>
+            <label>Thư mục Drive<input id="updateFolderUrl" value="${html(updateCfg.folderUrl || "")}" placeholder="Link folder Drive chứa APK"></label>
+            <label>Ghi chú cập nhật<textarea id="updateNote" rows="2">${html(updateCfg.note || "")}</textarea></label>
+          </div>
+          <div class="config-actions" style="margin-top:12px"><button class="primary" onclick="saveUpdateConfig()">Lưu cấu hình cập nhật</button></div>` : ""}
+      </section>`;
       const personalPanel = `<section class="section"><h2>Cài đặt cá nhân</h2>
         <div class="grid cols-2">
           <label>Font chữ<select id="personalFont"><option ${p.fontScale==="Nhỏ"?"selected":""}>Nhỏ</option><option ${p.fontScale==="Vừa"?"selected":""}>Vừa</option><option ${p.fontScale==="Lớn"?"selected":""}>Lớn</option><option ${p.fontScale==="Rất lớn"?"selected":""}>Rất lớn</option></select></label>
@@ -3480,6 +3505,7 @@
       const devicePanel = canViewDeviceArea() ? adminCache : "";
       const opsPanel = canViewOpsArea() ? `${queuePanel}${adminQueueErrors}` : "";
       el("view").innerHTML = `${accountPanel}
+      ${updatePanel}
       <section class="section">
         <details class="settings-root"><summary><h2>Cài đặt khác</h2></summary>
           <div class="settings-menu">
@@ -4167,6 +4193,7 @@
       const base = cloneConfig(defaultAppConfig);
       const merged = Object.assign(base, config || {});
       merged.sync = Object.assign(base.sync, (config && config.sync) || {});
+      merged.update = Object.assign(base.update, (config && config.update) || {});
       merged.personal = Object.assign(base.personal, (config && config.personal) || {});
       merged.storeCharts = Object.assign(base.storeCharts, (config && config.storeCharts) || {});
       merged.sheetProfiles = (config && config.sheetProfiles) || base.sheetProfiles;
@@ -4208,6 +4235,9 @@
       if (config.uiConfig && config.uiConfig.personal) {
         appConfig.personal = Object.assign({}, appConfig.personal || defaultAppConfig.personal, config.uiConfig.personal);
       }
+      if (config.update) {
+        appConfig.update = Object.assign({}, appConfig.update || defaultAppConfig.update, config.update);
+      }
       saveAppConfig(false);
     }
     async function saveReturnThApiConfig(value){
@@ -4237,7 +4267,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "2.7";
+    const APP_VERSION = "2.9";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const nativeImagePickerMap = {
@@ -6103,19 +6133,19 @@
       if (!item || item.notifiedErrorAt) return;
       const code = queueItemOrderCode(item);
       const message = code
-        ? `Đơn ${code} chưa hoàn tất đồng bộ hệ thống. Vui lòng bạn thực hiện lại.`
-        : "Có 1 đơn chưa hoàn tất đồng bộ hệ thống. Vui lòng bạn thực hiện lại.";
+        ? "Chưa hoàn tất đồng bộ hệ thống. Vui lòng thực hiện lại."
+        : "Có 1 đơn chưa hoàn tất đồng bộ hệ thống. Vui lòng thực hiện lại.";
       item.notifiedErrorAt = Date.now();
-      notifyDevice("Đơn lỗi sync", message, "#settings", `user_error_${item.localId || code || item.createdAt || Date.now()}`);
+      notifyDevice(code ? `Đơn ${code} lỗi sync` : "Đơn lỗi sync", message, "#settings", `user_error_${item.localId || code || item.createdAt || Date.now()}`);
     }
     function notifyQueueItemDone(item){
       if (!item || !item.notifiedErrorAt || item.notifiedDoneAt) return;
       const code = queueItemOrderCode(item);
       const message = code
-        ? `Đơn ${code} đã được đồng bộ thành công. Cảm ơn bạn.`
+        ? "Đã được đồng bộ thành công. Cảm ơn bạn."
         : "Đơn lỗi đã được đồng bộ thành công. Cảm ơn bạn.";
       item.notifiedDoneAt = Date.now();
-      notifyDevice("Đồng bộ thành công", message, "#home", `user_done_${item.localId || code || item.syncedAt || Date.now()}`);
+      notifyDevice(code ? `Đơn ${code} đã đồng bộ` : "Đồng bộ thành công", message, "#home", `user_done_${item.localId || code || item.syncedAt || Date.now()}`);
     }
     function notifyAdminQueueErrors(rows){
       if (!Array.isArray(rows) || !rows.length) return;
@@ -6130,13 +6160,81 @@
         const user = row.email || row.user || "user";
         const code = row.maDon || "";
         const message = code
-          ? `Đơn ${code} chưa hoàn thành đồng bộ bởi ${user}. Vui lòng báo người thực hiện check lại.`
+          ? `${user} chưa hoàn thành đồng bộ. Vui lòng báo người thực hiện check lại.`
           : `Có 1 đơn chưa hoàn thành đồng bộ bởi ${user}. Vui lòng báo người thực hiện check lại.`;
-        notifyDevice("Đơn lỗi sync", message, "#settings", `admin_error_${key}`);
+        notifyDevice(code ? `Đơn ${code} lỗi sync` : "Đơn lỗi sync", message, "#settings", `admin_error_${key}`);
       });
       if (changed) {
         const entries = Object.entries(seen).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 300);
         localStorage.setItem("vtd_admin_notified_queue_errors_v1", JSON.stringify(Object.fromEntries(entries)));
+      }
+    }
+    function versionParts(value){
+      return String(value || "").split(".").map(part => Math.max(0, Number(part.replace(/[^\d]/g, "") || 0)));
+    }
+    function compareVersion(a, b){
+      const av = versionParts(a);
+      const bv = versionParts(b);
+      const len = Math.max(av.length, bv.length);
+      for (let i = 0; i < len; i++) {
+        const diff = Number(av[i] || 0) - Number(bv[i] || 0);
+        if (diff) return diff;
+      }
+      return 0;
+    }
+    function appUpdateConfig(){
+      return Object.assign({}, defaultAppConfig.update || {}, appConfig.update || {});
+    }
+    function hasNewAppVersion(){
+      const cfg = appUpdateConfig();
+      return cfg.latestVersion && compareVersion(cfg.latestVersion, APP_VERSION) > 0;
+    }
+    function checkAppUpdate(showToast){
+      const cfg = appUpdateConfig();
+      if (!cfg.latestVersion) return false;
+      if (!hasNewAppVersion()) {
+        if (showToast) toast(`App đang ở bản mới nhất (${APP_VERSION}).`, "ok");
+        return false;
+      }
+      const key = `update_${cfg.latestVersion}`;
+      notifyDevice(`Có bản Chứng từ FF ${cfg.latestVersion}`, cfg.note || "Bấm để cập nhật phiên bản mới.", "#settings", key);
+      if (showToast) toast(`Có bản mới ${cfg.latestVersion}. Vào Cài đặt để cập nhật.`, "ok");
+      return true;
+    }
+    function installLatestAppUpdate(){
+      const cfg = appUpdateConfig();
+      const apkUrl = String(cfg.apkUrl || "").trim();
+      const folderUrl = String(cfg.folderUrl || "").trim();
+      if (apkUrl && window.VTDNative && typeof window.VTDNative.installApk === "function") {
+        window.VTDNative.installApk(apkUrl, String(cfg.latestVersion || ""));
+        toast("Đang tải bản cập nhật. Khi tải xong Android sẽ hỏi xác nhận cài đặt.", "ok");
+        return;
+      }
+      const url = apkUrl || folderUrl;
+      if (!url) return toast("Chưa có link APK hoặc thư mục Drive để cập nhật.", "err");
+      if (window.VTDNative && typeof window.VTDNative.openUrl === "function") {
+        window.VTDNative.openUrl(url);
+      } else {
+        window.open(url, "_blank");
+      }
+      toast(apkUrl ? "Đã mở link tải APK." : "Đã mở thư mục Drive. Bạn chọn file APK mới nhất để tải/cài.", "ok");
+    }
+    async function saveUpdateConfig(){
+      if (!canAdminConfig()) return toast("Bạn không có quyền lưu cấu hình cập nhật.", "err");
+      appConfig.update = Object.assign({}, appUpdateConfig(), {
+        latestVersion: (el("updateLatestVersion")?.value || "").trim(),
+        apkUrl: (el("updateApkUrl")?.value || "").trim(),
+        folderUrl: (el("updateFolderUrl")?.value || "").trim(),
+        note: (el("updateNote")?.value || "").trim()
+      });
+      saveAppConfig(false);
+      const res = await api("saveSystemConfig", {config:{update: appConfig.update}, _silent:true});
+      if (res && res.ok) {
+        mergeSystemConfig(res.config || {});
+        toast("Đã lưu cấu hình cập nhật.", "ok");
+        settings();
+      } else {
+        toast((res && res.message) || "Chưa lưu được cấu hình cập nhật lên hệ thống.", "err");
       }
     }
     function queueImageDb(){
@@ -7297,6 +7395,7 @@
       scheduleQueueReport(1500);
       warmLiveData();
       startBackgroundTasks();
+      setTimeout(() => checkAppUpdate(false), 2500);
     }
     async function refreshSessionAuth(){
       if (!live.token) return;
@@ -7306,6 +7405,7 @@
         live.passwordPolicy = res.passwordPolicy || res.auth.passwordPolicy || live.passwordPolicy || null;
         if (res.config && res.config.system) mergeSystemConfig(res.config.system);
         localStorage.setItem("vtd_user", JSON.stringify(live.user));
+        checkAppUpdate(false);
         render();
         return;
       }
