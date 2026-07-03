@@ -4193,7 +4193,7 @@
       const base = cloneConfig(defaultAppConfig);
       const merged = Object.assign(base, config || {});
       merged.sync = Object.assign(base.sync, (config && config.sync) || {});
-      merged.update = Object.assign(base.update, (config && config.update) || {});
+      merged.update = Object.assign(base.update, loadLocalUpdateConfig(), (config && config.update) || {}, (config && config.uiConfig && config.uiConfig.update) || {});
       merged.personal = Object.assign(base.personal, (config && config.personal) || {});
       merged.storeCharts = Object.assign(base.storeCharts, (config && config.storeCharts) || {});
       merged.sheetProfiles = (config && config.sheetProfiles) || base.sheetProfiles;
@@ -4217,6 +4217,7 @@
     }
     function saveAppConfig(showMessage = true){
       localStorage.setItem("vtd_app_config", JSON.stringify(appConfig));
+      if (appConfig.update) persistLocalUpdateConfig(appConfig.update);
       if (showMessage) alert("Đã lưu config trong app. Khi nối backend thật sẽ đẩy vào VTD_USERS/VTD_PERMISSIONS.");
     }
     function mergeSystemConfig(config){
@@ -4235,8 +4236,10 @@
       if (config.uiConfig && config.uiConfig.personal) {
         appConfig.personal = Object.assign({}, appConfig.personal || defaultAppConfig.personal, config.uiConfig.personal);
       }
-      if (config.update) {
-        appConfig.update = Object.assign({}, appConfig.update || defaultAppConfig.update, config.update);
+      const incomingUpdate = config.update || (config.uiConfig && config.uiConfig.update);
+      if (incomingUpdate) {
+        appConfig.update = Object.assign({}, appConfig.update || defaultAppConfig.update, incomingUpdate);
+        persistLocalUpdateConfig(appConfig.update);
       }
       saveAppConfig(false);
     }
@@ -6183,7 +6186,26 @@
       return 0;
     }
     function appUpdateConfig(){
-      return Object.assign({}, defaultAppConfig.update || {}, appConfig.update || {});
+      return Object.assign({}, defaultAppConfig.update || {}, loadLocalUpdateConfig(), appConfig.update || {});
+    }
+    function loadLocalUpdateConfig(){
+      try {
+        const value = JSON.parse(localStorage.getItem("vtd_update_config") || "null");
+        return value && typeof value === "object" ? value : {};
+      } catch (err) {
+        return {};
+      }
+    }
+    function persistLocalUpdateConfig(config){
+      try {
+        localStorage.setItem("vtd_update_config", JSON.stringify(config || {}));
+      } catch (err) {}
+    }
+    function normalizeDriveApkUrl(url){
+      const text = String(url || "").trim();
+      const match = text.match(/drive\.google\.com\/file\/d\/([^/]+)/i);
+      if (match && match[1]) return `https://drive.google.com/uc?export=download&id=${match[1]}`;
+      return text;
     }
     function hasNewAppVersion(){
       const cfg = appUpdateConfig();
@@ -6203,7 +6225,7 @@
     }
     function installLatestAppUpdate(){
       const cfg = appUpdateConfig();
-      const apkUrl = String(cfg.apkUrl || "").trim();
+      const apkUrl = normalizeDriveApkUrl(cfg.apkUrl);
       const folderUrl = String(cfg.folderUrl || "").trim();
       if (apkUrl && window.VTDNative && typeof window.VTDNative.installApk === "function") {
         window.VTDNative.installApk(apkUrl, String(cfg.latestVersion || ""));
@@ -6223,12 +6245,13 @@
       if (!canAdminConfig()) return toast("Bạn không có quyền lưu cấu hình cập nhật.", "err");
       appConfig.update = Object.assign({}, appUpdateConfig(), {
         latestVersion: (el("updateLatestVersion")?.value || "").trim(),
-        apkUrl: (el("updateApkUrl")?.value || "").trim(),
+        apkUrl: normalizeDriveApkUrl(el("updateApkUrl")?.value || ""),
         folderUrl: (el("updateFolderUrl")?.value || "").trim(),
         note: (el("updateNote")?.value || "").trim()
       });
+      persistLocalUpdateConfig(appConfig.update);
       saveAppConfig(false);
-      const res = await api("saveSystemConfig", {config:{update: appConfig.update}, _silent:true});
+      const res = await api("saveSystemConfig", {config:{update: appConfig.update, uiConfig:{views: appConfig.views, storeCharts: appConfig.storeCharts, update: appConfig.update}}, _silent:true});
       if (res && res.ok) {
         mergeSystemConfig(res.config || {});
         toast("Đã lưu cấu hình cập nhật.", "ok");
