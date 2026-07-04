@@ -1504,7 +1504,7 @@
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
       update: {
-        latestVersion: "3.4",
+        latestVersion: "3.5",
         apkUrl: "",
         folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
         note: "Bản mới của Chứng từ FF đã sẵn sàng."
@@ -3473,7 +3473,7 @@
         <div class="config-actions" style="margin-top:10px"><button onclick="checkAppUpdate(true)">Kiểm tra cập nhật</button></div>
         ${canAdminConfig() ? `<h2 style="margin-top:14px">Cấu hình cập nhật</h2>
           <div class="grid">
-            <label>Bản mới nhất<input id="updateLatestVersion" value="${html(updateCfg.latestVersion || "")}" placeholder="3.4"></label>
+            <label>Bản mới nhất<input id="updateLatestVersion" value="${html(updateCfg.latestVersion || "")}" placeholder="3.5"></label>
             <label>Link APK trực tiếp<input id="updateApkUrl" value="${html(updateCfg.apkUrl || "")}" placeholder="Dán link file APK trực tiếp để tự tải/cài"></label>
             <label>Thư mục Drive<input id="updateFolderUrl" value="${html(updateCfg.folderUrl || "")}" placeholder="Link folder Drive chứa APK"></label>
             <label>Ghi chú cập nhật<textarea id="updateNote" rows="2">${html(updateCfg.note || "")}</textarea></label>
@@ -4270,7 +4270,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "3.4";
+    const APP_VERSION = "3.5";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const nativeImagePickerMap = {
@@ -6112,13 +6112,35 @@
       const p = item && item.payload || {};
       return p.maDon || p.ma_don || p.orderCode || p["Mã đơn"] || p["MÃ£ Ä‘Æ¡n"] || "";
     }
+    function currentDraftWorkForNotify(){
+      try {
+        const inputCode = String((typeof el === "function" && el("inMaDon") ? el("inMaDon").value : "") || (typeof inputLookup !== "undefined" && inputLookup.query) || "").trim();
+        const inputNote = String((typeof el === "function" && el("inNote") ? el("inNote").value : "") || "").trim();
+        const hasInputDraft = !!(
+          inputCode || inputNote ||
+          (inputState && (inputState.slog || inputState.loai || inputState.xacThuc || inputState.po || inputState.tinhTrang !== "Bình thường")) ||
+          (skuState && (skuState.productIndex || skuState.productSearch || skuState.qty || skuState.type || skuState.newMaterial || skuState.newName || (skuState.items || []).length)) ||
+          (live && ((live.docFiles || []).length || (live.productFiles || []).length || live.inputSaving))
+        );
+        if (hasInputDraft) return {route:"#input", code: inputCode, label: live && live.inputSaving ? "Don dang luu/dang dong bo" : "Don dang thao tac do"};
+        const returnCode = String((typeof el === "function" && el("returnThMaDon") ? el("returnThMaDon").value : "") || (returnThState && returnThState.maDon) || "").trim();
+        const hasReturnDraft = !!(
+          returnCode ||
+          (returnThState && (returnThState.product || returnThState.productSearch || returnThState.customProduct || returnThState.newSubSku || returnThState.newName || returnThState.newUnit || returnThState.qty || returnThState.note || (returnThState.items || []).length || returnThState.saving || returnThState.creatingSku)) ||
+          (live && (live.returnThFiles || []).length)
+        );
+        if (hasReturnDraft) return {route:"#returnth", code: returnCode, label: returnThState && returnThState.saving ? "Don TH dang luu/dang dong bo" : "Don TH dang thao tac do"};
+      } catch (err) {}
+      return null;
+    }
     function normalizeNotificationText(value, fallback){
       let raw = String(value == null || value === "" ? (fallback || "") : value).trim();
       try {
-        raw = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[d�]/g, match => match === "�" ? "D" : "d");
+        raw = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, match => match === "Đ" ? "D" : "d");
       } catch (err) {}
       return raw.replace(/[^\x20-\x7E]/g, "").replace(/\s+/g, " ").trim();
-    }    function notifyDevice(title, message, route, key){
+    }
+    function notifyDevice(title, message, route, key){
       try {
         if (key) {
           const seenKey = `vtd_notify_seen_${key}`;
@@ -6142,28 +6164,31 @@
       try {
         recoverLocalQueue();
         const active = localQueue().filter(item => item && (item.status === "pending" || item.status === "pendingImage" || item.status === "syncing" || item.status === "error"));
-        if (!active.length) return false;
+        const draft = currentDraftWorkForNotify();
+        if (!active.length && !draft) return false;
         const now = Date.now();
-        const last = Number(localStorage.getItem("vtd_queue_exit_notify_last_v1") || 0);
-        if (now - last < 45000) return false;
-        localStorage.setItem("vtd_queue_exit_notify_last_v1", String(now));
+        const last = Number(localStorage.getItem("vtd_queue_exit_notify_last_v2") || 0);
+        if (now - last < 8000) return false;
+        localStorage.setItem("vtd_queue_exit_notify_last_v2", String(now));
         const stats = queueStats();
         const syncing = Number(stats.syncing || 0);
         const pending = Number(stats.pending || 0) + Number(stats.pendingImage || 0);
         const errors = Number(stats.error || 0);
         const first = active.find(item => item.status === "syncing") || active.find(item => item.status === "pendingImage") || active.find(item => item.status === "pending") || active[0];
-        const code = queueItemOrderCode(first);
+        const code = (draft && draft.code) || queueItemOrderCode(first);
         const total = active.length;
         const parts = [];
+        if (draft) parts.push(draft.label || "Co thao tac dang do");
         if (syncing) parts.push(`${syncing} don dang dong bo`);
         if (pending) parts.push(`${pending} don dang cho dong bo`);
         if (errors) parts.push(`${errors} don loi sync`);
         const user = currentEmail ? currentEmail() : "";
         const prefix = user ? `${user}: ` : "";
         const statusText = parts.join(", ") || `${total} don chua dong bo`;
-        const title = code ? `Don ${code} chua sync xong` : `${total} don chua sync xong`;
+        const title = code ? `Don ${code} chua hoan tat` : (draft ? "Co thao tac chua hoan tat" : `${total} don chua sync xong`);
         const message = `${prefix}${statusText}. Mo app de hoan tat truoc khi thoat.`;
-        notifyDevice(title, message, "#settings", `queue_exit_${Math.floor(now / 45000)}_${code || total}_${syncing}_${pending}_${errors}`);
+        const route = draft && draft.route ? draft.route : "#settings";
+        notifyDevice(title, message, route, `queue_exit_v2_${Math.floor(now / 8000)}_${code || total || "draft"}_${syncing}_${pending}_${errors}_${reason || "hide"}`);
         return true;
       } catch (err) {
         return false;
