@@ -1504,7 +1504,7 @@
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
       update: {
-        latestVersion: "2.9",
+        latestVersion: "2.10",
         apkUrl: "",
         folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
         note: "Bản mới của Chứng từ FF đã sẵn sàng."
@@ -3473,7 +3473,7 @@
         <div class="config-actions" style="margin-top:10px"><button onclick="checkAppUpdate(true)">Kiểm tra cập nhật</button></div>
         ${canAdminConfig() ? `<h2 style="margin-top:14px">Cấu hình cập nhật</h2>
           <div class="grid">
-            <label>Bản mới nhất<input id="updateLatestVersion" value="${html(updateCfg.latestVersion || "")}" placeholder="2.9"></label>
+            <label>Bản mới nhất<input id="updateLatestVersion" value="${html(updateCfg.latestVersion || "")}" placeholder="2.10"></label>
             <label>Link APK trực tiếp<input id="updateApkUrl" value="${html(updateCfg.apkUrl || "")}" placeholder="Dán link file APK trực tiếp để tự tải/cài"></label>
             <label>Thư mục Drive<input id="updateFolderUrl" value="${html(updateCfg.folderUrl || "")}" placeholder="Link folder Drive chứa APK"></label>
             <label>Ghi chú cập nhật<textarea id="updateNote" rows="2">${html(updateCfg.note || "")}</textarea></label>
@@ -3505,10 +3505,10 @@
       const devicePanel = canViewDeviceArea() ? adminCache : "";
       const opsPanel = canViewOpsArea() ? `${queuePanel}${adminQueueErrors}` : "";
       el("view").innerHTML = `${accountPanel}
-      ${updatePanel}
       <section class="section">
         <details class="settings-root"><summary><h2>Cài đặt khác</h2></summary>
           <div class="settings-menu">
+            ${settingsFold("Cập nhật app", updatePanel, false)}
             ${settingsFold("Cài đặt cá nhân", personalPanel, false)}
             ${canOpenAdminArea() ? settingsFold("Quản lý admin", adminPanel, false) : ""}
             ${canViewDeviceArea() ? settingsFold("Quản lý thiết bị", devicePanel, false) : ""}
@@ -3664,15 +3664,18 @@
       if (!live.activityLifecycleBound) {
         live.activityLifecycleBound = true;
         window.addEventListener("beforeunload", () => {
+          notifyQueueWorkOnExit("beforeunload");
           activityReporterTick();
           flushActivityReporter(true);
         });
         window.addEventListener("pagehide", () => {
+          notifyQueueWorkOnExit("pagehide");
           activityReporterTick();
           flushActivityReporter(true);
         });
         document.addEventListener("visibilitychange", () => {
           if (document.hidden) {
+            notifyQueueWorkOnExit("hidden");
             activityReporterTick();
             flushActivityReporter(true);
             return;
@@ -4267,7 +4270,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "2.9";
+    const APP_VERSION = "2.10";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const nativeImagePickerMap = {
@@ -6129,6 +6132,37 @@
         }
       } catch (err) {}
     }
+        function notifyQueueWorkOnExit(reason){
+      try {
+        recoverLocalQueue();
+        const active = localQueue().filter(item => item && (item.status === "pending" || item.status === "pendingImage" || item.status === "syncing" || item.status === "error"));
+        if (!active.length) return false;
+        const now = Date.now();
+        const last = Number(localStorage.getItem("vtd_queue_exit_notify_last_v1") || 0);
+        if (now - last < 45000) return false;
+        localStorage.setItem("vtd_queue_exit_notify_last_v1", String(now));
+        const stats = queueStats();
+        const syncing = Number(stats.syncing || 0);
+        const pending = Number(stats.pending || 0) + Number(stats.pendingImage || 0);
+        const errors = Number(stats.error || 0);
+        const first = active.find(item => item.status === "syncing") || active.find(item => item.status === "pendingImage") || active.find(item => item.status === "pending") || active[0];
+        const code = queueItemOrderCode(first);
+        const total = active.length;
+        const parts = [];
+        if (syncing) parts.push(`${syncing} đơn đang đồng bộ`);
+        if (pending) parts.push(`${pending} đơn đang chờ đồng bộ`);
+        if (errors) parts.push(`${errors} đơn lỗi sync`);
+        const user = currentEmail ? currentEmail() : "";
+        const prefix = user ? `${user}: ` : "";
+        const statusText = parts.join(", ") || `${total} đơn chưa đồng bộ`;
+        const title = code ? `Đơn ${code} chưa sync xong` : `${total} đơn chưa sync xong`;
+        const message = `${prefix}${statusText}. Mở app để hoàn tất trước khi thoát.`;
+        notifyDevice(title, message, "#settings", `queue_exit_${Math.floor(now / 45000)}_${code || total}_${syncing}_${pending}_${errors}`);
+        return true;
+      } catch (err) {
+        return false;
+      }
+    }
     function notifyQueueItemError(item){
       if (!item || item.notifiedErrorAt) return;
       const code = queueItemOrderCode(item);
@@ -7468,13 +7502,17 @@
       return text;
     }
     function bindLoginEnter(){
-      document.querySelectorAll("#login input").forEach(input => {
-        input.addEventListener("keydown", event => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            loginDemo();
-          }
-        });
+      const loginBox = el("login");
+      if (!loginBox || loginBox._enterBound) return;
+      loginBox._enterBound = true;
+      loginBox.addEventListener("keydown", event => {
+        const isEnter = event.key === "Enter" || event.code === "Enter" || event.keyCode === 13;
+        if (!isEnter || event.isComposing) return;
+        const target = event.target;
+        if (!target || !target.matches || !target.matches("#login input")) return;
+        if (loginBox.classList.contains("hidden")) return;
+        event.preventDefault();
+        loginDemo();
       });
     }
     function toggleLoginPass(){
