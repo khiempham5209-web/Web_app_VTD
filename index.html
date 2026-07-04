@@ -1504,7 +1504,7 @@
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
       update: {
-        latestVersion: "2.10",
+        latestVersion: "3.4",
         apkUrl: "",
         folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
         note: "Bản mới của Chứng từ FF đã sẵn sàng."
@@ -3473,7 +3473,7 @@
         <div class="config-actions" style="margin-top:10px"><button onclick="checkAppUpdate(true)">Kiểm tra cập nhật</button></div>
         ${canAdminConfig() ? `<h2 style="margin-top:14px">Cấu hình cập nhật</h2>
           <div class="grid">
-            <label>Bản mới nhất<input id="updateLatestVersion" value="${html(updateCfg.latestVersion || "")}" placeholder="2.10"></label>
+            <label>Bản mới nhất<input id="updateLatestVersion" value="${html(updateCfg.latestVersion || "")}" placeholder="3.4"></label>
             <label>Link APK trực tiếp<input id="updateApkUrl" value="${html(updateCfg.apkUrl || "")}" placeholder="Dán link file APK trực tiếp để tự tải/cài"></label>
             <label>Thư mục Drive<input id="updateFolderUrl" value="${html(updateCfg.folderUrl || "")}" placeholder="Link folder Drive chứa APK"></label>
             <label>Ghi chú cập nhật<textarea id="updateNote" rows="2">${html(updateCfg.note || "")}</textarea></label>
@@ -4270,7 +4270,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "2.10";
+    const APP_VERSION = "3.4";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const nativeImagePickerMap = {
@@ -6112,15 +6112,21 @@
       const p = item && item.payload || {};
       return p.maDon || p.ma_don || p.orderCode || p["Mã đơn"] || p["MÃ£ Ä‘Æ¡n"] || "";
     }
-    function notifyDevice(title, message, route, key){
+    function normalizeNotificationText(value, fallback){
+      let raw = String(value == null || value === "" ? (fallback || "") : value).trim();
+      try {
+        raw = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[d�]/g, match => match === "�" ? "D" : "d");
+      } catch (err) {}
+      return raw.replace(/[^\x20-\x7E]/g, "").replace(/\s+/g, " ").trim();
+    }    function notifyDevice(title, message, route, key){
       try {
         if (key) {
           const seenKey = `vtd_notify_seen_${key}`;
           if (localStorage.getItem(seenKey)) return;
           localStorage.setItem(seenKey, String(Date.now()));
         }
-        const safeTitle = String(title || "VTD");
-        const safeMessage = String(message || "");
+        const safeTitle = normalizeNotificationText(title, "Chung tu FF");
+        const safeMessage = normalizeNotificationText(message, "");
         if (window.VTDNative && typeof window.VTDNative.notify === "function") {
           window.VTDNative.notify(safeTitle, safeMessage, String(route || ""));
           return;
@@ -6149,14 +6155,14 @@
         const code = queueItemOrderCode(first);
         const total = active.length;
         const parts = [];
-        if (syncing) parts.push(`${syncing} đơn đang đồng bộ`);
-        if (pending) parts.push(`${pending} đơn đang chờ đồng bộ`);
-        if (errors) parts.push(`${errors} đơn lỗi sync`);
+        if (syncing) parts.push(`${syncing} don dang dong bo`);
+        if (pending) parts.push(`${pending} don dang cho dong bo`);
+        if (errors) parts.push(`${errors} don loi sync`);
         const user = currentEmail ? currentEmail() : "";
         const prefix = user ? `${user}: ` : "";
-        const statusText = parts.join(", ") || `${total} đơn chưa đồng bộ`;
-        const title = code ? `Đơn ${code} chưa sync xong` : `${total} đơn chưa sync xong`;
-        const message = `${prefix}${statusText}. Mở app để hoàn tất trước khi thoát.`;
+        const statusText = parts.join(", ") || `${total} don chua dong bo`;
+        const title = code ? `Don ${code} chua sync xong` : `${total} don chua sync xong`;
+        const message = `${prefix}${statusText}. Mo app de hoan tat truoc khi thoat.`;
         notifyDevice(title, message, "#settings", `queue_exit_${Math.floor(now / 45000)}_${code || total}_${syncing}_${pending}_${errors}`);
         return true;
       } catch (err) {
@@ -6166,20 +6172,16 @@
     function notifyQueueItemError(item){
       if (!item || item.notifiedErrorAt) return;
       const code = queueItemOrderCode(item);
-      const message = code
-        ? "Chưa hoàn tất đồng bộ hệ thống. Vui lòng thực hiện lại."
-        : "Có 1 đơn chưa hoàn tất đồng bộ hệ thống. Vui lòng thực hiện lại.";
+      const message = code ? "Chua hoan tat dong bo he thong. Vui long mo app de xu ly lai." : "Co 1 don chua hoan tat dong bo he thong. Vui long mo app de xu ly lai.";
       item.notifiedErrorAt = Date.now();
-      notifyDevice(code ? `Đơn ${code} lỗi sync` : "Đơn lỗi sync", message, "#settings", `user_error_${item.localId || code || item.createdAt || Date.now()}`);
+      notifyDevice(code ? `Don ${code} loi sync` : "Don loi sync", message, "#settings", `user_error_${item.localId || code || item.createdAt || Date.now()}`);
     }
     function notifyQueueItemDone(item){
       if (!item || !item.notifiedErrorAt || item.notifiedDoneAt) return;
       const code = queueItemOrderCode(item);
-      const message = code
-        ? "Đã được đồng bộ thành công. Cảm ơn bạn."
-        : "Đơn lỗi đã được đồng bộ thành công. Cảm ơn bạn.";
+      const message = code ? "Da dong bo thanh cong." : "Don loi da dong bo thanh cong.";
       item.notifiedDoneAt = Date.now();
-      notifyDevice(code ? `Đơn ${code} đã đồng bộ` : "Đồng bộ thành công", message, "#home", `user_done_${item.localId || code || item.syncedAt || Date.now()}`);
+      notifyDevice(code ? `Don ${code} da dong bo` : "Dong bo thanh cong", message, "#home", `user_done_${item.localId || code || item.syncedAt || Date.now()}`);
     }
     function notifyAdminQueueErrors(rows){
       if (!Array.isArray(rows) || !rows.length) return;
@@ -6193,10 +6195,8 @@
         changed = true;
         const user = row.email || row.user || "user";
         const code = row.maDon || "";
-        const message = code
-          ? `${user} chưa hoàn thành đồng bộ. Vui lòng báo người thực hiện check lại.`
-          : `Có 1 đơn chưa hoàn thành đồng bộ bởi ${user}. Vui lòng báo người thực hiện check lại.`;
-        notifyDevice(code ? `Đơn ${code} lỗi sync` : "Đơn lỗi sync", message, "#settings", `admin_error_${key}`);
+        const message = code ? `${user} co don chua hoan thanh dong bo. Vui long bao user mo app kiem tra lai.` : `Co 1 don chua hoan thanh dong bo boi ${user}. Vui long bao user mo app kiem tra lai.`;
+        notifyDevice(code ? `Don ${code} loi sync` : "Don loi sync", message, "#settings", `admin_error_${key}`);
       });
       if (changed) {
         const entries = Object.entries(seen).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 300);
@@ -8431,3 +8431,5 @@
   </script>
 </body>
 </html>
+
+
