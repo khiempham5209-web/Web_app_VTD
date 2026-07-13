@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="vi">
 <head>
   <meta charset="utf-8">
@@ -329,9 +329,22 @@
       .search-filter-row label { font-size: 14px; }
       .search-filter-row input,
       .search-filter-row select { min-height: 40px; padding: 7px 8px; font-size: 14px; }
-      .login-page { min-height: 100vh; min-height: 100dvh; width: min(100vw, 430px); max-width: 430px; margin: 0 auto; display: grid; place-items: start stretch; padding: 72px 14px 18px; background: linear-gradient(180deg, #e9f3fb, #f7fafc); box-shadow: 0 0 0 1px rgba(15, 23, 42, .08); }
-    .login-card { width: 100%; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 20px; display: grid; gap: 14px; }
+      .login-page { --login-bg-color: #e9f3fb; --login-bg-image: linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.56)); --login-page-top: 72px; min-height: 100vh; min-height: 100dvh; width: min(100vw, 430px); max-width: 430px; margin: 0 auto; display: grid; place-items: start stretch; padding: var(--login-page-top) 14px 18px; background-color: var(--login-bg-color); background-image: var(--login-bg-image); background-size: cover; background-position: center; box-shadow: 0 0 0 1px rgba(15, 23, 42, .08); }
+    .login-card { width: min(100%, var(--login-card-width, 100%)); justify-self: center; background: var(--login-card-bg, rgba(255,255,255,.96)); border: 1px solid var(--login-card-border, var(--line)); border-radius: var(--login-card-radius, 12px); box-shadow: var(--shadow); padding: 20px; display: grid; gap: 14px; backdrop-filter: blur(var(--login-card-blur, 0px)); }
     .login-card h1 { margin: 0; font-size: 26px; }
+    .login-mark { width: 54px; height: 54px; border-radius: 14px; background: linear-gradient(145deg, #1769aa, #12b8a6); color: #fff; display: grid; place-items: center; box-shadow: 0 12px 24px rgba(23, 105, 170, .22); }
+    .login-mark svg { width: 31px; height: 31px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .login-color-control { gap: 5px; font-size: 13px; color: var(--muted); }
+    .login-color-control input { min-height: 38px; padding: 3px; }
+    .login-bg-button { min-height: 38px; padding: 0 10px; font-size: 13px; }
+    .login-bg-file { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    .login-bg-preview { min-height: 120px; border: 1px solid var(--line); border-radius: 8px; background-color: var(--login-bg-color, #e9f3fb); background-image: var(--login-bg-image, linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.56))); background-size: cover; background-position: center; }
+    .app-bg-preview { min-height: 150px; border: 1px solid var(--line); border-radius: 8px; background-color: var(--app-bg-color, #ffffff); background-image: var(--app-bg-image, none); background-size: cover; background-position: center; padding: 14px; display: grid; align-content: center; gap: 10px; }
+    .app-bg-preview-card { background: var(--app-card-bg, rgba(255,255,255,.96)); border: 1px solid var(--app-card-border, var(--line)); border-radius: var(--app-card-radius, 8px); min-height: 48px; padding: 10px; box-shadow: 0 10px 22px rgba(15,23,42,.08); }
+    .login-style-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .login-style-grid input[type="range"] { min-height: 34px; padding: 0; }
+    .login-style-grid output { color: var(--muted); font-size: 12px; font-weight: 700; }
+    body.theme-dark .login-page { background-color: var(--login-bg-color) !important; background-image: var(--login-bg-image) !important; }
     .error-box { background: var(--err-bg); color: var(--err); border: 1px solid #ffb4ab; padding: 11px; border-radius: 8px; font-weight: 700; }
     .loading-overlay { position: fixed; inset: 0; z-index: 80; display: none; place-items: center; background: rgba(248, 250, 252, .72); backdrop-filter: blur(1px); }
     .loading-overlay.active { display: grid; }
@@ -798,7 +811,8 @@
       max-width: none;
       margin: 0;
       box-shadow: none;
-      background: var(--bg);
+      background-color: var(--login-bg-color);
+      background-image: var(--login-bg-image);
     }
     html.apk .content {
       padding-left: 8px;
@@ -1283,7 +1297,8 @@
       margin: 0;
       padding: 48px;
       place-items: center;
-      background: #eef3f8 !important;
+      background-color: var(--login-bg-color) !important;
+      background-image: var(--login-bg-image) !important;
       box-shadow: none;
     }
     html.desktop body.theme-dark .login-page {
@@ -1331,7 +1346,7 @@
 <body class="vtd-flat">
   <div id="login" class="login-page">
     <section class="login-card">
-      <div class="logo">V</div>
+      <div class="login-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5"></path><path d="M9 14l2 2 4-5"></path></svg></div>
       <h1>Chứng từ FF</h1>
       <p style="margin:0;color:var(--muted)">Đăng nhập bằng email và Pass được cấp.</p>
       <div id="loginError" class="error-box hidden">Email hoặc Pass không đúng.</div>
@@ -1442,6 +1457,7 @@
     let storeDrillMonth = "";
     let storeDayModalDate = "";
     let adminTab = "users";
+    let appAppearanceTarget = "global";
     let editingUserIndex = -1;
     let detailRows = rows;
     const navState = {fromView:"home", scrollY:0, detailIndex:0, detailKey:""};
@@ -1508,6 +1524,31 @@
         apkUrl: "",
         folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
         note: "Bản mới của Chứng từ FF đã sẵn sàng."
+      },
+      loginAppearance: {
+        bgColor: "#e9f3fb",
+        hasImage: false,
+        bgDim: 16,
+        cardColor: "#ffffff",
+        cardOpacity: 94,
+        cardBorder: "#d6e0ea",
+        cardRadius: 14,
+        cardWidth: 100,
+        cardTop: 72,
+        cardBlur: 0
+      },
+      appAppearance: {
+        global: {
+          bgColor: "#ffffff",
+          hasImage: false,
+          bgDim: 12,
+          cardColor: "#ffffff",
+          cardOpacity: 98,
+          cardBorder: "#d6e0ea",
+          cardRadius: 8,
+          cardBlur: 0
+        },
+        screens: {}
       },
       sheetProfiles: [
         {name:"Mặc định VTD", apiUrl:"https://script.google.com/macros/s/AKfycbwGcF7yM8MOqx7OwUaU2ut5xiBPkRbtuEljzw5QnUXWiv_5ukR-CkdnGyCWwuo956ig/exec", chungTuSheet:"FFHN | Chung tu VTD", hangHoanSheet:"FFHN | Hoan VITA", lookupSheet:"Full das chung tu VTD", active:true},
@@ -1901,7 +1942,7 @@
       if (!options.skipHistory && oldView !== v) pushAppHistory(v);
       render();
     }
-    function render(){ applyPersonalSettings(); shell(); (view.startsWith("dyn_") ? dynamicView : ({home, search, input, returnth, store, settings, admin}[view] || home))(); }
+    function render(){ applyPersonalSettings(); shell(); (view.startsWith("dyn_") ? dynamicView : ({home, search, input, returnth, store, settings, admin}[view] || home))(); if (typeof applyAppAppearance === "function") applyAppAppearance(); }
     function home(){
       const todayLabel = new Date().toLocaleDateString("vi-VN", {timeZone:"Asia/Ho_Chi_Minh"});
       const todayRows = rows.filter(r => r.ngay === todayLabel);
@@ -2947,6 +2988,7 @@
       }
       const tabs = [
         ["builder","Dynamic Builder"],
+        ...(isSystemOwner() ? [["appearance","Giao diện đăng nhập"]] : []),
         ["views","Màn hình"],
         ["storeCharts","Biểu đồ ST"],
         ["fields","Cột/Form"],
@@ -2991,6 +3033,7 @@
     function setAdminTab(tab){ adminTab = tab; admin(); }
     function adminPanel(){
       if (adminTab === "builder") return adminBuilderPanel();
+      if (adminTab === "appearance") return isSystemOwner() ? adminAppearancePanel() : adminBuilderPanel();
       if (adminTab === "views") return adminViewsPanel();
       if (adminTab === "storeCharts") return adminStoreChartsPanel();
       if (adminTab === "fields") return adminFieldsPanel();
@@ -3000,7 +3043,75 @@
       if (adminTab === "export") return adminExportPanel();
       return adminBuilderPanel();
     }
-    function adminUsersPanel(){
+    function adminAppearancePanel(){
+      const cfg = loginAppearanceConfig();
+      const appCfg = Object.assign({}, (defaultAppConfig.appAppearance || {}).global || {}, appAppearanceTargetConfig());
+      const screenOptions = [["global", "Tất cả màn"], ...allScreenDefs().map(s => [s[0], s[2]])];
+      const screenOptionHtml = screenOptions.map(item => "<option value=\"" + html(item[0]) + "\" " + (item[0]===appAppearanceTarget ? "selected" : "") + ">" + html(item[1]) + "</option>").join("");
+      const appImageState = appAppearanceTargetConfig().hasImage ? "Đã có ảnh nền riêng" : (appAppearanceTarget === "global" ? "Chưa có ảnh nền" : "Chưa có ảnh riêng, đang dùng nền chung nếu có");
+      setTimeout(initLoginAppearance, 0);
+      setTimeout(applyAppAppearancePreview, 0);
+      return `<section class="section">
+        <div class="config-title">
+          <div><h2>Giao diện đăng nhập</h2><div class="muted">Chỉ chủ app/admin cấu hình ở đây. Màn đăng nhập chỉ hiển thị giao diện đã lưu, không hiện nút chỉnh cho user.</div></div>
+        </div>
+        <div class="grid cols-2" style="margin-top:12px">
+          <div class="login-bg-preview" aria-hidden="true"></div>
+          <div class="grid">
+            <h2>Nền đăng nhập</h2>
+            <label>Màu nền<input id="loginBgColor" type="color" value="${html(cfg.bgColor || "#e9f3fb")}" oninput="setLoginBgColor(this.value)"></label>
+            <label>Độ phủ ảnh nền <output id="bgDimOut">${html(cfg.bgDim || 16)}%</output><input type="range" min="0" max="70" step="1" value="${html(cfg.bgDim || 16)}" oninput="setLoginAppearanceValue('bgDim', this.value)"></label>
+            <div class="file-actions">
+              <button type="button" onclick="openLoginBgPicker()">Chọn ảnh nền</button>
+              <button type="button" onclick="clearLoginBgImage()">Xóa ảnh nền</button>
+            </div>
+            <input id="loginBgFile" class="login-bg-file" type="file" accept="image/*" onchange="setLoginBgImage(this)">
+            <div class="muted">Trạng thái ảnh: ${cfg.hasImage ? "Đã có ảnh nền" : "Chưa có ảnh nền"}. Ảnh được lưu riêng trong bộ nhớ app để tránh lỗi vượt quota.</div>
+          </div>
+        </div>
+      </section>
+      <section class="section">
+        <h2>Khung đăng nhập</h2>
+        <div class="login-style-grid">
+          <label>Màu khung<input type="color" value="${html(cfg.cardColor || "#ffffff")}" oninput="setLoginAppearanceValue('cardColor', this.value)"></label>
+          <label>Màu viền<input type="color" value="${html(cfg.cardBorder || "#d6e0ea")}" oninput="setLoginAppearanceValue('cardBorder', this.value)"></label>
+          <label>Độ trong suốt <output id="cardOpacityOut">${html(cfg.cardOpacity || 94)}%</output><input type="range" min="45" max="100" step="1" value="${html(cfg.cardOpacity || 94)}" oninput="setLoginAppearanceValue('cardOpacity', this.value)"></label>
+          <label>Độ rộng khung <output id="cardWidthOut">${html(cfg.cardWidth || 100)}%</output><input type="range" min="78" max="100" step="1" value="${html(cfg.cardWidth || 100)}" oninput="setLoginAppearanceValue('cardWidth', this.value)"></label>
+          <label>Bo góc <output id="cardRadiusOut">${html(cfg.cardRadius || 14)}px</output><input type="range" min="0" max="32" step="1" value="${html(cfg.cardRadius || 14)}" oninput="setLoginAppearanceValue('cardRadius', this.value)"></label>
+          <label>Cách mép trên <output id="cardTopOut">${html(cfg.cardTop || 72)}px</output><input type="range" min="16" max="140" step="1" value="${html(cfg.cardTop || 72)}" oninput="setLoginAppearanceValue('cardTop', this.value)"></label>
+          <label>Làm mờ phía sau khung <output id="cardBlurOut">${html(cfg.cardBlur || 0)}px</output><input type="range" min="0" max="18" step="1" value="${html(cfg.cardBlur || 0)}" oninput="setLoginAppearanceValue('cardBlur', this.value)"></label>
+        </div>
+      </section>
+      <section class="section">
+        <div class="config-title">
+          <div><h2>Nền trong app</h2><div class="muted">Chọn nền riêng cho từng màn hoặc áp dụng chung cho tất cả màn. Ảnh này tách riêng với ảnh màn đăng nhập.</div></div>
+        </div>
+        <div class="grid cols-2" style="margin-top:12px">
+          <div class="app-bg-preview" aria-hidden="true"><div class="app-bg-preview-card">Ô nội dung</div><div class="app-bg-preview-card">Bảng / form / thống kê</div></div>
+          <div class="grid">
+            <label>Áp dụng cho màn<select id="appAppearanceTarget" onchange="setAppAppearanceTarget(this.value)">${screenOptionHtml}</select></label>
+            <label>Màu nền app<input type="color" value="${html(appCfg.bgColor || "#ffffff")}" oninput="setAppAppearanceValue('bgColor', this.value)"></label>
+            <label>Độ phủ ảnh nền <output id="appBgDimOut">${html(appCfg.bgDim || 12)}%</output><input type="range" min="0" max="70" step="1" value="${html(appCfg.bgDim || 12)}" oninput="setAppAppearanceValue('bgDim', this.value)"></label>
+            <div class="file-actions">
+              <button type="button" onclick="openAppBgPicker()">Chọn ảnh nền app</button>
+              <button type="button" onclick="clearAppBgImage()">Xóa ảnh nền app</button>
+            </div>
+            <input id="appBgFile" class="login-bg-file" type="file" accept="image/*" onchange="setAppBgImage(this)">
+            <div class="muted">Trạng thái: ${html(appImageState)}.</div>
+          </div>
+        </div>
+      </section>
+      <section class="section">
+        <h2>Ô nội dung trong app</h2>
+        <div class="login-style-grid">
+          <label>Màu ô<input type="color" value="${html(appCfg.cardColor || "#ffffff")}" oninput="setAppAppearanceValue('cardColor', this.value)"></label>
+          <label>Màu viền ô<input type="color" value="${html(appCfg.cardBorder || "#d6e0ea")}" oninput="setAppAppearanceValue('cardBorder', this.value)"></label>
+          <label>Độ trong suốt ô <output id="appCardOpacityOut">${html(appCfg.cardOpacity || 98)}%</output><input type="range" min="55" max="100" step="1" value="${html(appCfg.cardOpacity || 98)}" oninput="setAppAppearanceValue('cardOpacity', this.value)"></label>
+          <label>Bo góc ô <output id="appCardRadiusOut">${html(appCfg.cardRadius || 8)}px</output><input type="range" min="0" max="24" step="1" value="${html(appCfg.cardRadius || 8)}" oninput="setAppAppearanceValue('cardRadius', this.value)"></label>
+          <label>Làm mờ sau ô <output id="appCardBlurOut">${html(appCfg.cardBlur || 0)}px</output><input type="range" min="0" max="18" step="1" value="${html(appCfg.cardBlur || 0)}" oninput="setAppAppearanceValue('cardBlur', this.value)"></label>
+        </div>
+      </section>`;
+    }    function adminUsersPanel(){
       if (typeof live !== "undefined" && !live.adminPermissionsLoaded && !live.adminPermissionsLoading) {
         setTimeout(() => loadAdminPermissions(false), 0);
       }
@@ -4197,6 +4308,10 @@
       const merged = Object.assign(base, config || {});
       merged.sync = Object.assign(base.sync, (config && config.sync) || {});
       merged.update = Object.assign(base.update, (config && config.update) || {});
+      merged.loginAppearance = Object.assign(base.loginAppearance, (config && config.loginAppearance) || {});
+      merged.appAppearance = Object.assign({}, base.appAppearance || {}, (config && config.appAppearance) || {});
+      merged.appAppearance.global = Object.assign({}, (base.appAppearance || {}).global || {}, ((config && config.appAppearance) || {}).global || {});
+      merged.appAppearance.screens = Object.assign({}, (config && config.appAppearance && config.appAppearance.screens) || {});
       merged.personal = Object.assign(base.personal, (config && config.personal) || {});
       merged.storeCharts = Object.assign(base.storeCharts, (config && config.storeCharts) || {});
       merged.sheetProfiles = (config && config.sheetProfiles) || base.sheetProfiles;
@@ -4817,7 +4932,7 @@
     }
     function logout(){ localStorage.removeItem("vtd_session_day"); showLogin(); }
     function enforceSession(){ if (!sessionValid()) showLogin(); }
-    function showLogin(){ el("app").classList.add("hidden"); el("login").classList.remove("hidden"); }
+    function showLogin(){ el("app").classList.add("hidden"); el("login").classList.remove("hidden"); if (typeof initLoginAppearance === "function") initLoginAppearance(); }
     function showApp(){ el("login").classList.add("hidden"); el("app").classList.remove("hidden"); }
     render();
     if (sessionValid()) showApp(); else showLogin();
@@ -5082,7 +5197,7 @@
       const text = String(value || "").trim();
       const norm = text.toLowerCase();
       if (!text) return "Chờ đồng bộ";
-      if (text.includes("Ä") || text.includes("á") || text.includes("Æ")) {
+      if (text.includes("Ã„") || text.includes("á") || text.includes("Ã†")) {
         if (norm.includes("error") || norm.includes("img") || norm.includes("lá")) return "Lỗi";
         if (norm.includes("running") || norm.includes("pending") || norm.includes("yes")) return "Đang đồng bộ";
         return "Đã đồng bộ";
@@ -6110,7 +6225,7 @@
     }
     function queueItemOrderCode(item){
       const p = item && item.payload || {};
-      return p.maDon || p.ma_don || p.orderCode || p["Mã đơn"] || p["MÃ£ Ä‘Æ¡n"] || "";
+      return p.maDon || p.ma_don || p.orderCode || p["Mã đơn"] || p["Mã đơn"] || "";
     }
     function currentDraftWorkForNotify(){
       try {
@@ -7552,6 +7667,393 @@
         button.setAttribute("title", show ? "Ẩn Pass" : "Hiện Pass");
       }
     }
+    const LOGIN_BG_COLOR_KEY = "vtd_login_bg_color";
+    const LOGIN_BG_IMAGE_KEY = "vtd_login_bg_image";
+    let loginBgImageCache = "";
+    let loginBgImageLoaded = false;
+    function loginAppearanceConfig(){
+      appConfig.loginAppearance = Object.assign({}, defaultAppConfig.loginAppearance || {}, appConfig.loginAppearance || {});
+      return appConfig.loginAppearance;
+    }
+    function clampNumber(value, min, max, fallback){
+      const n = Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.max(min, Math.min(max, n));
+    }
+    function hexToRgb(value){
+      const hex = String(value || "").replace("#", "");
+      if (!/^[0-9a-f]{6}$/i.test(hex)) return [255, 255, 255];
+      return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
+    }
+    function loginBgOverlay(dataUrl){
+      if (!dataUrl) return "linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.56))";
+      const cfg = loginAppearanceConfig();
+      const dim = clampNumber(cfg.bgDim, 0, 70, 16) / 100;
+      const wash = Math.min(.72, dim + .24);
+      return `linear-gradient(180deg, rgba(15,23,42,${dim}), rgba(248,250,252,${wash})), url("${dataUrl}")`;
+    }
+    function loginBgStore(){
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open("vtd_ui_store", 1);
+        req.onupgradeneeded = () => req.result.createObjectStore("assets");
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error || new Error("Không mở được kho ảnh nền."));
+      });
+    }
+    async function readStoredLoginBgImage(){
+      try {
+        const oldValue = localStorage.getItem(LOGIN_BG_IMAGE_KEY);
+        if (oldValue) localStorage.removeItem(LOGIN_BG_IMAGE_KEY);
+        const db = await loginBgStore();
+        return await new Promise(resolve => {
+          const tx = db.transaction("assets", "readonly");
+          const req = tx.objectStore("assets").get("loginBgImage");
+          req.onsuccess = () => resolve(String(req.result || ""));
+          req.onerror = () => resolve("");
+        });
+      } catch (err) {
+        return "";
+      }
+    }
+    async function writeStoredLoginBgImage(dataUrl){
+      const db = await loginBgStore();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction("assets", "readwrite");
+        tx.objectStore("assets").put(dataUrl, "loginBgImage");
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error || new Error("Không lưu được ảnh nền."));
+      });
+    }
+    async function deleteStoredLoginBgImage(){
+      localStorage.removeItem(LOGIN_BG_IMAGE_KEY);
+      try {
+        const db = await loginBgStore();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction("assets", "readwrite");
+          tx.objectStore("assets").delete("loginBgImage");
+          tx.oncomplete = resolve;
+          tx.onerror = () => reject(tx.error || new Error("Không xóa được ảnh nền."));
+        });
+      } catch (err) {}
+    }
+    function applyLoginAppearance(image){
+      const cfg = loginAppearanceConfig();
+      const color = cfg.bgColor || localStorage.getItem(LOGIN_BG_COLOR_KEY) || "#e9f3fb";
+      const cardRgb = hexToRgb(cfg.cardColor || "#ffffff");
+      const cardOpacity = clampNumber(cfg.cardOpacity, 45, 100, 94) / 100;
+      const cardRadius = clampNumber(cfg.cardRadius, 0, 32, 14);
+      const cardWidth = clampNumber(cfg.cardWidth, 78, 100, 100);
+      const cardTop = clampNumber(cfg.cardTop, 16, 140, 72);
+      const cardBlur = clampNumber(cfg.cardBlur, 0, 18, 0);
+      document.querySelectorAll(".login-page, .login-bg-preview").forEach(node => {
+        node.style.setProperty("--login-bg-color", color);
+        node.style.setProperty("--login-bg-image", loginBgOverlay(image || ""));
+        node.style.setProperty("--login-page-top", `${cardTop}px`);
+        if (node.classList.contains("login-page")) node.style.paddingTop = `${cardTop}px`;
+      });
+      document.querySelectorAll(".login-card").forEach(node => {
+        node.style.setProperty("--login-card-bg", `rgba(${cardRgb[0]}, ${cardRgb[1]}, ${cardRgb[2]}, ${cardOpacity})`);
+        node.style.setProperty("--login-card-border", cfg.cardBorder || "#d6e0ea");
+        node.style.setProperty("--login-card-radius", `${cardRadius}px`);
+        node.style.setProperty("--login-card-width", `${cardWidth}%`);
+        node.style.setProperty("--login-card-blur", `${cardBlur}px`);
+        node.style.backgroundColor = `rgba(${cardRgb[0]}, ${cardRgb[1]}, ${cardRgb[2]}, ${cardOpacity})`;
+        node.style.borderColor = cfg.cardBorder || "#d6e0ea";
+        node.style.borderRadius = `${cardRadius}px`;
+        node.style.width = `min(100%, ${cardWidth}%)`;
+        node.style.backdropFilter = `blur(${cardBlur}px)`;
+      });
+      const picker = el("loginBgColor");
+      if (picker) picker.value = color;
+      updateLoginAppearanceOutputs();
+    }
+    function initLoginAppearance(){
+      applyLoginAppearance(loginBgImageCache);
+      if (!loginBgImageLoaded) {
+        loginBgImageLoaded = true;
+        readStoredLoginBgImage().then(image => {
+          loginBgImageCache = image || "";
+          if (appConfig.loginAppearance) appConfig.loginAppearance.hasImage = !!loginBgImageCache;
+          applyLoginAppearance(loginBgImageCache);
+        });
+      }
+    }
+    function setLoginBgColor(color){
+      if (!/^#[0-9a-f]{6}$/i.test(String(color || ""))) return;
+      loginAppearanceConfig().bgColor = color;
+      localStorage.setItem(LOGIN_BG_COLOR_KEY, color);
+      saveAppConfig(false);
+      initLoginAppearance();
+    }
+    function setLoginAppearanceValue(key, value){
+      const cfg = loginAppearanceConfig();
+      const numeric = ["bgDim","cardOpacity","cardRadius","cardWidth","cardTop","cardBlur"];
+      cfg[key] = numeric.includes(key) ? Number(value) : value;
+      saveAppConfig(false);
+      initLoginAppearance();
+    }
+    function updateLoginAppearanceOutputs(){
+      const cfg = loginAppearanceConfig();
+      const map = {
+        bgDimOut: `${clampNumber(cfg.bgDim, 0, 70, 16)}%`,
+        cardOpacityOut: `${clampNumber(cfg.cardOpacity, 45, 100, 94)}%`,
+        cardRadiusOut: `${clampNumber(cfg.cardRadius, 0, 32, 14)}px`,
+        cardWidthOut: `${clampNumber(cfg.cardWidth, 78, 100, 100)}%`,
+        cardTopOut: `${clampNumber(cfg.cardTop, 16, 140, 72)}px`,
+        cardBlurOut: `${clampNumber(cfg.cardBlur, 0, 18, 0)}px`
+      };
+      Object.entries(map).forEach(([id, text]) => {
+        const node = el(id);
+        if (node) node.textContent = text;
+      });
+    }
+    function openLoginBgPicker(){
+      const input = el("loginBgFile");
+      if (input) input.click();
+    }
+    async function clearLoginBgImage(){
+      await deleteStoredLoginBgImage();
+      loginBgImageCache = "";
+      loginBgImageLoaded = true;
+      appConfig.loginAppearance = appConfig.loginAppearance || {};
+      appConfig.loginAppearance.hasImage = false;
+      saveAppConfig(false);
+      initLoginAppearance();
+      if (view === "admin" && adminTab === "appearance") admin();
+      toast("Đã xóa ảnh nền đăng nhập.", "ok");
+    }
+    function readLoginBgFile(file){
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Không đọc được ảnh nền."));
+        reader.readAsDataURL(file);
+      });
+    }
+    function resizeLoginBgImage(dataUrl){
+      return new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => {
+          const maxSide = 1600;
+          const scale = Math.min(1, maxSide / Math.max(img.width || 1, img.height || 1));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round((img.width || 1) * scale));
+          canvas.height = Math.max(1, Math.round((img.height || 1) * scale));
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#eef4f8";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", .82));
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+      });
+    }
+    async function setLoginBgImage(input){
+      const file = input && input.files && input.files[0];
+      if (!file) return;
+      if (!/^image\//i.test(file.type || "")) {
+        toast("Vui lòng chọn file ảnh.", "err");
+        input.value = "";
+        return;
+      }
+      try {
+        const dataUrl = await readLoginBgFile(file);
+        const resized = await resizeLoginBgImage(dataUrl);
+        await writeStoredLoginBgImage(resized);
+        loginBgImageCache = resized;
+        loginBgImageLoaded = true;
+        appConfig.loginAppearance = appConfig.loginAppearance || {};
+        appConfig.loginAppearance.hasImage = true;
+        saveAppConfig(false);
+        initLoginAppearance();
+        if (view === "admin" && adminTab === "appearance") admin();
+        toast("Đã lưu ảnh nền đăng nhập.", "ok");
+      } catch (err) {
+        toast(err && err.message ? err.message : "Không lưu được ảnh nền.", "err");
+      } finally {
+        input.value = "";
+      }
+    }
+    const appBgImageCache = {};
+    const appBgImageLoaded = {};
+    function appAppearanceBase(){
+      appConfig.appAppearance = appConfig.appAppearance || {};
+      appConfig.appAppearance.global = Object.assign({}, (defaultAppConfig.appAppearance || {}).global || {}, appConfig.appAppearance.global || {});
+      appConfig.appAppearance.screens = appConfig.appAppearance.screens || {};
+      return appConfig.appAppearance;
+    }
+    function appAppearanceTargetConfig(target = appAppearanceTarget){
+      const cfg = appAppearanceBase();
+      if (target === "global") return cfg.global;
+      cfg.screens[target] = Object.assign({}, cfg.screens[target] || {});
+      return cfg.screens[target];
+    }
+    function resolvedAppAppearance(screen = view){
+      const cfg = appAppearanceBase();
+      return Object.assign({}, cfg.global || {}, (cfg.screens && cfg.screens[screen]) || {});
+    }
+    function appBgAssetKey(target){ return `appBgImage:${target || "global"}`; }
+    async function readStoredAppBgImage(target){
+      try {
+        const db = await loginBgStore();
+        return await new Promise(resolve => {
+          const tx = db.transaction("assets", "readonly");
+          const req = tx.objectStore("assets").get(appBgAssetKey(target));
+          req.onsuccess = () => resolve(String(req.result || ""));
+          req.onerror = () => resolve("");
+        });
+      } catch (err) {
+        return "";
+      }
+    }
+    async function writeStoredAppBgImage(target, dataUrl){
+      const db = await loginBgStore();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction("assets", "readwrite");
+        tx.objectStore("assets").put(dataUrl, appBgAssetKey(target));
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error || new Error("Không lưu được ảnh nền app."));
+      });
+    }
+    async function deleteStoredAppBgImage(target){
+      try {
+        const db = await loginBgStore();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction("assets", "readwrite");
+          tx.objectStore("assets").delete(appBgAssetKey(target));
+          tx.oncomplete = resolve;
+          tx.onerror = () => reject(tx.error || new Error("Không xóa được ảnh nền app."));
+        });
+      } catch (err) {}
+    }
+    function appBgOverlay(cfg, dataUrl){
+      if (!dataUrl) return "none";
+      const dim = clampNumber(cfg.bgDim, 0, 70, 12) / 100;
+      const wash = Math.min(.68, dim + .18);
+      return `linear-gradient(180deg, rgba(15,23,42,${dim}), rgba(248,250,252,${wash})), url("${dataUrl}")`;
+    }
+    function applyAppAppearanceForNodes(cfg, image, root = document){
+      const bgColor = cfg.bgColor || "#ffffff";
+      const cardRgb = hexToRgb(cfg.cardColor || "#ffffff");
+      const cardOpacity = clampNumber(cfg.cardOpacity, 55, 100, 98) / 100;
+      const cardBg = `rgba(${cardRgb[0]}, ${cardRgb[1]}, ${cardRgb[2]}, ${cardOpacity})`;
+      const cardBorder = cfg.cardBorder || "#d6e0ea";
+      const cardRadius = `${clampNumber(cfg.cardRadius, 0, 24, 8)}px`;
+      const cardBlur = `blur(${clampNumber(cfg.cardBlur, 0, 18, 0)}px)`;
+      const bgImage = appBgOverlay(cfg, image || "");
+      root.querySelectorAll(".app-bg-preview, #app.app, .app, .main, .content").forEach(node => {
+        node.style.setProperty("--app-bg-color", bgColor);
+        node.style.setProperty("--app-bg-image", bgImage);
+        node.style.backgroundColor = bgColor;
+        node.style.backgroundImage = bgImage;
+        node.style.backgroundSize = "cover";
+        node.style.backgroundPosition = "center";
+      });
+      root.querySelectorAll(".app-bg-preview-card, .section, .stat, .table-wrap, .lookup, .config-card, .product-row, .sku-card, .sku-form, .sku-added-item, .edit-sku-row, .edit-image-row, .preview-item, .form-sheet").forEach(node => {
+        node.style.setProperty("--app-card-bg", cardBg);
+        node.style.setProperty("--app-card-border", cardBorder);
+        node.style.setProperty("--app-card-radius", cardRadius);
+        node.style.backgroundColor = cardBg;
+        node.style.borderColor = cardBorder;
+        node.style.borderRadius = cardRadius;
+        node.style.backdropFilter = cardBlur;
+      });
+    }
+    function applyAppAppearance(){
+      const screen = view || "home";
+      const cfg = resolvedAppAppearance(screen);
+      const targetKey = appBgImageCache[screen] ? screen : "global";
+      const image = appBgImageCache[screen] || appBgImageCache.global || "";
+      applyAppAppearanceForNodes(cfg, image);
+      updateAppAppearanceOutputs();
+      ["global", screen].forEach(key => {
+        if (appBgImageLoaded[key]) return;
+        appBgImageLoaded[key] = true;
+        readStoredAppBgImage(key).then(img => {
+          appBgImageCache[key] = img || "";
+          applyAppAppearance();
+        });
+      });
+    }
+    function applyAppAppearancePreview(){
+      const cfg = Object.assign({}, (defaultAppConfig.appAppearance || {}).global || {}, appAppearanceTargetConfig());
+      const image = appBgImageCache[appAppearanceTarget] || "";
+      document.querySelectorAll(".app-bg-preview").forEach(node => applyAppAppearanceForNodes(cfg, image, node.parentElement || document));
+      updateAppAppearanceOutputs();
+    }
+    function setAppAppearanceTarget(target){
+      appAppearanceTarget = target || "global";
+      if (!appBgImageLoaded[appAppearanceTarget]) {
+        appBgImageLoaded[appAppearanceTarget] = true;
+        readStoredAppBgImage(appAppearanceTarget).then(img => {
+          appBgImageCache[appAppearanceTarget] = img || "";
+          admin();
+        });
+        return;
+      }
+      admin();
+    }
+    function setAppAppearanceValue(key, value){
+      const cfg = appAppearanceTargetConfig();
+      const numeric = ["bgDim","cardOpacity","cardRadius","cardBlur"];
+      cfg[key] = numeric.includes(key) ? Number(value) : value;
+      saveAppConfig(false);
+      applyAppAppearance();
+      applyAppAppearancePreview();
+    }
+    async function setAppBgImage(input){
+      const file = input && input.files && input.files[0];
+      if (!file) return;
+      if (!/^image\//i.test(file.type || "")) {
+        toast("Vui lòng chọn file ảnh.", "err");
+        input.value = "";
+        return;
+      }
+      try {
+        const dataUrl = await readLoginBgFile(file);
+        const resized = await resizeLoginBgImage(dataUrl);
+        await writeStoredAppBgImage(appAppearanceTarget, resized);
+        appBgImageCache[appAppearanceTarget] = resized;
+        appBgImageLoaded[appAppearanceTarget] = true;
+        appAppearanceTargetConfig().hasImage = true;
+        saveAppConfig(false);
+        applyAppAppearance();
+        if (view === "admin" && adminTab === "appearance") admin();
+        toast("Đã lưu ảnh nền app.", "ok");
+      } catch (err) {
+        toast(err && err.message ? err.message : "Không lưu được ảnh nền app.", "err");
+      } finally {
+        input.value = "";
+      }
+    }
+    function openAppBgPicker(){
+      const input = el("appBgFile");
+      if (input) input.click();
+    }
+    async function clearAppBgImage(){
+      await deleteStoredAppBgImage(appAppearanceTarget);
+      appBgImageCache[appAppearanceTarget] = "";
+      appBgImageLoaded[appAppearanceTarget] = true;
+      appAppearanceTargetConfig().hasImage = false;
+      saveAppConfig(false);
+      applyAppAppearance();
+      if (view === "admin" && adminTab === "appearance") admin();
+      toast("Đã xóa ảnh nền app.", "ok");
+    }
+    function updateAppAppearanceOutputs(){
+      const cfg = Object.assign({}, (defaultAppConfig.appAppearance || {}).global || {}, appAppearanceTargetConfig());
+      const map = {
+        appBgDimOut: `${clampNumber(cfg.bgDim, 0, 70, 12)}%`,
+        appCardOpacityOut: `${clampNumber(cfg.cardOpacity, 55, 100, 98)}%`,
+        appCardRadiusOut: `${clampNumber(cfg.cardRadius, 0, 24, 8)}px`,
+        appCardBlurOut: `${clampNumber(cfg.cardBlur, 0, 18, 0)}px`
+      };
+      Object.entries(map).forEach(([id, text]) => {
+        const node = el(id);
+        if (node) node.textContent = text;
+      });
+    }
     function togglePasswordField(inputId, button){
       const input = document.getElementById(inputId);
       if (!input) return;
@@ -8443,6 +8945,7 @@
     (function bootLive(){
       clearLoading();
       bindLoginEnter();
+      initLoginAppearance();
       lockPortrait();
       initAppHistory();
       const storedUser = localStorage.getItem("vtd_user");
@@ -8456,5 +8959,7 @@
   </script>
 </body>
 </html>
+
+
 
 
