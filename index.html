@@ -1528,6 +1528,7 @@
       loginAppearance: {
         bgColor: "#e9f3fb",
         hasImage: false,
+        imageVersion: "",
         bgDim: 16,
         cardColor: "#ffffff",
         cardOpacity: 94,
@@ -1541,6 +1542,7 @@
         global: {
           bgColor: "#ffffff",
           hasImage: false,
+          imageVersion: "",
           bgDim: 12,
           cardColor: "#ffffff",
           cardOpacity: 98,
@@ -1594,7 +1596,7 @@
       const displayMode = (appConfig.personal && appConfig.personal.displayMode) || "Chuyên nghiệp";
       const hcmHour = Number(new Intl.DateTimeFormat("en-US", {timeZone:"Asia/Ho_Chi_Minh", hour:"2-digit", hour12:false}).format(new Date()));
       const timeDark = hcmHour >= 18 || hcmHour < 6;
-      const useDark = theme === "Tối" || (theme === "Theo hệ thống" && timeDark);
+      const useDark = theme === "Tối" || (theme === "Tự động" && timeDark);
       const palettes = {
         "Xanh dương": {brand:"#1769aa", soft: useDark ? "#17375f" : "#e6f2ff"},
         "Xanh lá": {brand:"#0f8a5f", soft: useDark ? "#123d34" : "#e4f8ed"},
@@ -3053,7 +3055,8 @@
       setTimeout(applyAppAppearancePreview, 0);
       return `<section class="section">
         <div class="config-title">
-          <div><h2>Giao diện đăng nhập</h2><div class="muted">Chỉ chủ app/admin cấu hình ở đây. Màn đăng nhập chỉ hiển thị giao diện đã lưu, không hiện nút chỉnh cho user.</div></div>
+          <div><h2>Giao diện đăng nhập</h2><div class="muted">Chỉ chủ app/admin cấu hình ở đây. Chỉnh xong bấm Đẩy theme hệ thống để các máy khác tự nhận khi đăng nhập/mở lại app.</div></div>
+          <div class="config-actions"><button type="button" onclick="loadThemeConfigFromSystem(true)">Tải theme hệ thống</button><button type="button" class="primary" onclick="saveThemeConfigToSystem()">Đẩy theme hệ thống</button></div>
         </div>
         <div class="grid cols-2" style="margin-top:12px">
           <div class="login-bg-preview" aria-hidden="true"></div>
@@ -3594,7 +3597,7 @@
       const personalPanel = `<section class="section"><h2>Cài đặt cá nhân</h2>
         <div class="grid cols-2">
           <label>Font chữ<select id="personalFont"><option ${p.fontScale==="Nhỏ"?"selected":""}>Nhỏ</option><option ${p.fontScale==="Vừa"?"selected":""}>Vừa</option><option ${p.fontScale==="Lớn"?"selected":""}>Lớn</option><option ${p.fontScale==="Rất lớn"?"selected":""}>Rất lớn</option></select></label>
-          <label>Đổi màu nền<select id="personalTheme"><option ${selectedTheme==="Theo hệ thống"?"selected":""}>Theo hệ thống</option><option ${selectedTheme==="Sáng"?"selected":""}>Sáng</option><option ${selectedTheme==="Tối"?"selected":""}>Tối</option></select></label>
+          <label>Đổi màu nền<select id="personalTheme"><option ${selectedTheme==="Theo hệ thống"?"selected":""}>Theo hệ thống</option><option ${selectedTheme==="Tự động"?"selected":""}>Tự động</option><option ${selectedTheme==="Sáng"?"selected":""}>Sáng</option><option ${selectedTheme==="Tối"?"selected":""}>Tối</option></select></label>
           <label>Màu chủ đề<select id="personalThemeColor">${themeColorOptions.map(color => `<option ${color===selectedThemeColor?"selected":""}>${color}</option>`).join("")}</select></label>
           <label>Chế độ hiển thị<select id="personalDisplay"><option ${selectedDisplay==="Chuyên nghiệp"?"selected":""}>Chuyên nghiệp</option><option ${selectedDisplay==="Dễ nhìn"?"selected":""}>Dễ nhìn</option></select></label>
           <label>Màn mở đầu<select id="personalDefault">${tabOptions.map(x => `<option value="${x[0]}" ${p.defaultScreen===x[0]?"selected":""}>${x[1]}</option>`).join("")}</select></label>
@@ -4355,6 +4358,9 @@
       }
       if (config.update) {
         appConfig.update = Object.assign({}, appConfig.update || defaultAppConfig.update, config.update);
+      }
+      if (config.themeConfig) {
+        applyRemoteThemeConfig(config.themeConfig);
       }
       saveAppConfig(false);
     }
@@ -7611,6 +7617,7 @@
       live.user = res.auth || {email: res.user, role: "staff"};
       resetActivityReporterState();
       live.passwordPolicy = res.passwordPolicy || (live.user && live.user.passwordPolicy) || null;
+      if (res.config && res.config.system) mergeSystemConfig(res.config.system);
       localStorage.setItem("vtd_token", live.token);
       localStorage.setItem("vtd_user", JSON.stringify(live.user));
       localStorage.setItem("vtd_session_day", sessionDay());
@@ -7669,8 +7676,96 @@
     }
     const LOGIN_BG_COLOR_KEY = "vtd_login_bg_color";
     const LOGIN_BG_IMAGE_KEY = "vtd_login_bg_image";
+    const THEME_ASSET_META_KEY = "vtd_theme_asset_meta_v1";
     let loginBgImageCache = "";
     let loginBgImageLoaded = false;
+    function themeAssetMeta(){
+      try { return JSON.parse(localStorage.getItem(THEME_ASSET_META_KEY) || "{}") || {}; }
+      catch (err) { return {}; }
+    }
+    function saveThemeAssetMeta(meta){
+      try { localStorage.setItem(THEME_ASSET_META_KEY, JSON.stringify(meta || {})); } catch (err) {}
+    }
+    function themeAssetHash(value){
+      const text = String(value || "");
+      let hash = 2166136261;
+      const step = Math.max(1, Math.floor(text.length / 24000));
+      for (let i = 0; i < text.length; i += step) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      hash ^= text.length;
+      return (hash >>> 0).toString(36);
+    }
+    function themeAssetVersion(dataUrl){
+      return dataUrl ? `img_${themeAssetHash(dataUrl)}_${String(dataUrl.length)}` : `empty_${Date.now()}`;
+    }
+    function themeAssetMetaKey(kind, target){
+      return `${kind}:${target || "global"}`;
+    }
+    async function applyThemeAssetIfChanged(kind, target, asset, writer, remover){
+      if (!asset || typeof asset !== "object") return "";
+      const version = String(asset.version || "");
+      if (!version) return "";
+      const key = themeAssetMetaKey(kind, target);
+      const meta = themeAssetMeta();
+      const dataUrl = String(asset.dataUrl || "");
+      if (meta[key] === version) return "";
+      if (dataUrl) await writer(dataUrl);
+      else await remover();
+      meta[key] = version;
+      saveThemeAssetMeta(meta);
+      return dataUrl;
+    }
+    function themeConfigWithoutAssets(config){
+      const clone = Object.assign({}, config || {});
+      delete clone.assets;
+      return clone;
+    }
+    async function applyRemoteThemeConfig(themeConfig){
+      if (!themeConfig || typeof themeConfig !== "object") return;
+      if (themeConfig.loginAppearance) {
+        appConfig.loginAppearance = Object.assign({}, loginAppearanceConfig(), themeConfig.loginAppearance);
+      }
+      if (themeConfig.appAppearance) {
+        appConfig.appAppearance = Object.assign({}, appAppearanceBase(), themeConfigWithoutAssets(themeConfig.appAppearance));
+        appConfig.appAppearance.global = Object.assign({}, (defaultAppConfig.appAppearance || {}).global || {}, appConfig.appAppearance.global || {});
+        appConfig.appAppearance.screens = Object.assign({}, appConfig.appAppearance.screens || {});
+      }
+      const assets = themeConfig.assets || {};
+      if (assets.login) {
+        const stored = await applyThemeAssetIfChanged("login", "login", assets.login, writeStoredLoginBgImage, deleteStoredLoginBgImage);
+        if (stored || String(assets.login.dataUrl || "") === "") {
+          loginBgImageCache = stored || "";
+          loginBgImageLoaded = true;
+          appConfig.loginAppearance = appConfig.loginAppearance || {};
+          appConfig.loginAppearance.hasImage = !!loginBgImageCache;
+        }
+      }
+      const appAssets = assets.app || {};
+      if (appAssets.global) {
+        const stored = await applyThemeAssetIfChanged("app", "global", appAssets.global, data => writeStoredAppBgImage("global", data), () => deleteStoredAppBgImage("global"));
+        if (stored || String(appAssets.global.dataUrl || "") === "") {
+          appBgImageCache.global = stored || "";
+          appBgImageLoaded.global = true;
+          appAppearanceTargetConfig("global").hasImage = !!appBgImageCache.global;
+        }
+      }
+      const screenAssets = appAssets.screens || {};
+      for (const target of Object.keys(screenAssets)) {
+        const asset = screenAssets[target];
+        const stored = await applyThemeAssetIfChanged("app", target, asset, data => writeStoredAppBgImage(target, data), () => deleteStoredAppBgImage(target));
+        if (stored || String(asset && asset.dataUrl || "") === "") {
+          appBgImageCache[target] = stored || "";
+          appBgImageLoaded[target] = true;
+          appAppearanceTargetConfig(target).hasImage = !!appBgImageCache[target];
+        }
+      }
+      saveAppConfig(false);
+      initLoginAppearance();
+      applyAppAppearance();
+      if (view === "admin" && adminTab === "appearance") admin();
+    }
     function loginAppearanceConfig(){
       appConfig.loginAppearance = Object.assign({}, defaultAppConfig.loginAppearance || {}, appConfig.loginAppearance || {});
       return appConfig.loginAppearance;
@@ -7817,6 +7912,7 @@
       loginBgImageLoaded = true;
       appConfig.loginAppearance = appConfig.loginAppearance || {};
       appConfig.loginAppearance.hasImage = false;
+      appConfig.loginAppearance.imageVersion = themeAssetVersion("");
       saveAppConfig(false);
       initLoginAppearance();
       if (view === "admin" && adminTab === "appearance") admin();
@@ -7865,6 +7961,7 @@
         loginBgImageLoaded = true;
         appConfig.loginAppearance = appConfig.loginAppearance || {};
         appConfig.loginAppearance.hasImage = true;
+        appConfig.loginAppearance.imageVersion = themeAssetVersion(resized);
         saveAppConfig(false);
         initLoginAppearance();
         if (view === "admin" && adminTab === "appearance") admin();
@@ -7933,6 +8030,16 @@
       const wash = Math.min(.68, dim + .18);
       return `linear-gradient(180deg, rgba(15,23,42,${dim}), rgba(248,250,252,${wash})), url("${dataUrl}")`;
     }
+    function useSystemAppAppearance(){
+      const theme = (appConfig.personal && appConfig.personal.theme) || "Theo hệ thống";
+      return theme === "Theo hệ thống";
+    }
+    function clearAppAppearanceOverrides(root = document){
+      root.querySelectorAll('[data-vtd-appearance="1"]').forEach(node => {
+        ["background-color","background-image","background-size","background-position","border-color","border-radius","backdrop-filter"].forEach(prop => node.style.removeProperty(prop));
+        node.removeAttribute("data-vtd-appearance");
+      });
+    }
     function applyAppAppearanceForNodes(cfg, image, root = document){
       const bgColor = cfg.bgColor || "#ffffff";
       const cardRgb = hexToRgb(cfg.cardColor || "#ffffff");
@@ -7945,22 +8052,28 @@
       root.querySelectorAll(".app-bg-preview, #app.app, .app, .main, .content").forEach(node => {
         node.style.setProperty("--app-bg-color", bgColor);
         node.style.setProperty("--app-bg-image", bgImage);
-        node.style.backgroundColor = bgColor;
-        node.style.backgroundImage = bgImage;
-        node.style.backgroundSize = "cover";
-        node.style.backgroundPosition = "center";
+        node.style.setProperty("background-color", bgColor, "important");
+        node.style.setProperty("background-image", bgImage, "important");
+        node.style.setProperty("background-size", "cover", "important");
+        node.style.setProperty("background-position", "center", "important");
+        node.setAttribute("data-vtd-appearance", "1");
       });
       root.querySelectorAll(".app-bg-preview-card, .section, .stat, .table-wrap, .lookup, .config-card, .product-row, .sku-card, .sku-form, .sku-added-item, .edit-sku-row, .edit-image-row, .preview-item, .form-sheet").forEach(node => {
         node.style.setProperty("--app-card-bg", cardBg);
         node.style.setProperty("--app-card-border", cardBorder);
         node.style.setProperty("--app-card-radius", cardRadius);
-        node.style.backgroundColor = cardBg;
-        node.style.borderColor = cardBorder;
-        node.style.borderRadius = cardRadius;
-        node.style.backdropFilter = cardBlur;
+        node.style.setProperty("background-color", cardBg, "important");
+        node.style.setProperty("border-color", cardBorder, "important");
+        node.style.setProperty("border-radius", cardRadius, "important");
+        node.style.setProperty("backdrop-filter", cardBlur, "important");
+        node.setAttribute("data-vtd-appearance", "1");
       });
     }
     function applyAppAppearance(){
+      if (!useSystemAppAppearance()) {
+        clearAppAppearanceOverrides();
+        return;
+      }
       const screen = view || "home";
       const cfg = resolvedAppAppearance(screen);
       const targetKey = appBgImageCache[screen] ? screen : "global";
@@ -8017,6 +8130,7 @@
         appBgImageCache[appAppearanceTarget] = resized;
         appBgImageLoaded[appAppearanceTarget] = true;
         appAppearanceTargetConfig().hasImage = true;
+        appAppearanceTargetConfig().imageVersion = themeAssetVersion(resized);
         saveAppConfig(false);
         applyAppAppearance();
         if (view === "admin" && adminTab === "appearance") admin();
@@ -8036,6 +8150,7 @@
       appBgImageCache[appAppearanceTarget] = "";
       appBgImageLoaded[appAppearanceTarget] = true;
       appAppearanceTargetConfig().hasImage = false;
+      appAppearanceTargetConfig().imageVersion = themeAssetVersion("");
       saveAppConfig(false);
       applyAppAppearance();
       if (view === "admin" && adminTab === "appearance") admin();
@@ -8053,6 +8168,92 @@
         const node = el(id);
         if (node) node.textContent = text;
       });
+    }
+    async function currentLoginBgImage(){
+      if (loginBgImageLoaded) return loginBgImageCache || "";
+      const image = await readStoredLoginBgImage();
+      loginBgImageCache = image || "";
+      loginBgImageLoaded = true;
+      return loginBgImageCache;
+    }
+    async function currentAppBgImage(target){
+      target = target || "global";
+      if (appBgImageLoaded[target]) return appBgImageCache[target] || "";
+      const image = await readStoredAppBgImage(target);
+      appBgImageCache[target] = image || "";
+      appBgImageLoaded[target] = true;
+      return appBgImageCache[target];
+    }
+    function themeAssetPayload(dataUrl, version){
+      dataUrl = String(dataUrl || "");
+      return {
+        version: version || themeAssetVersion(dataUrl),
+        dataUrl
+      };
+    }
+    async function buildThemeConfigPayload(){
+      const loginCfg = Object.assign({}, loginAppearanceConfig());
+      const appCfg = appAppearanceBase();
+      const payload = {
+        version: Date.now(),
+        updatedAt: new Date().toISOString(),
+        loginAppearance: Object.assign({}, loginCfg),
+        appAppearance: {
+          global: Object.assign({}, appCfg.global || {}),
+          screens: Object.assign({}, appCfg.screens || {})
+        },
+        assets: {
+          login: null,
+          app: {global: null, screens: {}}
+        }
+      };
+      const loginImage = await currentLoginBgImage();
+      loginCfg.imageVersion = loginCfg.imageVersion || themeAssetVersion(loginImage);
+      payload.loginAppearance.imageVersion = loginCfg.imageVersion;
+      payload.loginAppearance.hasImage = !!loginImage;
+      payload.assets.login = themeAssetPayload(loginImage, loginCfg.imageVersion);
+
+      const globalImage = await currentAppBgImage("global");
+      appCfg.global.imageVersion = appCfg.global.imageVersion || themeAssetVersion(globalImage);
+      appCfg.global.hasImage = !!globalImage;
+      payload.appAppearance.global = Object.assign({}, appCfg.global);
+      payload.assets.app.global = themeAssetPayload(globalImage, appCfg.global.imageVersion);
+
+      const targets = new Set(Object.keys(appCfg.screens || {}));
+      targets.add(appAppearanceTarget || "global");
+      targets.delete("global");
+      for (const target of targets) {
+        const cfg = appAppearanceTargetConfig(target);
+        const image = await currentAppBgImage(target);
+        cfg.imageVersion = cfg.imageVersion || themeAssetVersion(image);
+        cfg.hasImage = !!image;
+        payload.appAppearance.screens[target] = Object.assign({}, cfg);
+        payload.assets.app.screens[target] = themeAssetPayload(image, cfg.imageVersion);
+      }
+      return payload;
+    }
+    async function saveThemeConfigToSystem(){
+      if (!canAdminConfig()) return toast("Bạn không có quyền đẩy theme hệ thống.", "err");
+      saveAppConfig(false);
+      const payload = await buildThemeConfigPayload();
+      const res = await api("saveSystemConfig", {config:{themeConfig: payload}, _silent:true});
+      if (res && res.ok) {
+        await applyRemoteThemeConfig((res.config && res.config.themeConfig) || payload);
+        toast("Đã đẩy theme hệ thống. Máy khác sẽ nhận khi đăng nhập/mở lại app.", "ok");
+      } else {
+        toast((res && res.message) || "Chưa đẩy được theme hệ thống.", "err");
+      }
+    }
+    async function loadThemeConfigFromSystem(showToast){
+      if (!live.token) return toast("Cần đăng nhập trước khi tải theme hệ thống.", "err");
+      const res = await api("init", {_silent:true});
+      const theme = res && res.config && res.config.system && res.config.system.themeConfig;
+      if (res && res.ok && theme) {
+        await applyRemoteThemeConfig(theme);
+        if (showToast) toast("Đã tải theme hệ thống.", "ok");
+        return;
+      }
+      if (showToast) toast((res && res.message) || "Chưa có theme hệ thống để tải.", "err");
     }
     function togglePasswordField(inputId, button){
       const input = document.getElementById(inputId);
