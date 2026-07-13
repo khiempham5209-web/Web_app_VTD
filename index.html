@@ -1520,7 +1520,7 @@
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
       update: {
-        latestVersion: "3.5",
+        latestVersion: "3.6",
         apkUrl: "",
         folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
         note: "Bản mới của Chứng từ FF đã sẵn sàng."
@@ -3584,7 +3584,7 @@
         <div class="config-actions" style="margin-top:10px"><button onclick="checkAppUpdate(true)">Kiểm tra cập nhật</button></div>
         ${canAdminConfig() ? `<h2 style="margin-top:14px">Cấu hình cập nhật</h2>
           <div class="grid">
-            <label>Bản mới nhất<input id="updateLatestVersion" value="${html(updateCfg.latestVersion || "")}" placeholder="3.5"></label>
+            <label>Bản mới nhất<input id="updateLatestVersion" value="${html(updateCfg.latestVersion || "")}" placeholder="3.6"></label>
             <label>Link APK trực tiếp<input id="updateApkUrl" value="${html(updateCfg.apkUrl || "")}" placeholder="Dán link file APK trực tiếp để tự tải/cài"></label>
             <label>Thư mục Drive<input id="updateFolderUrl" value="${html(updateCfg.folderUrl || "")}" placeholder="Link folder Drive chứa APK"></label>
             <label>Ghi chú cập nhật<textarea id="updateNote" rows="2">${html(updateCfg.note || "")}</textarea></label>
@@ -4385,7 +4385,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "3.5";
+    const APP_VERSION = "3.6";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const nativeImagePickerMap = {
