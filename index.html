@@ -7583,7 +7583,10 @@
       if (res.ok && res.auth) {
         live.user = res.auth;
         live.passwordPolicy = res.passwordPolicy || res.auth.passwordPolicy || live.passwordPolicy || null;
-        if (res.config && res.config.system) mergeSystemConfig(res.config.system);
+        if (res.config && res.config.system) {
+          mergeSystemConfig(res.config.system);
+          if (res.config.system.themeConfig) await applyRemoteThemeConfig(res.config.system.themeConfig);
+        }
         localStorage.setItem("vtd_user", JSON.stringify(live.user));
         checkAppUpdate(false);
         render();
@@ -7617,7 +7620,10 @@
       live.user = res.auth || {email: res.user, role: "staff"};
       resetActivityReporterState();
       live.passwordPolicy = res.passwordPolicy || (live.user && live.user.passwordPolicy) || null;
-      if (res.config && res.config.system) mergeSystemConfig(res.config.system);
+      if (res.config && res.config.system) {
+        mergeSystemConfig(res.config.system);
+        if (res.config.system.themeConfig) await applyRemoteThemeConfig(res.config.system.themeConfig);
+      }
       localStorage.setItem("vtd_token", live.token);
       localStorage.setItem("vtd_user", JSON.stringify(live.user));
       localStorage.setItem("vtd_session_day", sessionDay());
@@ -8237,12 +8243,19 @@
       saveAppConfig(false);
       const payload = await buildThemeConfigPayload();
       const res = await api("saveSystemConfig", {config:{themeConfig: payload}, _silent:true});
-      if (res && res.ok) {
-        await applyRemoteThemeConfig((res.config && res.config.themeConfig) || payload);
-        toast("Đã đẩy theme hệ thống. Máy khác sẽ nhận khi đăng nhập/mở lại app.", "ok");
-      } else {
+      if (!(res && res.ok)) {
         toast((res && res.message) || "Chưa đẩy được theme hệ thống.", "err");
+        return;
       }
+      const verify = await api("init", {_silent:true});
+      const remoteTheme = verify && verify.config && verify.config.system && verify.config.system.themeConfig;
+      if (!remoteTheme || String(remoteTheme.version || "") !== String(payload.version || "")) {
+        await applyRemoteThemeConfig(payload);
+        toast("Máy này đã lưu theme, nhưng server chưa trả lại themeConfig. Cần cập nhật Apps Script để lưu key themeConfig.", "err");
+        return;
+      }
+      await applyRemoteThemeConfig(remoteTheme);
+      toast("Đã đẩy theme hệ thống và server đã xác nhận. Máy khác sẽ nhận khi đăng nhập/mở lại app.", "ok");
     }
     async function loadThemeConfigFromSystem(showToast){
       if (!live.token) return toast("Cần đăng nhập trước khi tải theme hệ thống.", "err");
