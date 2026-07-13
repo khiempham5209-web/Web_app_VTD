@@ -4938,7 +4938,12 @@
     }
     function logout(){ localStorage.removeItem("vtd_session_day"); showLogin(); }
     function enforceSession(){ if (!sessionValid()) showLogin(); }
-    function showLogin(){ el("app").classList.add("hidden"); el("login").classList.remove("hidden"); if (typeof initLoginAppearance === "function") initLoginAppearance(); }
+    function showLogin(){
+      el("app").classList.add("hidden");
+      el("login").classList.remove("hidden");
+      if (typeof initLoginAppearance === "function") initLoginAppearance();
+      if (typeof loadPublicThemeConfig === "function") setTimeout(() => loadPublicThemeConfig(false), 0);
+    }
     function showApp(){ el("login").classList.add("hidden"); el("app").classList.remove("hidden"); }
     render();
     if (sessionValid()) showApp(); else showLogin();
@@ -8258,7 +8263,7 @@
       toast("Đã đẩy theme hệ thống và server đã xác nhận. Máy khác sẽ nhận khi đăng nhập/mở lại app.", "ok");
     }
     async function loadThemeConfigFromSystem(showToast){
-      if (!live.token) return toast("Cần đăng nhập trước khi tải theme hệ thống.", "err");
+      if (!live.token) return loadPublicThemeConfig(showToast);
       const res = await api("init", {_silent:true});
       const theme = res && res.config && res.config.system && res.config.system.themeConfig;
       if (res && res.ok && theme) {
@@ -8267,6 +8272,50 @@
         return;
       }
       if (showToast) toast((res && res.message) || "Chưa có theme hệ thống để tải.", "err");
+    }
+    async function publicApi(action, params = {}){
+      const controller = window.AbortController ? new AbortController() : null;
+      const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, 20000);
+      try {
+        const response = await fetch(activeApiUrl(), {
+          method: "POST",
+          headers: {"Content-Type": "text/plain;charset=utf-8"},
+          body: JSON.stringify({action, params:Object.assign({}, params || {}, {appVersion: APP_VERSION})}),
+          signal: controller ? controller.signal : undefined
+        });
+        return await response.json();
+      } catch (err) {
+        return {ok:false, message: err && err.name === "AbortError" ? "API theme quá lâu." : String(err)};
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    let publicThemeLoading = false;
+    async function loadPublicThemeConfig(showToast){
+      if (publicThemeLoading) return;
+      publicThemeLoading = true;
+      try {
+        const knownVersion = localStorage.getItem("vtd_public_theme_version") || "";
+        let res = await publicApi("publicTheme", {knownVersion, _silent:true});
+        let theme = res && (res.themeConfig || (res.config && res.config.system && res.config.system.themeConfig));
+        if (!(res && res.ok && theme)) {
+          res = await publicApi("init", {publicTheme:true, knownVersion, _silent:true});
+          theme = res && (res.themeConfig || (res.config && res.config.system && res.config.system.themeConfig));
+        }
+        if (res && res.ok && res.unchanged) {
+          if (showToast) toast("Theme hệ thống đang là bản mới nhất.", "ok");
+          return;
+        }
+        if (res && res.ok && theme) {
+          await applyRemoteThemeConfig(theme);
+          localStorage.setItem("vtd_public_theme_version", String(theme.version || ""));
+          if (showToast) toast("Đã tải theme hệ thống public.", "ok");
+          return;
+        }
+        if (showToast) toast((res && res.message) || "API chưa có publicTheme.", "err");
+      } finally {
+        publicThemeLoading = false;
+      }
     }
     function togglePasswordField(inputId, button){
       const input = document.getElementById(inputId);
