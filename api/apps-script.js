@@ -37,11 +37,13 @@ module.exports = async function handler(req, res) {
       res.status(upstream.status).send(text);
     } catch (parseErr) {
       const compact = text.replace(/\s+/g, " ").slice(0, 300);
+      const targetTail = targetUrl.replace(/^https:\/\/script\.google\.com\/macros\/s\//i, "").slice(0, 18);
       res.status(502).json({
         ok: false,
-        message: "Apps Script tra ve HTML/khong phai JSON. Kiem tra link /exec va quyen deploy Web app.",
+        message: "Apps Script tra ve HTML/khong phai JSON. Target " + targetTail + "... status " + upstream.status + ". Preview: " + compact,
         upstreamStatus: upstream.status,
         upstreamContentType: contentType,
+        targetTail,
         preview: compact
       });
     }
