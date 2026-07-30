@@ -4923,27 +4923,35 @@ latest doGet/doPost/storeInfo definitions.
 ************************************************/
 
 function doGet(e) {
-  e = e || {};
-  if (e.parameter && e.parameter.action) {
-    return vtdApp_json_(vtdApp_apiDispatch_(String(e.parameter.action), e.parameter || {}));
+  try {
+    e = e || {};
+    if (e.parameter && e.parameter.action) {
+      return vtdApp_json_(vtdApp_apiDispatch_(String(e.parameter.action), e.parameter || {}));
+    }
+    return HtmlService
+      .createTemplateFromFile("Index")
+      .evaluate()
+      .setTitle("Chung tu VTD")
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  } catch (err) {
+    return vtdApp_json_(vtdApp_fail_(String(err && err.stack || err)));
   }
-  return HtmlService
-    .createTemplateFromFile("Index")
-    .evaluate()
-    .setTitle("Chung tu VTD")
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 function doPost(e) {
-  let body = {};
   try {
-    body = e && e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : {};
+    let body = {};
+    try {
+      body = e && e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : {};
+    } catch (err) {
+      body = {};
+    }
+    const action = String(body.action || (e && e.parameter && e.parameter.action) || "").trim();
+    const params = body.params || body || {};
+    return vtdApp_json_(vtdApp_apiDispatch_(action, params));
   } catch (err) {
-    body = {};
+    return vtdApp_json_(vtdApp_fail_(String(err && err.stack || err)));
   }
-  const action = String(body.action || (e && e.parameter && e.parameter.action) || "").trim();
-  const params = body.params || body || {};
-  return vtdApp_json_(vtdApp_apiDispatch_(action, params));
 }
 
 function vtdApp_json_(obj) {
