@@ -1532,8 +1532,8 @@
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
       update: {
-        latestVersion: "4.2",
-        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v4.2.apk",
+        latestVersion: "4.3",
+        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v4.3.apk",
         folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
         note: "Bản mới của Chứng từ FF đã sẵn sàng."
       },
@@ -4473,7 +4473,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "4.2";
+    const APP_VERSION = "4.3";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -7427,6 +7427,51 @@
       scheduleSyncQueue(0);
       return item;
     }
+    async function enqueueDocOpsSave(record, payload, imagePayloads){
+      const itemLocalId = localId();
+      const maDon = String(payload && payload.maDon || record && (record.maDon || record.po || record.orderNo) || "").trim();
+      const imageRefs = await persistQueueImages(itemLocalId, imagePayloads || []);
+      const cleanPayload = Object.assign({}, payload || {}, {
+        maDon,
+        clientId: itemLocalId,
+        files: []
+      });
+      const now = new Date();
+      const row = Object.assign({}, record || {}, cleanPayload, {
+        localId: itemLocalId,
+        date: todayApiDateText(),
+        time: now.toLocaleTimeString("vi-VN", {timeZone:"Asia/Ho_Chi_Minh", hour12:false}),
+        user: currentEmail() || "unknown",
+        syncStatus: "Pending",
+        linkAnh: "",
+        imageCount: imageRefs.length
+      });
+      const item = {
+        kind: "docOps",
+        localId: itemLocalId,
+        createdAt: Date.now(),
+        dateText: todayText(),
+        timeText: row.time,
+        user: currentEmail(),
+        status: "pending",
+        attempts: 0,
+        lastError: "",
+        lastStep: "queued",
+        payload: cleanPayload,
+        record: record || {},
+        images: imageRefs
+      };
+      const queue = localQueue();
+      queue.push(item);
+      saveLocalQueue(queue);
+      saveDocOpsRowsCache([row, ...docOpsRowsCache().filter(x => String(x.localId || "") !== itemLocalId && String(x.maDon || x.po || x.orderNo || "") !== maDon)]);
+      docOpsRememberRecords([row]);
+      updateInputSyncBadge();
+      scheduleQueueReport();
+      scheduleSyncQueue(0);
+      if (view === "home") home();
+      return item;
+    }
     function scheduleSyncQueue(delay = 0){
       if (!hasSyncableQueueWork()) {
         if (live.syncTimer) clearTimeout(live.syncTimer);
@@ -7523,6 +7568,71 @@
             scheduleQueueReport();
             live.returnThTodayLoaded = false;
             if (view === "home") loadReturnThToday(true);
+            continue;
+          }
+          if (item.kind === "docOps") {
+            await ensureQueueItemImageRefs(item);
+            item.status = "syncing";
+            item.attempts = Number(item.attempts || 0) + 1;
+            item.lastTryAt = Date.now();
+            item.lastStep = "saveDocOps";
+            saveLocalQueue(queue);
+            updateInputSyncBadge();
+            scheduleQueueReport();
+            if (view === "home") home();
+
+            let docFiles = [];
+            try {
+              for (const ref of (item.images || [])) {
+                const payload = await queuedImagePayload(ref);
+                if (payload) docFiles.push(payload);
+              }
+            } catch (err) {
+              queue = localQueue();
+              const updated = queue.find(x => x.localId === item.localId);
+              if (updated) {
+                updated.status = "error";
+                updated.lastError = String(err && err.message || err);
+                updated.lastStep = "readDocOpsImage";
+                notifyQueueItemError(updated);
+                saveLocalQueue(queue);
+                updateInputSyncBadge();
+                scheduleQueueReport();
+              }
+              continue;
+            }
+
+            const res = await docOpsApi("save", Object.assign({}, item.payload, {files: docFiles, _silent:true}));
+            queue = localQueue();
+            const updated = queue.find(x => x.localId === item.localId);
+            if (!updated) continue;
+            if (!res.ok) {
+              updated.status = "error";
+              updated.lastError = res.message || "Sync Nhập PN lỗi";
+              updated.lastStep = "saveDocOps";
+              notifyQueueItemError(updated);
+              saveLocalQueue(queue);
+              updateInputSyncBadge();
+              scheduleQueueReport();
+              const cachedRows = docOpsRowsCache();
+              saveDocOpsRowsCache(cachedRows.map(row => String(row.localId || "") === String(updated.localId || "") ? Object.assign({}, row, {syncStatus:"Pending", lastError: updated.lastError}) : row));
+              if (view === "home") home();
+              continue;
+            }
+            await queueImagesDelete((updated.images || []).map(img => img && img.id));
+            updated.status = "done";
+            updated.remoteId = res.rowNumber || res.id || "";
+            updated.syncedAt = Date.now();
+            updated.lastError = "";
+            updated.lastStep = "done";
+            notifyQueueItemDone(updated);
+            saveLocalQueue(queue);
+            updateInputSyncBadge();
+            scheduleQueueReport();
+            const cachedRows = docOpsRowsCache();
+            saveDocOpsRowsCache(cachedRows.map(row => String(row.localId || "") === String(updated.localId || "") ? Object.assign({}, row, {syncStatus:"Done", linkAnh: res.linkAnh || row.linkAnh || "", rowNumber: res.rowNumber || row.rowNumber || ""}) : row));
+            live.docOpsTodayLoaded = false;
+            if (view === "home") loadDocOpsToday(true);
             continue;
           }
           await ensureQueueItemImageRefs(item);
@@ -9177,56 +9287,28 @@
       const files = live.docOpsFiles || [];
       docOpsState.saving = true;
       docops();
-      let payload = null;
-      let imageFiles = [];
       try {
-        for (let i = 0; i < files.length; i++) imageFiles.push(await filePayload(files[i], {imageType:"document"}));
-        payload = {
+        const imageRefs = files.map((file, index) => Object.assign({}, file || {}, {
+          sourceFile: file,
+          imageType: "document",
+          fileName: file && (file.fileName || file.name) || `PN_${maDon}_${index + 1}.jpg`,
+          mimeType: file && (file.mimeType || file.type) || "image/jpeg"
+        }));
+        const payload = {
           maDon,
           rowNumber: record.rowNumber || "",
           xacThuc: docOpsState.xacThuc,
           status: docOpsState.status,
-          note: el("docOpsNote")?.value || docOpsState.note || "",
-          files: imageFiles
+          note: el("docOpsNote")?.value || docOpsState.note || ""
         };
-        let res = null;
-        if (docOpsApiUrl()) res = await docOpsApi("save", payload);
-        if (docOpsApiUrl() && !(res && res.ok)) throw new Error((res && res.message) || "Chưa lưu được thao tác chứng từ.");
-        const now = new Date();
-        const row = Object.assign({}, record, payload, {
-          date: todayApiDateText(),
-          time: now.toLocaleTimeString("vi-VN", {timeZone:"Asia/Ho_Chi_Minh", hour12:false}),
-          user: currentEmail() || "unknown",
-          syncStatus: docOpsApiUrl() ? "Done" : "Pending",
-          linkAnh: res && res.linkAnh || ""
-        });
-        saveDocOpsRowsCache([row, ...docOpsRowsCache().filter(x => String(x.maDon) !== maDon)]);
-        docOpsRememberRecords([row]);
-        toast(docOpsApiUrl() ? "Đã lưu thao tác chứng từ." : "Đã lưu Pending trên máy.", "ok");
+        await enqueueDocOpsSave(record, payload, imageRefs);
         resetDocOpsForm();
         docops();
+        toast(docOpsApiUrl() ? "Đã lưu vào máy, app sẽ tự đồng bộ nền." : "Đã lưu Pending trên máy.", "ok");
       } catch (err) {
-        const now = new Date();
-        const pendingRow = Object.assign({}, record, payload || {
-          maDon,
-          rowNumber: record.rowNumber || "",
-          xacThuc: docOpsState.xacThuc,
-          status: docOpsState.status,
-          note: el("docOpsNote")?.value || docOpsState.note || "",
-          files: imageFiles
-        }, {
-          date: todayApiDateText(),
-          time: now.toLocaleTimeString("vi-VN", {timeZone:"Asia/Ho_Chi_Minh", hour12:false}),
-          user: currentEmail() || "unknown",
-          syncStatus: "Pending",
-          linkAnh: "",
-          lastError: err && err.message ? err.message : String(err)
-        });
-        saveDocOpsRowsCache([pendingRow, ...docOpsRowsCache().filter(x => String(x.maDon) !== maDon)]);
-        docOpsRememberRecords([pendingRow]);
         docOpsState.saving = false;
         docops();
-        toast("Chưa đẩy được lên Sheet, đã lưu Pending trên máy.", "err");
+        toast(err && err.message ? err.message : "Chưa lưu được vào bộ nhớ máy.", "err");
       }
     }
     function docops(){
