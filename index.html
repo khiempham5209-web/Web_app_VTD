@@ -1532,8 +1532,8 @@
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
       update: {
-        latestVersion: "3.7",
-        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v3.7.apk",
+        latestVersion: "3.8",
+        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v3.8.apk",
         folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
         note: "Bản mới của Chứng từ FF đã sẵn sàng."
       },
@@ -4471,11 +4471,12 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "3.7";
+    const APP_VERSION = "3.8";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
     const DOC_OPS_LOOKUP_CACHE_KEY = "vtd_doc_ops_lookup_cache_v1";
+    const DOC_OPS_TODAY_REFRESH_MS = 30000;
     const nativeImagePickerMap = {
       productCamera: ["camera", "productFiles", "productPreview"],
       productLibrary: ["library", "productFiles", "productPreview"],
@@ -5091,6 +5092,7 @@
       docOpsTodayLoaded: false,
       docOpsTodayLoading: false,
       docOpsTodayDay: "",
+      docOpsTodayFetchedAt: 0,
       lookupCacheStatus: [],
       lookupCacheStatusLoaded: false,
       queueErrors: [],
@@ -8589,6 +8591,7 @@
       });
       const qStats = queueStats({includeReturnTh:false});
       const returnThRows = returnThTodayRecords();
+      loadDocOpsToday(false);
       const docOpsRows = docOpsTodayRecords();
       loadReturnThToday(false);
       const bySlog = ["O1B1","O1B3","O1BH","Ecom"].map(s => [s, String(d && d.bySlog ? (slogMap[s] || 0) : previewRows.filter(r => r.slog === s).length)]);
@@ -8623,7 +8626,7 @@
         <section class="section"><h2>User thao tác trong ngày</h2>${smallTable(byUser)}</section>
         <section class="section"><h2>Chi tiết trong ngày</h2>${searchResultView(previewRows, {hideLimit:true, summaryRows:previewRows, summaryCounts:slogMap})}</section>
         <section class="section"><h2>Chi tiết TH Truemilk trong ngày</h2>${returnThTodayTable(returnThRows)}</section>
-        <section class="section"><h2>Chứng từ Phạm Nguyên trong ngày</h2>${docOpsTodayTable(docOpsRows)}</section>`;
+          <section class="section"><h2>Chứng từ Phạm Nguyên trong ngày</h2>${docOpsTodayTable(docOpsRows)}${live.docOpsTodayLoading ? `<div class="muted tiny" style="margin-top:6px">Đang tải dữ liệu chứng từ chung...</div>` : ""}</section>`;
     }
     function search(){
       el("view").className = "content";
@@ -9048,7 +9051,8 @@
         live.docOpsTodayDay = day;
         if (view === "home") setTimeout(home, 0);
       }
-      if (!force && live.docOpsTodayLoaded && live.docOpsTodayDay === day) return;
+      const fresh = live.docOpsTodayDay === day && live.docOpsTodayFetchedAt && Date.now() - live.docOpsTodayFetchedAt < DOC_OPS_TODAY_REFRESH_MS;
+      if (!force && live.docOpsTodayLoaded && fresh) return;
       if (live.docOpsTodayLoading || !docOpsApiUrl()) return;
       live.docOpsTodayLoading = true;
       docOpsApi("today", {date: day, _silent:true}).then(res => {
@@ -9063,6 +9067,7 @@
           if (view === "home") home();
         }
       }).finally(() => {
+        live.docOpsTodayFetchedAt = Date.now();
         live.docOpsTodayLoading = false;
       });
     }
