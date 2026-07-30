@@ -30,8 +30,21 @@ module.exports = async function handler(req, res) {
       redirect: "follow"
     });
     const text = await upstream.text();
-    res.setHeader("Content-Type", upstream.headers.get("content-type") || "application/json; charset=utf-8");
-    res.status(upstream.status).send(text);
+    const contentType = String(upstream.headers.get("content-type") || "");
+    try {
+      JSON.parse(text);
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.status(upstream.status).send(text);
+    } catch (parseErr) {
+      const compact = text.replace(/\s+/g, " ").slice(0, 300);
+      res.status(502).json({
+        ok: false,
+        message: "Apps Script tra ve HTML/khong phai JSON. Kiem tra link /exec va quyen deploy Web app.",
+        upstreamStatus: upstream.status,
+        upstreamContentType: contentType,
+        preview: compact
+      });
+    }
   } catch (err) {
     res.status(502).json({ ok: false, message: err && err.message ? err.message : String(err) });
   }

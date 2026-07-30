@@ -1532,8 +1532,8 @@
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
       update: {
-        latestVersion: "4.1",
-        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v4.1.apk",
+        latestVersion: "4.2",
+        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v4.2.apk",
         folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
         note: "Bản mới của Chứng từ FF đã sẵn sàng."
       },
@@ -4473,7 +4473,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "4.1";
+    const APP_VERSION = "4.2";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -5157,6 +5157,18 @@
         body: JSON.stringify(useProxy ? {targetUrl: apiUrl, payload} : payload)
       }));
     }
+    async function readApiJson(response, label){
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch (err) {
+        const preview = String(text || "").replace(/\s+/g, " ").slice(0, 160);
+        return {
+          ok: false,
+          message: `${label || "API"} trả về HTML/không phải JSON (${response.status}). Kiểm tra link /exec, quyền deploy Web app và Vercel proxy. ${preview}`
+        };
+      }
+    }
     function api(action, params) {
       params = Object.assign({}, params || {}, {sessionToken: live.token, appVersion: APP_VERSION});
       const silent = !!params._silent;
@@ -5187,7 +5199,7 @@
       const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, timeoutMs);
       return scriptApiFetch(apiUrl, {action, params}, {
         signal: controller ? controller.signal : undefined
-      }).then(r => r.json()).then(res => handleApiResponse(action, res)).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API phản hồi quá lâu, bấm chạy lại sync để thử lại." : String(err)})).finally(() => {
+      }).then(r => readApiJson(r, "API hệ thống")).then(res => handleApiResponse(action, res)).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API phản hồi quá lâu, bấm chạy lại sync để thử lại." : String(err)})).finally(() => {
         clearTimeout(timer);
         if (action !== "login" && !silent) setLoading(false);
       });
@@ -8383,7 +8395,7 @@
         const response = await scriptApiFetch(activeApiUrl(), {action, params:Object.assign({}, params || {}, {appVersion: APP_VERSION})}, {
           signal: controller ? controller.signal : undefined
         });
-        return await response.json();
+        return await readApiJson(response, "API theme");
       } catch (err) {
         return {ok:false, message: err && err.name === "AbortError" ? "API theme quá lâu." : String(err)};
       } finally {
@@ -8916,7 +8928,7 @@
       const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, 120000);
       return scriptApiFetch(url, {action, params: Object.assign({}, params, {userEmail: currentEmail(), sessionToken: live.token})}, {
         signal: controller ? controller.signal : undefined
-      }).then(r => r.json()).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API Thao tác CT phản hồi quá lâu." : String(err)})).finally(() => {
+      }).then(r => readApiJson(r, "API Thao tác CT")).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API Thao tác CT phản hồi quá lâu." : String(err)})).finally(() => {
         clearTimeout(timer);
         if (!silent) setLoading(false);
       });
