@@ -716,7 +716,9 @@
     .doc-ops-table .search-table th:nth-child(1), .doc-ops-table .search-table td:nth-child(1) { width: 15%; }
     .doc-ops-table .search-table th:nth-child(2), .doc-ops-table .search-table td:nth-child(2) { width: 14%; }
     .doc-ops-table .search-table th:nth-child(3), .doc-ops-table .search-table td:nth-child(3) { width: 24%; }
-    .doc-ops-table .search-table th:nth-child(4), .doc-ops-table .search-table td:nth-child(4) { width: 31%; text-align: left; font-size: 10px; overflow-wrap: anywhere; }
+    .doc-ops-table .search-table th:nth-child(4), .doc-ops-table .search-table td:nth-child(4) { width: 31%; font-size: 10px; overflow-wrap: anywhere; }
+    .doc-ops-table .search-table th:nth-child(4) { text-align: center; }
+    .doc-ops-table .search-table td:nth-child(4) { text-align: left; }
     .doc-ops-table .search-table th:nth-child(5), .doc-ops-table .search-table td:nth-child(5) { width: 16%; }
     .result-table thead { display: none; }
     .result-table, .result-table tbody, .result-table tr, .result-table td { display: block; width: 100%; }
@@ -1530,8 +1532,8 @@
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
       update: {
-        latestVersion: "3.6",
-        apkUrl: "",
+        latestVersion: "3.7",
+        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v3.7.apk",
         folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
         note: "Bản mới của Chứng từ FF đã sẵn sàng."
       },
@@ -3615,7 +3617,7 @@
         <div class="config-actions" style="margin-top:10px"><button onclick="checkAppUpdate(true)">Kiểm tra cập nhật</button></div>
         ${canAdminConfig() ? `<h2 style="margin-top:14px">Cấu hình cập nhật</h2>
           <div class="grid">
-            <label>Bản mới nhất<input id="updateLatestVersion" value="${html(updateCfg.latestVersion || "")}" placeholder="3.6"></label>
+            <label>Bản mới nhất<input id="updateLatestVersion" value="${html(updateCfg.latestVersion || "")}" placeholder="3.7"></label>
             <label>Link APK trực tiếp<input id="updateApkUrl" value="${html(updateCfg.apkUrl || "")}" placeholder="Dán link file APK trực tiếp để tự tải/cài"></label>
             <label>Thư mục Drive<input id="updateFolderUrl" value="${html(updateCfg.folderUrl || "")}" placeholder="Link folder Drive chứa APK"></label>
             <label>Ghi chú cập nhật<textarea id="updateNote" rows="2">${html(updateCfg.note || "")}</textarea></label>
@@ -4469,7 +4471,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "3.6";
+    const APP_VERSION = "3.7";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
