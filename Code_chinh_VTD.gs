@@ -303,12 +303,14 @@ function vtdApp_saveSystemConfig(params) {
   params = params || {};
   const input = params.config || {};
   const config = vtdApp_systemConfig_();
+  const changed = {};
   if (Object.prototype.hasOwnProperty.call(input, "returnThApiUrl")) {
     const url = String(input.returnThApiUrl || "").trim();
     if (url && !/^https:\/\/script\.google\.com\/macros\/s\/[-\w]+\/exec/i.test(url)) {
       return vtdApp_fail_("Link API Nhập TH không hợp lệ.");
     }
     config.returnThApiUrl = url;
+    changed.returnThApiUrl = config.returnThApiUrl;
   }
   if (Object.prototype.hasOwnProperty.call(input, "docOpsApiUrl")) {
     const url = String(input.docOpsApiUrl || "").trim();
@@ -316,6 +318,7 @@ function vtdApp_saveSystemConfig(params) {
       return vtdApp_fail_("Link API Thao tac CT khong hop le.");
     }
     config.docOpsApiUrl = url;
+    changed.docOpsApiUrl = config.docOpsApiUrl;
   }
   if (Object.prototype.hasOwnProperty.call(input, "uiConfig")) {
     let uiConfig = input.uiConfig || {};
@@ -328,17 +331,21 @@ function vtdApp_saveSystemConfig(params) {
     }
     const cleanUiConfig = {
       views: Array.isArray(uiConfig.views) ? uiConfig.views : [],
-      storeCharts: uiConfig.storeCharts && typeof uiConfig.storeCharts === "object" ? uiConfig.storeCharts : {}
+      storeCharts: uiConfig.storeCharts && typeof uiConfig.storeCharts === "object" ? uiConfig.storeCharts : {},
+      personal: uiConfig.personal && typeof uiConfig.personal === "object" ? uiConfig.personal : {}
     };
     if (uiConfig.update && typeof uiConfig.update === "object") {
       cleanUiConfig.update = vtdApp_cleanUpdateConfig_(uiConfig.update);
       config.update = JSON.stringify(cleanUiConfig.update);
+      changed.update = config.update;
     }
     config.uiConfig = JSON.stringify(cleanUiConfig);
+    changed.uiConfig = config.uiConfig;
   }
   if (Object.prototype.hasOwnProperty.call(input, "update")) {
     if (!input.update || typeof input.update !== "object") return vtdApp_fail_("Cấu hình cập nhật không hợp lệ.");
     config.update = JSON.stringify(vtdApp_cleanUpdateConfig_(input.update));
+    changed.update = config.update;
   }
   if (Object.prototype.hasOwnProperty.call(input, "themeConfig")) {
     let themeConfig = input.themeConfig || {};
@@ -351,8 +358,9 @@ function vtdApp_saveSystemConfig(params) {
     }
     if (!themeConfig || typeof themeConfig !== "object") return vtdApp_fail_("Cau hinh theme khong hop le.");
     config.themeConfig = JSON.stringify(themeConfig);
+    changed.themeConfig = config.themeConfig;
   }
-  vtdApp_saveSystemConfig_(config, params && params.userEmail);
+  vtdApp_saveSystemConfig_(changed, params && params.userEmail);
   return vtdApp_ok_({message: "Đã lưu cấu hình hệ thống.", config: vtdApp_publicSystemConfig_(config)});
 }
 
