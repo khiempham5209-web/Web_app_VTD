@@ -310,6 +310,13 @@ function vtdApp_saveSystemConfig(params) {
     }
     config.returnThApiUrl = url;
   }
+  if (Object.prototype.hasOwnProperty.call(input, "docOpsApiUrl")) {
+    const url = String(input.docOpsApiUrl || "").trim();
+    if (url && !/^https:\/\/script\.google\.com\/macros\/s\/[-\w]+\/exec/i.test(url)) {
+      return vtdApp_fail_("Link API Thao tac CT khong hop le.");
+    }
+    config.docOpsApiUrl = url;
+  }
   if (Object.prototype.hasOwnProperty.call(input, "uiConfig")) {
     let uiConfig = input.uiConfig || {};
     if (typeof uiConfig === "string") {
@@ -379,6 +386,7 @@ function vtdApp_publicSystemConfig_(config) {
   }
   return {
     returnThApiUrl: String(config.returnThApiUrl || ""),
+    docOpsApiUrl: String(config.docOpsApiUrl || ""),
     uiConfig: uiConfig,
     update: update,
     themeConfig: themeConfig
@@ -410,7 +418,7 @@ function vtdApp_systemConfig_() {
     try { return JSON.parse(cached); } catch (err) {}
   }
   const sh = vtdApp_systemConfigSheet_();
-  const config = {returnThApiUrl: "", uiConfig: "", update: "", themeConfig: ""};
+  const config = {returnThApiUrl: "", docOpsApiUrl: "", uiConfig: "", update: "", themeConfig: ""};
   if (sh.getLastRow() > 1) {
     const values = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues();
     values.forEach(row => {
