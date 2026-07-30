@@ -713,6 +713,11 @@
     .return-th-table .search-table th:nth-child(3), .return-th-table .search-table td:nth-child(3) { width: 20%; }
     .return-th-table .search-table th:nth-child(4), .return-th-table .search-table td:nth-child(4) { width: 36%; text-align: left; font-size: 10px; overflow-wrap: anywhere; }
     .return-th-table .search-table th:nth-child(5), .return-th-table .search-table td:nth-child(5) { width: 16%; }
+    .doc-ops-table .search-table th:nth-child(1), .doc-ops-table .search-table td:nth-child(1) { width: 15%; }
+    .doc-ops-table .search-table th:nth-child(2), .doc-ops-table .search-table td:nth-child(2) { width: 14%; }
+    .doc-ops-table .search-table th:nth-child(3), .doc-ops-table .search-table td:nth-child(3) { width: 24%; }
+    .doc-ops-table .search-table th:nth-child(4), .doc-ops-table .search-table td:nth-child(4) { width: 31%; text-align: left; font-size: 10px; overflow-wrap: anywhere; }
+    .doc-ops-table .search-table th:nth-child(5), .doc-ops-table .search-table td:nth-child(5) { width: 16%; }
     .result-table thead { display: none; }
     .result-table, .result-table tbody, .result-table tr, .result-table td { display: block; width: 100%; }
     .result-table tr { padding: 10px 12px; border-bottom: 1px solid #e9eef4; position: relative; }
@@ -1416,6 +1421,7 @@
       ["search", "⌕", "Tìm kiếm"],
       ["input", "+", "Nhập thông tin"],
       ["returnth", "⇈", "Nhập TH"],
+      ["docops", "▣", "Thao tác CT"],
       ["store", "☷", "Thông tin ST"],
       ["settings", "⚙", "Cài đặt"],
       ["admin", "□", "Admin"]
@@ -1424,6 +1430,7 @@
     const rows = [];
     const inputState = { slog: "", loai: "", xacThuc: "", tinhTrang: "Bình thường", po: "" };
     const returnThState = { maDon: "", product: "", productSearch: "", customProduct: false, newSubSku: "", newName: "", newUnit: "", creatingSku: false, qty: "", status: "Bình thường", note: "", items: [], loadingSku: false, skuLoaded: false, saving: false };
+    const docOpsState = { maDon: "", loading: false, record: null, message: "", xacThuc: "Đã nhận chứng từ", status: "Bình thường", note: "", saving: false };
     const loaiBySlog = {
       O1B1: ["Sản phẩm", "Chứng từ"],
       O1B3: ["Sản phẩm"],
@@ -1467,16 +1474,17 @@
     var dynamicState = {rows:{}, loaded:{}, loading:{}, query:{}, detail:{}};
     const defaultAppConfig = {
       users: [
-        {email:"lananhdo940@gmail.com", role:"Staff", pass:"123456", active:true, screens:["home","search","input","returnth","store"], actions:["dashboard","search","getRecord","saveRaw","saveReturnTh","uploadImage"]},
-        {email:"letuyetthanh88@gmail.com", role:"Staff", pass:"223344", active:true, screens:["home","search","input","returnth"], actions:["dashboard","search","getRecord","saveRaw","saveReturnTh"]},
+        {email:"lananhdo940@gmail.com", role:"Staff", pass:"123456", active:true, screens:["home","search","input","returnth","docops","store"], actions:["dashboard","search","getRecord","saveRaw","saveReturnTh","saveDocOps","uploadImage"]},
+        {email:"letuyetthanh88@gmail.com", role:"Staff", pass:"223344", active:true, screens:["home","search","input","returnth","docops"], actions:["dashboard","search","getRecord","saveRaw","saveReturnTh","saveDocOps"]},
         {email:"ntlamlogistics@gmail.com", role:"Staff", pass:"889900", active:true, screens:["home","search"], actions:["dashboard","search","getRecord"]},
-        {email:"khiempham5209@gmail.com", role:"Admin", pass:"5209", active:true, screens:["home","search","input","returnth","store","admin","ops"], actions:["dashboard","search","getRecord","saveRaw","saveReturnTh","uploadImage","manageUsers","manageConfig","viewSync","retrySync"]}
+        {email:"khiempham5209@gmail.com", role:"Admin", pass:"5209", active:true, screens:["home","search","input","returnth","docops","store","admin","ops"], actions:["dashboard","search","getRecord","saveRaw","saveReturnTh","saveDocOps","uploadImage","manageUsers","manageConfig","viewSync","retrySync"]}
       ],
       views: [
         {id:"home", name:"Trang chủ", type:"Dashboard", showIf:"role != ''", position:1, mobile:true},
         {id:"input", name:"Nhập thông tin", type:"Form", showIf:"can('saveRaw')", position:2, mobile:true},
         {id:"returnth", name:"Nhập TH", type:"Form", showIf:"can('saveReturnTh')", position:3, mobile:true},
-        {id:"search", name:"Tìm kiếm", type:"Table + Detail", showIf:"can('search')", position:4, mobile:true},
+        {id:"docops", name:"Thao tác CT", type:"Form", showIf:"can('saveDocOps')", position:4, mobile:true},
+        {id:"search", name:"Tìm kiếm", type:"Table + Detail", showIf:"can('search')", position:5, mobile:true},
         {id:"store", name:"Thông tin ST", type:"Chart/Table", showIf:"screens.includes('store')", position:5, mobile:true},
         {id:"settings", name:"Cài đặt", type:"User settings", showIf:"role != ''", position:6, mobile:true},
         {id:"admin", name:"Admin / Cấu hình", type:"Admin", showIf:"role == 'Admin'", position:6, mobile:false},
@@ -1495,6 +1503,7 @@
       actions: [
         {id:"saveRaw", name:"Lưu đơn", where:"Form Nhập", role:"Staff/Admin", effect:"append RAW_IN_M3 + queue sync"},
         {id:"saveReturnTh", name:"Lưu nhập TH", where:"Nhập TH", role:"Staff/Admin", effect:"append sheet Hàng hoàn qua API riêng"},
+        {id:"saveDocOps", name:"Lưu thao tác CT", where:"Thao tác CT", role:"Staff/Admin", effect:"update Chứng từ_FF qua API riêng"},
         {id:"uploadImage", name:"Upload ảnh", where:"Form Nhập/Chi tiết", role:"Staff/Admin", effect:"lưu Drive + metadata ảnh"},
         {id:"search", name:"Tìm kiếm", where:"Tìm kiếm", role:"Staff/Admin", effect:"đọc index theo tháng/ngày"},
         {id:"getRecord", name:"Xem chi tiết", where:"Tìm kiếm", role:"Staff/Admin", effect:"đọc row chi tiết + ảnh/SKU"},
@@ -1517,6 +1526,7 @@
         saveFlow: "APK lưu RAW trước, PJ1/PJ2 chạy nền",
         imageFlow: "Ảnh lên Drive, sheet chỉ lưu file_id/link",
         returnThApiUrl: "",
+        docOpsApiUrl: "",
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
       update: {
@@ -1562,7 +1572,7 @@
         themeColor:"Xanh dương",
         displayMode:"Chuyên nghiệp",
         homeDetailFields:["ma","slog","loai","ngay","user","po","images","st"],
-        bottomTabs:["home","search","input","returnth","store","settings"],
+        bottomTabs:["home","search","input","returnth","docops","store","settings"],
         defaultScreen:"home"
       },
       storeCharts: {
@@ -1794,12 +1804,13 @@
       const allowed = isSystemOwner() ? baseScreens.map(s => s[0]) : (cfgUser ? [...(cfgUser.screens || [])] : ["settings"]);
       if (!allowed.includes("settings")) allowed.push("settings");
       if (isSystemOwner() && !allowed.includes("returnth")) allowed.push("returnth");
+      if (isSystemOwner() && !allowed.includes("docops")) allowed.push("docops");
       if (isSystemOwner() && !allowed.includes("admin")) allowed.push("admin");
       return baseScreens.filter(s => allowed.includes(s[0]) && (s[0] !== "admin" || canOpenAdminArea()));
     }
     function mobileScreens(){
       const personal = appConfig.personal || defaultAppConfig.personal;
-      const ids = [...(personal.bottomTabs || ["home","search","input","returnth","store","settings"])];
+      const ids = [...(personal.bottomTabs || ["home","search","input","returnth","docops","store","settings"])];
       return allowedScreens().filter(s => {
         const cfg = screenConfig(s[0]);
         return s[0] !== "admin" && cfg.mobile !== false && ids.includes(s[0]);
@@ -1850,7 +1861,7 @@
       el("tabs").style.setProperty("--tab-count", Math.max(tabScreens.length, 1));
       el("tabs").innerHTML = tabScreens.map(s => `<button class="${view===s[0]?'active':''}" onclick="setView('${s[0]}')">${s[1] ? `<span>${s[1]}</span>` : ""}<small>${s[2]}</small></button>`).join("");
       const top = document.querySelector(".top");
-      const hideTopTitle = !desktopMode && document.body.classList.contains("vtd-flat") && ["search", "input", "returnth", "store"].includes(view);
+      const hideTopTitle = !desktopMode && document.body.classList.contains("vtd-flat") && ["search", "input", "returnth", "docops", "store"].includes(view);
       if (top) top.classList.toggle("no-title", hideTopTitle);
       el("title").textContent = hideTopTitle ? "" : (allScreenDefs().find(s => s[0]===view)?.[2] || "");
       let cachedAccount = {};
@@ -1944,7 +1955,21 @@
       if (!options.skipHistory && oldView !== v) pushAppHistory(v);
       render();
     }
-    function render(){ applyPersonalSettings(); shell(); (view.startsWith("dyn_") ? dynamicView : ({home, search, input, returnth, store, settings, admin}[view] || home))(); if (typeof applyAppAppearance === "function") applyAppAppearance(); }
+    function render(){
+      try {
+        applyPersonalSettings();
+        shell();
+        (view.startsWith("dyn_") ? dynamicView : ({home, search, input, returnth, docops, store, settings, admin}[view] || home))();
+        if (typeof applyAppAppearance === "function") applyAppAppearance();
+      } catch (err) {
+        const target = el("view");
+        if (target) {
+          target.className = "content";
+          target.innerHTML = `<section class="section"><div class="lookup" style="border-color:#fca5a5;background:#fff1f2"><strong>Lỗi hiển thị màn ${html(view || "")}</strong><span>${html(err && (err.stack || err.message) || String(err))}</span><button type="button" onclick="localStorage.removeItem('vtd_app_config'); location.reload()">Reset config máy này</button></div></section>`;
+        }
+        try { console.error(err); } catch (innerErr) {}
+      }
+    }
     function home(){
       const todayLabel = new Date().toLocaleDateString("vi-VN", {timeZone:"Asia/Ho_Chi_Minh"});
       const todayRows = rows.filter(r => r.ngay === todayLabel);
@@ -3125,6 +3150,7 @@
         ["getRecord","Xem chi tiết"],
         ["saveRaw","Lưu đơn"],
         ["updateRecord","Sửa đơn"],
+        ["saveDocOps","Lưu thao tác CT"],
         ["uploadImage","Upload ảnh"],
         ["queueRecord","Queue offline"],
         ["storeInfo","Thông tin ST"],
@@ -3554,8 +3580,10 @@
       const accountName = (live.user && (live.user.name || live.user.displayName || live.user.fullName)) || currentEmail();
       const stats = live.accountStats || {loading:true, total:0, bySlog:{}};
       const statsText = stats.loading ? "Đang tính..." : Number(stats.total || 0).toLocaleString("vi-VN");
-      const slogOrder = ["O1B1", "O1B3", "O1BH", "TH truemilk", "Ecom"];
-      const rawSlogStats = stats.bySlog || {};
+      const slogOrder = ["O1B1", "O1B3", "O1BH", "TH truemilk", "Thao tác CT", "Ecom"];
+      const rawSlogStats = Object.assign({}, stats.bySlog || {});
+      const docOpsUserCount = docOpsTodayRecords().filter(r => !currentEmail() || String(r.user || "").toLowerCase() === String(currentEmail()).toLowerCase() || String(r.user || "").indexOf("@") < 0).length;
+      if (docOpsUserCount) rawSlogStats["Thao tác CT"] = Number(rawSlogStats["Thao tác CT"] || 0) + docOpsUserCount;
       const orderedSlogEntries = [
         ...slogOrder.filter(k => rawSlogStats[k] != null).map(k => [k, rawSlogStats[k]]),
         ...Object.entries(rawSlogStats).filter(([k]) => !slogOrder.includes(k))
@@ -3615,7 +3643,8 @@
       const activeProfile = (appConfig.sheetProfiles || []).find(x => x.active) || {};
       const apiEntries = canViewApiArea() ? Object.entries(activeProfile).filter(([key]) => canAdminConfig() || key !== "apiUrl") : [];
       const returnThApiControl = canAdminConfig() ? `<div style="margin-top:12px"><label>API Nhập TH<input value="${html((appConfig.sync && appConfig.sync.returnThApiUrl) || "")}" placeholder="Dán link /exec của SCP Nhập TH" onchange="saveReturnThApiConfig(this.value)"></label><div class="muted">API này tách riêng với API chứng từ VTD, dùng cho màn Nhập TH.</div></div>` : "";
-      const apiPanel = canViewApiArea() ? `<section class="section"><h2>API hệ thống đang dùng</h2>${smallTable(apiEntries)}${returnThApiControl}</section>` : "";
+      const docOpsApiControl = canAdminConfig() ? `<div style="margin-top:12px"><label>API Thao tác CT<input value="${html((appConfig.sync && appConfig.sync.docOpsApiUrl) || "")}" placeholder="Dán link /exec của SCP Thao tác CT" onchange="saveDocOpsApiConfig(this.value)"></label><div class="muted">API này tách riêng để đọc/ghi tab Chứng từ_FF và upload ảnh chứng từ.</div></div>` : "";
+      const apiPanel = canViewApiArea() ? `<section class="section"><h2>API hệ thống đang dùng</h2>${smallTable(apiEntries)}${returnThApiControl}${docOpsApiControl}</section>` : "";
       const devicePanel = canViewDeviceArea() ? adminCache : "";
       const opsPanel = canViewOpsArea() ? `${queuePanel}${adminQueueErrors}` : "";
       el("view").innerHTML = `${accountPanel}
@@ -4158,7 +4187,7 @@
       const view = (appConfig.views || []).find(v => v.id === x);
       if (view) return view.name;
       const dyn = dynamicScreens().find(s => s[0] === x);
-      return dyn ? dyn[2] : ({home:"Trang chủ", search:"Tìm kiếm", input:"Nhập thông tin", store:"Thông tin ST", admin:"Admin", ops:"Sync / Queue"}[x] || x);
+      return dyn ? dyn[2] : ({home:"Trang chủ", search:"Tìm kiếm", input:"Nhập thông tin", returnth:"Nhập TH", docops:"Thao tác CT", store:"Thông tin ST", admin:"Admin", ops:"Sync / Queue"}[x] || x);
     }
     function tagRow(items, on){
       return `<span class="tag-row">${items.map(x => `<span class="tag ${on ? "on" : "off"}">${html(x)}</span>`).join("")}</span>`;
@@ -4321,15 +4350,30 @@
       merged.dynamic = Object.assign({version:1, tables:[], views:[]}, (config && config.dynamic) || base.dynamic || {});
       merged.dynamic.tables = Array.isArray(merged.dynamic.tables) ? merged.dynamic.tables : [];
       merged.dynamic.views = Array.isArray(merged.dynamic.views) ? merged.dynamic.views : [];
-      ["settings", "returnth"].forEach(id => {
-        if (!merged.views.some(v => v.id === id)) merged.views.push(base.views.find(v => v.id === id));
+      ["settings", "returnth", "docops"].forEach(id => {
+        const exists = Array.isArray(merged.views) && merged.views.some(v => v && v.id === id);
+        const baseView = (base.views || []).find(v => v && v.id === id);
+        if (!exists && baseView) merged.views.push(baseView);
+      });
+      ["saveReturnTh", "saveDocOps"].forEach(id => {
+        const exists = Array.isArray(merged.actions) && merged.actions.some(a => a && a.id === id);
+        const baseAction = (base.actions || []).find(a => a && a.id === id);
+        if (!exists && baseAction) merged.actions.push(baseAction);
       });
       const settingsView = merged.views.find(v => v.id === "settings");
       if (settingsView) settingsView.name = "Cài đặt";
+      merged.personal = merged.personal || {};
+      merged.personal.bottomTabs = Array.isArray(merged.personal.bottomTabs) ? merged.personal.bottomTabs : ["home","search","input","returnth","docops","store","settings"];
+      if (!merged.personal.bottomTabs.includes("docops")) {
+        const returnThIndex = merged.personal.bottomTabs.indexOf("returnth");
+        merged.personal.bottomTabs.splice(returnThIndex >= 0 ? returnThIndex + 1 : merged.personal.bottomTabs.length, 0, "docops");
+      }
       merged.users.forEach(u => {
         if (u.screens && !u.screens.includes("settings")) u.screens.push("settings");
         if (u.screens && !u.screens.includes("returnth")) u.screens.push("returnth");
+        if (u.screens && !u.screens.includes("docops")) u.screens.push("docops");
         if (u.actions && !u.actions.includes("saveReturnTh")) u.actions.push("saveReturnTh");
+        if (u.actions && !u.actions.includes("saveDocOps")) u.actions.push("saveDocOps");
       });
       return merged;
     }
@@ -4346,6 +4390,10 @@
       if (Object.prototype.hasOwnProperty.call(config, "returnThApiUrl")) {
         appConfig.sync.returnThApiUrl = String(config.returnThApiUrl || "").trim();
         localStorage.setItem("vtd_return_th_api_url", appConfig.sync.returnThApiUrl);
+      }
+      if (Object.prototype.hasOwnProperty.call(config, "docOpsApiUrl")) {
+        appConfig.sync.docOpsApiUrl = String(config.docOpsApiUrl || "").trim();
+        localStorage.setItem("vtd_doc_ops_api_url", appConfig.sync.docOpsApiUrl);
       }
       if (config.uiConfig && Array.isArray(config.uiConfig.views)) {
         appConfig.views = config.uiConfig.views;
@@ -4377,6 +4425,19 @@
         toast((res && res.message) || "Chưa lưu được API Nhập TH lên hệ thống.", "err");
       }
     }
+    async function saveDocOpsApiConfig(value){
+      appConfig.sync = appConfig.sync || {};
+      appConfig.sync.docOpsApiUrl = String(value || "").trim();
+      localStorage.setItem("vtd_doc_ops_api_url", appConfig.sync.docOpsApiUrl);
+      saveAppConfig(false);
+      const res = await api("saveSystemConfig", {config:{docOpsApiUrl: appConfig.sync.docOpsApiUrl}, _silent:true});
+      if (res && res.ok) {
+        mergeSystemConfig(res.config || {});
+        toast("Đã lưu API Thao tác CT cho toàn hệ thống.", "ok");
+      } else {
+        toast((res && res.message) || "Chưa lưu được API Thao tác CT lên hệ thống.", "err");
+      }
+    }
     function resetAppConfig(){
       appConfig = cloneConfig(defaultAppConfig);
       saveAppConfig(false);
@@ -4394,11 +4455,15 @@
     const APP_VERSION = "3.6";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
+    const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
+    const DOC_OPS_LOOKUP_CACHE_KEY = "vtd_doc_ops_lookup_cache_v1";
     const nativeImagePickerMap = {
       productCamera: ["camera", "productFiles", "productPreview"],
       productLibrary: ["library", "productFiles", "productPreview"],
       docCamera: ["camera", "docFiles", "docPreview"],
       docLibrary: ["library", "docFiles", "docPreview"],
+      docOpsCamera: ["camera", "docOpsFiles", "docOpsPreview"],
+      docOpsLibrary: ["library", "docOpsFiles", "docOpsPreview"],
       returnThCamera: ["camera", "returnThFiles", "returnThPreview"],
       returnThLibrary: ["library", "returnThFiles", "returnThPreview"]
     };
@@ -4997,11 +5062,16 @@
       skuItems: [],
       docFiles: [],
       productFiles: [],
+      docOpsFiles: [],
       returnThFiles: [],
       returnThTodayRows: [],
       returnThTodayLoaded: false,
       returnThTodayLoading: false,
       returnThTodayDay: "",
+      docOpsTodayRows: [],
+      docOpsTodayLoaded: false,
+      docOpsTodayLoading: false,
+      docOpsTodayDay: "",
       lookupCacheStatus: [],
       lookupCacheStatusLoaded: false,
       queueErrors: [],
@@ -8340,10 +8410,12 @@
         loadReturnThSku(false)
       ]);
       loadReturnThToday(false);
+      loadDocOpsToday(false);
       const currentMonth = currentBusinessMonth();
       if (shouldLiveLoadStore(currentMonth)) loadStoreInfo(currentMonth);
       warmStoreInfoFromDevice();
       warmOrderLookupCache().then(() => warmStoreInfoFromDevice());
+      loadDocOpsLookupCache(false);
       warmAllDataCaches();
       render();
     }
@@ -8498,9 +8570,11 @@
       });
       const qStats = queueStats({includeReturnTh:false});
       const returnThRows = returnThTodayRecords();
+      const docOpsRows = docOpsTodayRecords();
       loadReturnThToday(false);
       const bySlog = ["O1B1","O1B3","O1BH","Ecom"].map(s => [s, String(d && d.bySlog ? (slogMap[s] || 0) : previewRows.filter(r => r.slog === s).length)]);
       bySlog.push(["TH truemmilk", returnThRows.length.toLocaleString("vi-VN")]);
+      bySlog.push(["Thao tác CT", docOpsRows.length.toLocaleString("vi-VN")]);
       const byStatus = d && d.byStatus ? d.byStatus.map(x => [x.key, String(x.value)]) : [["Đã đồng bộ", "0"], ["Đang đồng bộ", "0"], ["Lỗi", "0"]];
       const localSyncing = Number(qStats.pending || 0) + Number(qStats.syncing || 0);
       const localErrors = Number(qStats.error || 0);
@@ -8529,7 +8603,8 @@
         </div>
         <section class="section"><h2>User thao tác trong ngày</h2>${smallTable(byUser)}</section>
         <section class="section"><h2>Chi tiết trong ngày</h2>${searchResultView(previewRows, {hideLimit:true, summaryRows:previewRows, summaryCounts:slogMap})}</section>
-        <section class="section"><h2>Chi tiết TH Truemilk trong ngày</h2>${returnThTodayTable(returnThRows)}</section>`;
+        <section class="section"><h2>Chi tiết TH Truemilk trong ngày</h2>${returnThTodayTable(returnThRows)}</section>
+        <section class="section"><h2>Chứng từ Phạm Nguyên trong ngày</h2>${docOpsTodayTable(docOpsRows)}</section>`;
     }
     function search(){
       el("view").className = "content";
@@ -8795,6 +8870,341 @@
         <div style="margin-top:14px;display:flex;gap:10px;justify-content:flex-end"><button type="button" onclick="resetInputForm(); input()" ${live.inputSaving ? "disabled" : ""}>Hủy</button><button type="button" class="success" onclick="saveInput()" ${live.inputSaving ? "disabled" : ""}>${live.inputSaving ? "Đang lưu..." : "OK"}</button></div>
       </section>`;
       renderInputLookup();
+    }
+    function docOpsApiUrl(){
+      const url = String((appConfig.sync && appConfig.sync.docOpsApiUrl) || localStorage.getItem("vtd_doc_ops_api_url") || "").trim();
+      return /^https:\/\/script\.google\.com\/macros\/s\/[-\w]+\/exec/i.test(url) ? url : "";
+    }
+    function docOpsApi(action, params = {}){
+      const url = docOpsApiUrl();
+      if (!url) return Promise.resolve({ok:false, message:"Chưa cấu hình API Thao tác CT."});
+      const silent = !!params._silent;
+      if (!silent) setLoading(true, "Đang xử lý chứng từ...");
+      const controller = window.AbortController ? new AbortController() : null;
+      const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, 120000);
+      return fetch(url, {
+        method: "POST",
+        headers: {"Content-Type": "text/plain;charset=utf-8"},
+        body: JSON.stringify({action, params: Object.assign({}, params, {userEmail: currentEmail(), sessionToken: live.token})}),
+        signal: controller ? controller.signal : undefined
+      }).then(r => r.json()).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API Thao tác CT phản hồi quá lâu." : String(err)})).finally(() => {
+        clearTimeout(timer);
+        if (!silent) setLoading(false);
+      });
+    }
+    function docOpsRowsCache(){
+      try {
+        const cache = JSON.parse(localStorage.getItem(DOC_OPS_TODAY_CACHE_KEY) || "{}") || {};
+        return Array.isArray(cache.records) ? cache.records.filter(row => !isDocOpsTestRow(row)) : [];
+      } catch (err) {
+        return [];
+      }
+    }
+    function saveDocOpsRowsCache(rows){
+      const clean = (Array.isArray(rows) ? rows : []).slice(0, 1000);
+      try {
+        localStorage.setItem(DOC_OPS_TODAY_CACHE_KEY, JSON.stringify({updatedAt: new Date().toISOString(), records: clean}));
+      } catch (err) {}
+      return clean;
+    }
+    function docOpsTodayRecords(){
+      const today = todayApiDateText();
+      const localRows = docOpsRowsCache().filter(row => dateTextDdMmYyyy(row.date || row.thoiGian || row.time) === today);
+      const remoteRows = Array.isArray(live.docOpsTodayRows) ? live.docOpsTodayRows : [];
+      const seen = {};
+      return [...localRows, ...remoteRows].filter(row => {
+        const key = [row.maDon || row.po || row.orderNo, row.time || row.thoiGian || "", row.user || ""].join("|");
+        if (seen[key]) return false;
+        seen[key] = true;
+        return dateTextDdMmYyyy(row.date || row.thoiGian || row.time) === today;
+      }).sort((a, b) => String(b.time || b.thoiGian || "").localeCompare(String(a.time || a.thoiGian || "")));
+    }
+    function docOpsSyncLabel(status){
+      const s = String(status || "").toLowerCase();
+      return s === "pending" || s === "error" || s === "fail" ? "Pending" : "Done";
+    }
+    function docOpsTodayTable(data){
+      const rows = Array.isArray(data) ? data : docOpsTodayRecords();
+      if (!rows.length) return `<div class="lookup">Chưa có chứng từ Phạm Nguyên trong ngày.</div>`;
+      const body = rows.map((r, index) => `<tr onclick="docOpsDetail(${index})">
+        <td>${html(r.date || dateTextDdMmYyyy(r.time || r.thoiGian) || todayApiDateText())}</td>
+        <td>${html(String(r.time || r.thoiGian || "").replace(/^\d{1,2}\/\d{1,2}\/\d{4}\s+/, "") || "-")}</td>
+        <td>${html(r.maDon || r.maDonGhtk || r.po || "-")}</td>
+        <td>${html(r.user || "-")}</td>
+        <td>${html(docOpsSyncLabel(r.syncStatus || r.sync || r.statusSync))}</td>
+      </tr>`).join("");
+      return `<div class="table-wrap return-th-table doc-ops-table"><table class="search-table"><thead><tr><th>Ngày</th><th>Giờ</th><th>Mã đơn</th><th>User thao tác</th><th>Trạng thái</th></tr></thead><tbody>${body}</tbody></table></div>`;
+    }
+    function docOpsDetail(index){
+      const row = docOpsTodayRecords()[index];
+      if (!row) return;
+      navState.fromView = "home";
+      navState.scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+      view = "detail";
+      const detailKv = kvRows([
+        ["Mã đơn", row.maDon || row.maDonGhtk],
+        ["Khách hàng", row.customer || row.khachHang],
+        ["Mã PO", row.po],
+        ["Số đơn hàng", row.orderNo || row.soDonHang],
+        ["Địa chỉ nhận hàng", row.address || row.diaChi],
+        ["Trạng thái", row.status || row.trangThai],
+        ["Ghi chú", row.note || row.ghiChu],
+        ["Xác thực chứng từ", row.xacThuc],
+        ["User thao tác", row.user]
+      ]);
+      el("view").className = "content";
+      el("title").textContent = "Chi tiết chứng từ Phạm Nguyên";
+      el("view").innerHTML = `<section class="section detail">
+        <div>
+          <button onclick="backToList()">← Quay lại</button>
+          <h2 style="margin-top:14px">Chứng từ Phạm Nguyên</h2>
+          <div class="kv">${detailKv}</div>
+        </div>
+      </section>`;
+    }
+    function docOpsLookupRowsCache(){
+      try {
+        const cache = JSON.parse(localStorage.getItem(DOC_OPS_LOOKUP_CACHE_KEY) || "{}") || {};
+        return Array.isArray(cache.records) ? cache.records.filter(row => !isDocOpsTestRow(row)) : [];
+      } catch (err) {
+        return [];
+      }
+    }
+    function isDocOpsTestRow(row){
+      if (!row) return false;
+      const user = String(row.user || "").toLowerCase();
+      const link = String(row.linkAnh || "").toLowerCase();
+      return user === "demo@ff.local" || link.includes("/example") || link.endsWith("id=example");
+    }
+    function saveDocOpsLookupRowsCache(rows){
+      const clean = (Array.isArray(rows) ? rows : []).filter(Boolean).slice(0, 3000);
+      try {
+        localStorage.setItem(DOC_OPS_LOOKUP_CACHE_KEY, JSON.stringify({day: todayApiDateText(), updatedAt: new Date().toISOString(), records: clean}));
+      } catch (err) {}
+      return clean;
+    }
+    function docOpsCacheKey(value){
+      return String(value || "").trim().toLowerCase();
+    }
+    function docOpsFindCached(query){
+      const q = docOpsCacheKey(query);
+      if (!q) return null;
+      return docOpsLookupRowsCache().find(r => [r.maDon, r.maDonGhtk, r.po, r.orderNo, r.soDonHang].some(v => docOpsCacheKey(v) === q)) || null;
+    }
+    function docOpsRememberRecords(records){
+      const current = docOpsLookupRowsCache();
+      const byKey = {};
+      [...records, ...current].forEach(row => {
+        if (!row) return;
+        const key = docOpsCacheKey(row.maDon || row.maDonGhtk || row.po || row.orderNo || row.rowNumber);
+        if (key && !byKey[key]) byKey[key] = row;
+      });
+      return saveDocOpsLookupRowsCache(Object.values(byKey));
+    }
+    function docOpsLookupCacheFresh(){
+      try {
+        const cache = JSON.parse(localStorage.getItem(DOC_OPS_LOOKUP_CACHE_KEY) || "{}") || {};
+        return cache.day === todayApiDateText() && Array.isArray(cache.records) && cache.records.length > 0;
+      } catch (err) {
+        return false;
+      }
+    }
+    function loadDocOpsLookupCache(force = false){
+      if (!docOpsApiUrl()) return Promise.resolve(false);
+      if (!force && docOpsLookupCacheFresh()) return Promise.resolve(true);
+      return docOpsApi("page", {startRow:2, pageSize:2000, _silent:true}).then(res => {
+        if (res && res.ok) {
+          const rows = Array.isArray(res.records) ? res.records : [];
+          docOpsRememberRecords(rows);
+          return true;
+        }
+        return false;
+      }).catch(() => false);
+    }
+    function loadDocOpsToday(force = false){
+      const day = todayApiDateText();
+      const cached = docOpsRowsCache().filter(row => dateTextDdMmYyyy(row.date || row.thoiGian || row.time) === day);
+      if (cached.length && live.docOpsTodayDay !== day) {
+        live.docOpsTodayRows = cached;
+        live.docOpsTodayDay = day;
+        if (view === "home") setTimeout(home, 0);
+      }
+      if (!force && live.docOpsTodayLoaded && live.docOpsTodayDay === day) return;
+      if (live.docOpsTodayLoading || !docOpsApiUrl()) return;
+      live.docOpsTodayLoading = true;
+      docOpsApi("today", {date: day, _silent:true}).then(res => {
+        if (res && res.ok) {
+          const rows = Array.isArray(res.records) ? res.records : (Array.isArray(res.rows) ? res.rows : []);
+          rows.forEach(r => r.syncStatus = r.syncStatus || "Done");
+          saveDocOpsRowsCache(rows);
+          docOpsRememberRecords(rows);
+          live.docOpsTodayRows = rows;
+          live.docOpsTodayLoaded = true;
+          live.docOpsTodayDay = day;
+          if (view === "home") home();
+        }
+      }).finally(() => {
+        live.docOpsTodayLoading = false;
+      });
+    }
+    function setDocOpsMaDon(value){
+      docOpsState.maDon = String(value || "").trim();
+      const input = el("docOpsMaDon");
+      if (input) input.value = docOpsState.maDon;
+      lookupDocOpsOrder(docOpsState.maDon);
+    }
+    async function lookupDocOpsOrder(query){
+      query = String(query || "").trim();
+      docOpsState.maDon = query;
+      if (!query || query.length < 5) {
+        docOpsState.record = null;
+        docOpsState.message = "";
+        renderDocOpsLookup();
+        return;
+      }
+      const cached = docOpsFindCached(query);
+      if (cached) {
+        docOpsState.record = cached;
+        docOpsState.message = "";
+        renderDocOpsLookup();
+        return;
+      }
+      if (!docOpsApiUrl()) {
+        docOpsState.record = null;
+        docOpsState.message = "Chưa có dữ liệu cache khớp mã đơn này.";
+        renderDocOpsLookup();
+        return;
+      }
+      docOpsState.loading = true;
+      renderDocOpsLookup();
+      const res = await docOpsApi("lookup", {query, _silent:true});
+      if (query !== docOpsState.maDon) return;
+      docOpsState.loading = false;
+      docOpsState.record = res && res.ok && res.record ? res.record : null;
+      if (docOpsState.record) docOpsRememberRecords([docOpsState.record]);
+      docOpsState.message = docOpsState.record ? "" : ((res && res.message) || "Không tìm thấy mã đơn trong tab Chứng từ_FF.");
+      renderDocOpsLookup();
+    }
+    function renderDocOpsLookup(){
+      const box = el("docOpsLookupBox");
+      if (!box) return;
+      if (!docOpsState.maDon && !docOpsState.record && !docOpsState.message) {
+        box.classList.add("hidden");
+        box.innerHTML = "";
+        return;
+      }
+      if (docOpsState.loading) {
+        box.innerHTML = `<strong>Đang kiểm tra mã đơn...</strong><span>${html(docOpsState.maDon)}</span>`;
+        box.classList.remove("hidden");
+        return;
+      }
+      if (!docOpsState.record) {
+        box.innerHTML = docOpsState.message ? `<strong>${html(docOpsState.message)}</strong>` : "";
+        box.classList.toggle("hidden", !docOpsState.message);
+        return;
+      }
+      const r = docOpsState.record;
+      const rows = [
+        ["Ngày lên đơn", r.ngayLenDon || r.date],
+        ["Khách hàng", r.customer || r.khachHang],
+        ["Mã PO", r.po],
+        ["Số đơn hàng", r.orderNo || r.soDonHang],
+        ["Địa chỉ nhận hàng", r.address || r.diaChi],
+        ["Loại siêu thị", r.storeType || r.loaiSt]
+      ];
+      box.innerHTML = `<strong>Thông tin đơn</strong><div class="kv">${kvRows(rows)}</div>`;
+      box.classList.remove("hidden");
+    }
+    function resetDocOpsForm(){
+      docOpsState.maDon = "";
+      docOpsState.record = null;
+      docOpsState.message = "";
+      docOpsState.xacThuc = "Đã nhận chứng từ";
+      docOpsState.status = "Bình thường";
+      docOpsState.note = "";
+      docOpsState.saving = false;
+      live.docOpsFiles = [];
+    }
+    async function saveDocOps(){
+      if (docOpsState.saving) return;
+      const maDon = String(el("docOpsMaDon")?.value || docOpsState.maDon || "").trim();
+      if (!maDon) return toast("Vui lòng nhập mã đơn.", "err");
+      const record = docOpsState.record;
+      if (!record) return toast("Chưa có thông tin đơn. Vui lòng nhập mã đơn để hệ thống tìm dữ liệu trước.", "err");
+      const files = live.docOpsFiles || [];
+      docOpsState.saving = true;
+      docops();
+      let payload = null;
+      let imageFiles = [];
+      try {
+        for (let i = 0; i < files.length; i++) imageFiles.push(await filePayload(files[i], {imageType:"document"}));
+        payload = {
+          maDon,
+          rowNumber: record.rowNumber || "",
+          xacThuc: docOpsState.xacThuc,
+          status: docOpsState.status,
+          note: el("docOpsNote")?.value || docOpsState.note || "",
+          files: imageFiles
+        };
+        let res = null;
+        if (docOpsApiUrl()) res = await docOpsApi("save", payload);
+        if (docOpsApiUrl() && !(res && res.ok)) throw new Error((res && res.message) || "Chưa lưu được thao tác chứng từ.");
+        const now = new Date();
+        const row = Object.assign({}, record, payload, {
+          date: todayApiDateText(),
+          time: now.toLocaleTimeString("vi-VN", {timeZone:"Asia/Ho_Chi_Minh", hour12:false}),
+          user: currentEmail() || "unknown",
+          syncStatus: docOpsApiUrl() ? "Done" : "Pending",
+          linkAnh: res && res.linkAnh || ""
+        });
+        saveDocOpsRowsCache([row, ...docOpsRowsCache().filter(x => String(x.maDon) !== maDon)]);
+        docOpsRememberRecords([row]);
+        toast(docOpsApiUrl() ? "Đã lưu thao tác chứng từ." : "Đã lưu Pending trên máy.", "ok");
+        resetDocOpsForm();
+        docops();
+      } catch (err) {
+        const now = new Date();
+        const pendingRow = Object.assign({}, record, payload || {
+          maDon,
+          rowNumber: record.rowNumber || "",
+          xacThuc: docOpsState.xacThuc,
+          status: docOpsState.status,
+          note: el("docOpsNote")?.value || docOpsState.note || "",
+          files: imageFiles
+        }, {
+          date: todayApiDateText(),
+          time: now.toLocaleTimeString("vi-VN", {timeZone:"Asia/Ho_Chi_Minh", hour12:false}),
+          user: currentEmail() || "unknown",
+          syncStatus: "Pending",
+          linkAnh: "",
+          lastError: err && err.message ? err.message : String(err)
+        });
+        saveDocOpsRowsCache([pendingRow, ...docOpsRowsCache().filter(x => String(x.maDon) !== maDon)]);
+        docOpsRememberRecords([pendingRow]);
+        docOpsState.saving = false;
+        docops();
+        toast("Chưa đẩy được lên Sheet, đã lưu Pending trên máy.", "err");
+      }
+    }
+    function docops(){
+      el("view").className = "content";
+      el("view").innerHTML = `<section class="section form-sheet">
+        <div class="form-head"><h2>Thao tác chứng từ</h2></div>
+        <label>Mã đơn<div class="scan-row"><input id="docOpsMaDon" placeholder="Scan hoặc nhập mã đơn" value="${html(docOpsState.maDon)}" oninput="docOpsState.maDon=this.value; lookupDocOpsOrder(this.value)"><button class="scan-btn" type="button" title="Quét mã đơn" aria-label="Quét mã đơn" onclick="openCodeScanner('docOpsMaDon', 'setDocOpsMaDon')">${scanIcon("Quét mã đơn")}</button></div></label>
+        <div id="docOpsLookupBox" class="lookup" style="margin-top:8px"></div>
+        <h2 style="margin-top:16px">Cập nhật chứng từ</h2>
+        <div class="grid cols-2">
+          <label>Xác thực hóa đơn<select onchange="docOpsState.xacThuc=this.value"><option ${docOpsState.xacThuc==="Đã nhận chứng từ"?"selected":""}>Đã nhận chứng từ</option><option ${docOpsState.xacThuc==="Chưa nhận chứng từ"?"selected":""}>Chưa nhận chứng từ</option></select></label>
+          <label>Trạng thái<select onchange="docOpsState.status=this.value"><option ${docOpsState.status==="Bình thường"?"selected":""}>Bình thường</option><option ${docOpsState.status==="Sai/thiếu chứng từ"?"selected":""}>Sai/thiếu chứng từ</option></select></label>
+        </div>
+        <label style="margin-top:12px">Ghi chú chứng từ<textarea id="docOpsNote" placeholder="Nhập ghi chú nếu có" oninput="docOpsState.note=this.value">${html(docOpsState.note || "")}</textarea></label>
+        <h2 style="margin-top:16px">Ảnh chứng từ</h2>
+        <div class="file-actions"><button type="button" onclick="openFilePicker('docOpsCamera')">Chụp ảnh</button><button type="button" onclick="openFilePicker('docOpsLibrary')">Chọn từ thư viện</button></div>
+        <input id="docOpsCamera" class="hidden-file" type="file" accept="image/*" capture="environment" multiple onchange="captureFiles(this, 'docOpsFiles', 'docOpsPreview')"><input id="docOpsLibrary" class="hidden-file" type="file" accept="image/*" multiple onchange="captureFiles(this, 'docOpsFiles', 'docOpsPreview')"><div id="docOpsPreview" class="preview-grid"></div>
+        <div style="margin-top:14px;display:flex;gap:10px;justify-content:flex-end"><button type="button" onclick="resetDocOpsForm(); docops()" ${docOpsState.saving ? "disabled" : ""}>Hủy</button><button type="button" class="success" onclick="saveDocOps()" ${docOpsState.saving ? "disabled" : ""}>${docOpsState.saving ? "Đang lưu..." : "OK"}</button></div>
+      </section>`;
+      renderDocOpsLookup();
+      renderFilePreview("docOpsFiles", "docOpsPreview", "docOpsCamera");
     }
     function setReturnThMaDon(value){
       returnThState.maDon = String(value || "").trim();
