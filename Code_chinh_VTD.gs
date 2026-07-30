@@ -426,8 +426,16 @@ function vtdApp_systemConfig_() {
       if (key) config[key] = String(row[1] || "").trim();
     });
   }
-  CacheService.getScriptCache().put("VTD_SYSTEM_CONFIG", JSON.stringify(config), 120);
+  vtdApp_putSmallCache_("VTD_SYSTEM_CONFIG", config, 120);
   return config;
+}
+
+function vtdApp_putSmallCache_(key, value, seconds) {
+  try {
+    const text = typeof value === "string" ? value : JSON.stringify(value);
+    if (text.length > 90000) return;
+    CacheService.getScriptCache().put(key, text, seconds || 120);
+  } catch (err) {}
 }
 
 function vtdApp_systemConfigSheet_() {
