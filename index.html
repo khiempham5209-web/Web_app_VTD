@@ -1532,8 +1532,8 @@
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
       update: {
-        latestVersion: "3.9",
-        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v3.9.apk",
+        latestVersion: "4.0",
+        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v4.0.apk",
         folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
         note: "Bản mới của Chứng từ FF đã sẵn sàng."
       },
@@ -4473,7 +4473,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "3.9";
+    const APP_VERSION = "4.0";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -8598,7 +8598,7 @@
       loadReturnThToday(false);
       const bySlog = ["O1B1","O1B3","O1BH","Ecom"].map(s => [s, String(d && d.bySlog ? (slogMap[s] || 0) : previewRows.filter(r => r.slog === s).length)]);
       bySlog.push(["TH truemmilk", returnThRows.length.toLocaleString("vi-VN")]);
-      bySlog.push(["Thao tác CT", docOpsRows.length.toLocaleString("vi-VN")]);
+      bySlog.push(["Chứng từ PN", docOpsRows.length.toLocaleString("vi-VN")]);
       const byStatus = d && d.byStatus ? d.byStatus.map(x => [x.key, String(x.value)]) : [["Đã đồng bộ", "0"], ["Đang đồng bộ", "0"], ["Lỗi", "0"]];
       const localSyncing = Number(qStats.pending || 0) + Number(qStats.syncing || 0);
       const localErrors = Number(qStats.error || 0);
@@ -8706,7 +8706,8 @@
       home();
       await Promise.allSettled([
         loadDashboard({silent:true}),
-        loadReturnThToday(true)
+        loadReturnThToday(true),
+        loadDocOpsToday(true)
       ]);
       live.dashboardRefreshActive = false;
       home();
