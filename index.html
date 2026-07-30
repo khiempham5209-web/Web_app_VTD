@@ -1532,8 +1532,8 @@
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
       update: {
-        latestVersion: "4.0",
-        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v4.0.apk",
+        latestVersion: "4.1",
+        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v4.1.apk",
         folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
         note: "Bản mới của Chứng từ FF đã sẵn sàng."
       },
@@ -4473,7 +4473,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "4.0";
+    const APP_VERSION = "4.1";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -5144,6 +5144,19 @@
       if (/^https:\/\/script\.google\.com\/macros\/s\/[-\w]+\/exec/i.test(url)) return url;
       return DEFAULT_API_URL;
     }
+    function shouldProxyScriptUrl(url){
+      return /^https:\/\/script\.google\.com\/macros\/s\/[-\w]+\/exec/i.test(String(url || "")) &&
+        /^https?:$/i.test(location.protocol || "") &&
+        !(window.VTDNative && window.VTDNative.api);
+    }
+    function scriptApiFetch(apiUrl, payload, options = {}){
+      const useProxy = shouldProxyScriptUrl(apiUrl);
+      return fetch(useProxy ? "/api/apps-script" : apiUrl, Object.assign({}, options, {
+        method: "POST",
+        headers: {"Content-Type": "text/plain;charset=utf-8"},
+        body: JSON.stringify(useProxy ? {targetUrl: apiUrl, payload} : payload)
+      }));
+    }
     function api(action, params) {
       params = Object.assign({}, params || {}, {sessionToken: live.token, appVersion: APP_VERSION});
       const silent = !!params._silent;
@@ -5172,10 +5185,7 @@
       const timeoutMs = action === "uploadImages" ? 150000 : action === "dashboard" ? 150000 : action === "search" ? 150000 : action === "storeInfo" ? 120000 : 90000;
       const controller = window.AbortController ? new AbortController() : null;
       const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, timeoutMs);
-      return fetch(apiUrl, {
-        method: "POST",
-        headers: {"Content-Type": "text/plain;charset=utf-8"},
-        body: JSON.stringify({action, params}),
+      return scriptApiFetch(apiUrl, {action, params}, {
         signal: controller ? controller.signal : undefined
       }).then(r => r.json()).then(res => handleApiResponse(action, res)).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API phản hồi quá lâu, bấm chạy lại sync để thử lại." : String(err)})).finally(() => {
         clearTimeout(timer);
@@ -8370,10 +8380,7 @@
       const controller = window.AbortController ? new AbortController() : null;
       const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, 20000);
       try {
-        const response = await fetch(activeApiUrl(), {
-          method: "POST",
-          headers: {"Content-Type": "text/plain;charset=utf-8"},
-          body: JSON.stringify({action, params:Object.assign({}, params || {}, {appVersion: APP_VERSION})}),
+        const response = await scriptApiFetch(activeApiUrl(), {action, params:Object.assign({}, params || {}, {appVersion: APP_VERSION})}, {
           signal: controller ? controller.signal : undefined
         });
         return await response.json();
@@ -8907,10 +8914,7 @@
       if (!silent) setLoading(true, "Đang xử lý chứng từ...");
       const controller = window.AbortController ? new AbortController() : null;
       const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, 120000);
-      return fetch(url, {
-        method: "POST",
-        headers: {"Content-Type": "text/plain;charset=utf-8"},
-        body: JSON.stringify({action, params: Object.assign({}, params, {userEmail: currentEmail(), sessionToken: live.token})}),
+      return scriptApiFetch(url, {action, params: Object.assign({}, params, {userEmail: currentEmail(), sessionToken: live.token})}, {
         signal: controller ? controller.signal : undefined
       }).then(r => r.json()).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API Thao tác CT phản hồi quá lâu." : String(err)})).finally(() => {
         clearTimeout(timer);
