@@ -4350,32 +4350,48 @@
       merged.dynamic = Object.assign({version:1, tables:[], views:[]}, (config && config.dynamic) || base.dynamic || {});
       merged.dynamic.tables = Array.isArray(merged.dynamic.tables) ? merged.dynamic.tables : [];
       merged.dynamic.views = Array.isArray(merged.dynamic.views) ? merged.dynamic.views : [];
+      ensureCoreConfigEntries(merged);
+      return merged;
+    }
+    function ensureCoreConfigEntries(config){
+      const base = defaultAppConfig || {};
+      config.views = Array.isArray(config.views) ? config.views : cloneConfig(base.views || []);
+      config.actions = Array.isArray(config.actions) ? config.actions : cloneConfig(base.actions || []);
+      config.users = Array.isArray(config.users) ? config.users : cloneConfig(base.users || []);
       ["settings", "returnth", "docops"].forEach(id => {
-        const exists = Array.isArray(merged.views) && merged.views.some(v => v && v.id === id);
+        const exists = config.views.some(v => v && v.id === id);
         const baseView = (base.views || []).find(v => v && v.id === id);
-        if (!exists && baseView) merged.views.push(baseView);
+        if (!exists && baseView) config.views.push(cloneConfig(baseView));
       });
       ["saveReturnTh", "saveDocOps"].forEach(id => {
-        const exists = Array.isArray(merged.actions) && merged.actions.some(a => a && a.id === id);
+        const exists = config.actions.some(a => a && a.id === id);
         const baseAction = (base.actions || []).find(a => a && a.id === id);
-        if (!exists && baseAction) merged.actions.push(baseAction);
+        if (!exists && baseAction) config.actions.push(cloneConfig(baseAction));
       });
-      const settingsView = merged.views.find(v => v.id === "settings");
-      if (settingsView) settingsView.name = "Cài đặt";
-      merged.personal = merged.personal || {};
-      merged.personal.bottomTabs = Array.isArray(merged.personal.bottomTabs) ? merged.personal.bottomTabs : ["home","search","input","returnth","docops","store","settings"];
-      if (!merged.personal.bottomTabs.includes("docops")) {
-        const returnThIndex = merged.personal.bottomTabs.indexOf("returnth");
-        merged.personal.bottomTabs.splice(returnThIndex >= 0 ? returnThIndex + 1 : merged.personal.bottomTabs.length, 0, "docops");
+      const docOpsView = config.views.find(v => v && v.id === "docops");
+      if (docOpsView) {
+        docOpsView.name = docOpsView.name || "Thao tác CT";
+        docOpsView.type = docOpsView.type || "Form";
+        docOpsView.showIf = docOpsView.showIf || "can('saveDocOps')";
+        docOpsView.position = Number(docOpsView.position || 4);
+        docOpsView.mobile = docOpsView.mobile !== false;
       }
-      merged.users.forEach(u => {
+      const settingsView = config.views.find(v => v && v.id === "settings");
+      if (settingsView) settingsView.name = "Cài đặt";
+      config.personal = config.personal || {};
+      config.personal.bottomTabs = Array.isArray(config.personal.bottomTabs) ? config.personal.bottomTabs : ["home","search","input","returnth","docops","store","settings"];
+      if (!config.personal.bottomTabs.includes("docops")) {
+        const returnThIndex = config.personal.bottomTabs.indexOf("returnth");
+        config.personal.bottomTabs.splice(returnThIndex >= 0 ? returnThIndex + 1 : config.personal.bottomTabs.length, 0, "docops");
+      }
+      config.users.forEach(u => {
         if (u.screens && !u.screens.includes("settings")) u.screens.push("settings");
         if (u.screens && !u.screens.includes("returnth")) u.screens.push("returnth");
         if (u.screens && !u.screens.includes("docops")) u.screens.push("docops");
         if (u.actions && !u.actions.includes("saveReturnTh")) u.actions.push("saveReturnTh");
         if (u.actions && !u.actions.includes("saveDocOps")) u.actions.push("saveDocOps");
       });
-      return merged;
+      return config;
     }
     function cloneConfig(config){
       return JSON.parse(JSON.stringify(config));
@@ -4410,6 +4426,7 @@
       if (config.themeConfig) {
         applyRemoteThemeConfig(config.themeConfig);
       }
+      ensureCoreConfigEntries(appConfig);
       saveAppConfig(false);
     }
     async function saveReturnThApiConfig(value){
