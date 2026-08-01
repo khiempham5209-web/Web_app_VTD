@@ -1532,8 +1532,8 @@
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
       update: {
-        latestVersion: "4.6",
-        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v4.6.apk",
+        latestVersion: "4.7",
+        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v4.7.apk",
         folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
         note: "Bản mới của Chứng từ FF đã sẵn sàng."
       },
@@ -3584,13 +3584,16 @@
       const accountName = (live.user && (live.user.name || live.user.displayName || live.user.fullName)) || currentEmail();
       const stats = live.accountStats || {loading:true, total:0, bySlog:{}};
       const statsText = stats.loading ? "Đang tính..." : Number(stats.total || 0).toLocaleString("vi-VN");
-      const slogOrder = ["O1B1", "O1B3", "O1BH", "TH truemilk", "Thao tác CT", "Ecom"];
+      const slogOrder = ["O1B1", "O1B3", "O1BH", "TH truemilk", "Chứng từ PN", "Ecom"];
       const rawSlogStats = Object.assign({}, stats.bySlog || {});
       const docOpsUserCount = docOpsTodayRecords().filter(r => !currentEmail() || String(r.user || "").toLowerCase() === String(currentEmail()).toLowerCase() || String(r.user || "").indexOf("@") < 0).length;
-      if (docOpsUserCount) rawSlogStats["Thao tác CT"] = Number(rawSlogStats["Thao tác CT"] || 0) + docOpsUserCount;
+      if (docOpsUserCount) rawSlogStats["Chứng từ PN"] = Number(rawSlogStats["Chứng từ PN"] || 0) + docOpsUserCount;
       const orderedSlogEntries = [
         ...slogOrder.filter(k => rawSlogStats[k] != null).map(k => [k, rawSlogStats[k]]),
-        ...Object.entries(rawSlogStats).filter(([k]) => !slogOrder.includes(k))
+        ...Object.entries(rawSlogStats).filter(([k]) => {
+          const key = String(k || "").trim();
+          return key && key !== "-" && !slogOrder.includes(key);
+        })
       ];
       const slogText = stats.loading ? `<span class="muted">Đang tính theo dữ liệu đã cache trên máy.</span>` :
         orderedSlogEntries.filter(([,v]) => Number(v || 0) > 0).map(([k,v]) => `<div class="slog-stat"><span class="muted">${html(k)}</span><strong>${Number(v || 0).toLocaleString("vi-VN")}</strong></div>`).join("") || `<span class="muted">Chưa có dữ liệu.</span>`;
@@ -3689,8 +3692,9 @@
         const bySlog = {};
         let total = 0;
         const add = (slog) => {
+          const key = String(slog || "").trim();
+          if (!key || key === "-") return;
           total += 1;
-          const key = String(slog || "-").trim() || "-";
           bySlog[key] = (bySlog[key] || 0) + 1;
         };
         const rows = await dataCacheGetAll("rawFull", (DATA_CACHE_TYPES.rawFull && DATA_CACHE_TYPES.rawFull.capRows || 20000) + 2000);
@@ -3703,6 +3707,7 @@
           const user = String(payload.userEmail || payload.user_email || payload.User_email || payload.email || currentEmail() || "").trim().toLowerCase();
           if (!email || user !== email) return;
           if (item && item.kind === "returnTh") add("TH truemilk");
+          else if (item && item.kind === "docOps") add("Chứng từ PN");
           else add(payload.slog || payload.Slog || payload.SLOG || payload.slogCode);
         });
         live.accountStats = {loading:false, total, bySlog};
@@ -4473,7 +4478,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "4.6";
+    const APP_VERSION = "4.7";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
