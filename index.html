@@ -1532,8 +1532,8 @@
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
       update: {
-        latestVersion: "4.7",
-        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v4.7.apk",
+        latestVersion: "4.8",
+        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v4.8.apk",
         folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
         note: "Bản mới của Chứng từ FF đã sẵn sàng."
       },
@@ -3586,6 +3586,10 @@
       const statsText = stats.loading ? "Đang tính..." : Number(stats.total || 0).toLocaleString("vi-VN");
       const slogOrder = ["O1B1", "O1B3", "O1BH", "TH truemilk", "Chứng từ PN", "Ecom"];
       const rawSlogStats = Object.assign({}, stats.bySlog || {});
+      if (rawSlogStats["Thao tác CT"] != null) {
+        rawSlogStats["Chứng từ PN"] = Number(rawSlogStats["Chứng từ PN"] || 0) + Number(rawSlogStats["Thao tác CT"] || 0);
+        delete rawSlogStats["Thao tác CT"];
+      }
       const docOpsUserCount = docOpsTodayRecords().filter(r => !currentEmail() || String(r.user || "").toLowerCase() === String(currentEmail()).toLowerCase() || String(r.user || "").indexOf("@") < 0).length;
       if (docOpsUserCount) rawSlogStats["Chứng từ PN"] = Number(rawSlogStats["Chứng từ PN"] || 0) + docOpsUserCount;
       const orderedSlogEntries = [
@@ -4478,7 +4482,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "4.7";
+    const APP_VERSION = "4.8";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
