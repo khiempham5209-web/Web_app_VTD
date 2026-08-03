@@ -1532,8 +1532,8 @@
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
       update: {
-        latestVersion: "4.8",
-        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v4.8.apk",
+        latestVersion: "4.9",
+        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v4.9.apk",
         folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
         note: "Bản mới của Chứng từ FF đã sẵn sàng."
       },
@@ -3879,6 +3879,10 @@
       await loadReturnThToday(true);
       await loadReturnThSku(true);
       await reportReturnThCacheProgress();
+      await loadDocOpsLookupCache(true);
+      await loadDocOpsToday(true);
+      await reportDocOpsLookupCacheProgress();
+      await reportDocOpsTodayCacheProgress();
       await loadLookupCacheStatus(true);
     }
     function adminQueueErrorPanel(){
@@ -4482,7 +4486,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "4.8";
+    const APP_VERSION = "4.9";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -5907,6 +5911,8 @@
       if (fallback) return fallback;
       if (type === "customerLookup") return "Khách hàng";
       if (type === "masterSku") return "Master SKU";
+      if (type === "docOpsLookup") return "Chứng từ PN lookup";
+      if (type === "docOpsToday") return "Chứng từ PN hôm nay";
       if (DATA_CACHE_TYPES[type]) return DATA_CACHE_TYPES[type].label;
       return type || "-";
     }
@@ -5957,6 +5963,39 @@
         return {status:"error", downloaded:0, total:0, lastError:String(err && err.message || err)};
       }
     }
+    function docOpsLookupCacheProgress(){
+      try {
+        const rows = docOpsLookupRowsCache();
+        const downloaded = rows.length;
+        return {
+          status: downloaded ? "done" : "pending",
+          downloaded,
+          total: downloaded,
+          updatedAt: (JSON.parse(localStorage.getItem(DOC_OPS_LOOKUP_CACHE_KEY) || "{}") || {}).updatedAt || "",
+          lastError: ""
+        };
+      } catch (err) {
+        return {status:"error", downloaded:0, total:0, lastError:String(err && err.message || err)};
+      }
+    }
+    function docOpsTodayCacheProgress(){
+      try {
+        const rows = docOpsRowsCache();
+        const today = todayApiDateText();
+        const todayRows = rows.filter(row => row && dateTextDdMmYyyy(row.date || row.thoiGian || row.time) === today);
+        const downloaded = todayRows.length;
+        const status = live.docOpsTodayLoading ? "downloading" : (live.docOpsTodayLoaded ? "done" : (downloaded ? "done" : "pending"));
+        return {
+          status,
+          downloaded,
+          total: downloaded,
+          updatedAt: rows.length ? ((JSON.parse(localStorage.getItem(DOC_OPS_TODAY_CACHE_KEY) || "{}") || {}).updatedAt || "") : "",
+          lastError: ""
+        };
+      } catch (err) {
+        return {status:"error", downloaded:0, total:0, lastError:String(err && err.message || err)};
+      }
+    }
     function reportMasterSkuCacheProgress(progress){
       progress = progress || masterSkuCacheProgress();
       return api("reportLookupCacheStatus", Object.assign({}, progress, {
@@ -5977,11 +6016,33 @@
         _silent: true
       }));
     }
+    function reportDocOpsLookupCacheProgress(progress){
+      progress = progress || docOpsLookupCacheProgress();
+      return api("reportLookupCacheStatus", Object.assign({}, progress, {
+        cacheType: "docOpsLookup",
+        label: "Chứng từ PN lookup",
+        deviceId: deviceId(),
+        appVersion: APP_VERSION,
+        _silent: true
+      }));
+    }
+    function reportDocOpsTodayCacheProgress(progress){
+      progress = progress || docOpsTodayCacheProgress();
+      return api("reportLookupCacheStatus", Object.assign({}, progress, {
+        cacheType: "docOpsToday",
+        label: "Chứng từ PN hôm nay",
+        deviceId: deviceId(),
+        appVersion: APP_VERSION,
+        _silent: true
+      }));
+    }
     function localCacheSummaryRows(){
       const order = orderCacheProgress();
       const data = dataCacheProgress();
       const masterSku = masterSkuCacheProgress();
       const returnTh = returnThCacheProgress();
+      const docOpsLookup = docOpsLookupCacheProgress();
+      const docOpsToday = docOpsTodayCacheProgress();
       const q = queueStats();
       const qTotal = Number(q.pending || 0) + Number(q.pendingImage || 0) + Number(q.syncing || 0) + Number(q.error || 0);
       return [
@@ -5992,6 +6053,8 @@
         }),
         {key:"masterSku", label:"Master SKU", status:cacheStatusLabel(masterSku.status), progress:(Number(masterSku.downloaded || 0) + "/" + Number(masterSku.total || 0))},
         {key:"returnThToday", label:"TH Truemilk hôm nay", status:cacheStatusLabel(returnTh.status), progress:(Number(returnTh.downloaded || 0) + "/" + Number(returnTh.total || 0))},
+        {key:"docOpsLookup", label:"Chứng từ PN lookup", status:cacheStatusLabel(docOpsLookup.status), progress:(Number(docOpsLookup.downloaded || 0) + "/" + Number(docOpsLookup.total || 0))},
+        {key:"docOpsToday", label:"Chứng từ PN hôm nay", status:cacheStatusLabel(docOpsToday.status), progress:(Number(docOpsToday.downloaded || 0) + "/" + Number(docOpsToday.total || 0))},
         {key:"queueSync", label:"Queue sync", status:qTotal ? (q.error ? "Lỗi" : q.syncing ? "Đang sync" : "Đang chờ") : "Đã đủ", progress:`${qTotal} đơn`}
       ];
     }
@@ -9167,17 +9230,35 @@
         return false;
       }
     }
-    function loadDocOpsLookupCache(force = false){
+    async function loadDocOpsLookupCache(force = false){
       if (!docOpsApiUrl()) return Promise.resolve(false);
       if (!force && docOpsLookupCacheFresh()) return Promise.resolve(true);
-      return docOpsApi("page", {startRow:2, pageSize:2000, _silent:true}).then(res => {
-        if (res && res.ok) {
+      let startRow = 2;
+      let allRows = [];
+      try {
+        for (let page = 0; page < 20; page++) {
+          const res = await docOpsApi("page", {startRow, pageSize:2000, _silent:true});
+          if (!res || !res.ok) {
+            await reportDocOpsLookupCacheProgress({
+              status:"error",
+              downloaded: allRows.length,
+              total: allRows.length,
+              lastError:(res && res.message) || "Không tải được cache Chứng từ PN"
+            });
+            return false;
+          }
           const rows = Array.isArray(res.records) ? res.records : [];
-          docOpsRememberRecords(rows);
-          return true;
+          allRows = allRows.concat(rows);
+          docOpsRememberRecords(allRows);
+          if (res.done || !res.nextRow || Number(res.nextRow) <= startRow || rows.length === 0) break;
+          startRow = Number(res.nextRow);
         }
+        await reportDocOpsLookupCacheProgress({status:"done", downloaded:allRows.length, total:allRows.length});
+        return true;
+      } catch (err) {
+        await reportDocOpsLookupCacheProgress({status:"error", downloaded:allRows.length, total:allRows.length, lastError:String(err && err.message || err)});
         return false;
-      }).catch(() => false);
+      }
     }
     function loadDocOpsToday(force = false){
       const day = todayApiDateText();
@@ -9200,8 +9281,19 @@
           live.docOpsTodayRows = rows;
           live.docOpsTodayLoaded = true;
           live.docOpsTodayDay = day;
+          reportDocOpsTodayCacheProgress();
           if (view === "home") home();
         }
+        else {
+          reportDocOpsTodayCacheProgress({
+            status:"error",
+            downloaded:cached.length,
+            total:cached.length,
+            lastError:(res && res.message) || "Không tải được chứng từ PN hôm nay"
+          });
+        }
+      }).catch(err => {
+        reportDocOpsTodayCacheProgress({status:"error", downloaded:cached.length, total:cached.length, lastError:String(err && err.message || err)});
       }).finally(() => {
         live.docOpsTodayFetchedAt = Date.now();
         live.docOpsTodayLoading = false;
