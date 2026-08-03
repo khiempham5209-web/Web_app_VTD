@@ -1961,7 +1961,9 @@
       try {
         applyPersonalSettings();
         shell();
-        (view.startsWith("dyn_") ? dynamicView : ({home, search, input, returnth, docops, store, settings, admin}[view] || home))();
+        const staticViews = {home, search, input, returnth, store, settings, admin};
+        if (typeof window.docops === "function") staticViews.docops = window.docops;
+        (view.startsWith("dyn_") ? dynamicView : (staticViews[view] || home))();
         if (typeof applyAppAppearance === "function") applyAppAppearance();
       } catch (err) {
         const target = el("view");
