@@ -3768,19 +3768,29 @@
     function activityReporterCanRun(){
       return !!live.token && document.visibilityState === "visible" && !document.hidden;
     }
-    function activityReporterTick(){
-      const now = Date.now();
+    function activityReporterTick(nowValue, allowHidden){
+      const now = Number(nowValue || Date.now());
       const last = Number(live.activityLastTickAt || now);
       live.activityLastTickAt = now;
-      if (!activityReporterCanRun()) return;
-      const elapsedMs = Math.max(0, now - last);
+      if (!allowHidden && !activityReporterCanRun()) return;
+      const lastInteraction = Number(live.activityLastInteractionAt || 0);
+      if (!lastInteraction) return;
+      const activeUntil = Math.min(now, lastInteraction + ACTIVITY_IDLE_MS);
+      const elapsedMs = Math.max(0, activeUntil - last);
       const seconds = Math.floor(elapsedMs / 1000);
       if (seconds > 0) live.activityAccumulatedSeconds = Number(live.activityAccumulatedSeconds || 0) + seconds;
+    }
+    function markActivityInteraction(){
+      if (!live.token) return;
+      const now = Date.now();
+      activityReporterTick(now);
+      live.activityLastInteractionAt = now;
+      live.activityLastTickAt = now;
     }
     function flushActivityReporter(allowHidden){
       if (!live.token) return Promise.resolve();
       if (document.hidden && !allowHidden) return Promise.resolve();
-      activityReporterTick();
+      activityReporterTick(undefined, allowHidden);
       const total = Math.max(0, Number(live.activityAccumulatedSeconds || 0));
       const sent = Math.max(0, Number(live.activityReportedSeconds || 0));
       const delta = Math.max(0, total - sent);
@@ -3804,6 +3814,7 @@
       live.activityAccumulatedSeconds = 0;
       live.activityReportedSeconds = 0;
       live.activityLastTickAt = 0;
+      live.activityLastInteractionAt = 0;
     }
     function startActivityReporter(){
       if (!live.token) return;
@@ -3812,13 +3823,17 @@
       live.activityAccumulatedSeconds = Math.max(0, Number(live.activityAccumulatedSeconds || 0));
       live.activityReportedSeconds = Math.max(0, Number(live.activityReportedSeconds || 0));
       live.activityLastTickAt = Date.now();
-      live.activityTickTimer = setInterval(activityReporterTick, 1000);
+      live.activityLastInteractionAt = Date.now();
+      live.activityTickTimer = null;
       live.activityTimer = setInterval(() => {
         activityReporterTick();
         flushActivityReporter(false);
-      }, 60000);
+      }, ACTIVITY_REPORT_MS);
       if (!live.activityLifecycleBound) {
         live.activityLifecycleBound = true;
+        ["pointerdown", "keydown", "input"].forEach(eventName => {
+          document.addEventListener(eventName, markActivityInteraction, {capture:true, passive:true});
+        });
         window.addEventListener("beforeunload", () => {
           notifyQueueWorkOnExit("beforeunload");
           activityReporterTick();
@@ -3837,6 +3852,7 @@
             return;
           }
           live.activityLastTickAt = Date.now();
+          live.activityLastInteractionAt = Date.now();
         });
       }
     }
@@ -5058,6 +5074,9 @@
   </script>
   <script>
     const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbwGcF7yM8MOqx7OwUaU2ut5xiBPkRbtuEljzw5QnUXWiv_5ukR-CkdnGyCWwuo956ig/exec";
+    const ACTIVITY_IDLE_MS = 10 * 60 * 1000;
+    const ACTIVITY_REPORT_MS = 10 * 60 * 1000;
+    const QUEUE_WATCHDOG_MS = 5 * 60 * 1000;
     const DASHBOARD_CACHE_KEY = "vtd_dashboard_today_cache";
     const LOCAL_QUEUE_KEY = "vtd_local_sync_queue_v1";
     const QUEUE_IMAGE_DB = "vtd_queue_image_db_v1";
@@ -5140,6 +5159,7 @@
       activityAccumulatedSeconds: 0,
       activityReportedSeconds: 0,
       activityLastTickAt: 0,
+      activityLastInteractionAt: 0,
       inputSaving: false,
       queueReportTimer: null,
       queueWatchdogTimer: null,
@@ -6864,7 +6884,7 @@
         } else {
           scheduleQueueReport(0);
         }
-      }, 30000);
+      }, QUEUE_WATCHDOG_MS);
     }
     function localQueuePanel(){
       recoverLocalQueue();
