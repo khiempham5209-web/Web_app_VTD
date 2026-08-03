@@ -5184,17 +5184,11 @@
       if (/^https:\/\/script\.google\.com\/macros\/s\/[-\w]+\/exec/i.test(url)) return url;
       return DEFAULT_API_URL;
     }
-    function shouldProxyScriptUrl(url){
-      return /^https:\/\/script\.google\.com\/macros\/s\/[-\w]+\/exec/i.test(String(url || "")) &&
-        /^https?:$/i.test(location.protocol || "") &&
-        !(window.VTDNative && window.VTDNative.api);
-    }
     function scriptApiFetch(apiUrl, payload, options = {}){
-      const useProxy = shouldProxyScriptUrl(apiUrl);
-      return fetch(useProxy ? "/api/apps-script" : apiUrl, Object.assign({}, options, {
+      return fetch(apiUrl, Object.assign({}, options, {
         method: "POST",
         headers: {"Content-Type": "text/plain;charset=utf-8"},
-        body: JSON.stringify(useProxy ? {targetUrl: apiUrl, payload} : payload)
+        body: JSON.stringify(payload)
       }));
     }
     async function readApiJson(response, label){
@@ -5205,7 +5199,7 @@
         const preview = String(text || "").replace(/\s+/g, " ").slice(0, 160);
         return {
           ok: false,
-          message: `${label || "API"} trả về HTML/không phải JSON (${response.status}). Kiểm tra link /exec, quyền deploy Web app và Vercel proxy. ${preview}`
+          message: `${label || "API"} trả về HTML/không phải JSON (${response.status}). Kiểm tra link /exec và quyền deploy Web app. ${preview}`
         };
       }
     }
