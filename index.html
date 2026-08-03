@@ -1532,8 +1532,8 @@
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
       update: {
-        latestVersion: "4.9",
-        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v4.9.apk",
+        latestVersion: "5.0",
+        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v5.0.apk",
         folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
         note: "Bản mới của Chứng từ FF đã sẵn sàng."
       },
@@ -4486,12 +4486,19 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "4.9";
+    const APP_VERSION = "5.0";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
     const DOC_OPS_LOOKUP_CACHE_KEY = "vtd_doc_ops_lookup_cache_v1";
+    const DOC_OPS_LOOKUP_DB = "VTD_DOC_OPS_LOOKUP_V1";
+    const DOC_OPS_LOOKUP_STORE = "records";
+    const DOC_OPS_LOOKUP_META_STORE = "meta";
     const DOC_OPS_TODAY_REFRESH_MS = 30000;
+    let docOpsLookupMemory = [];
+    let docOpsLookupMetaMemory = {lastRow:1, count:0, updatedAt:""};
+    let docOpsLookupHydrated = false;
+    let docOpsLookupHydratePromise = null;
     const nativeImagePickerMap = {
       productCamera: ["camera", "productFiles", "productPreview"],
       productLibrary: ["library", "productFiles", "productPreview"],
@@ -5970,8 +5977,8 @@
         return {
           status: downloaded ? "done" : "pending",
           downloaded,
-          total: downloaded,
-          updatedAt: (JSON.parse(localStorage.getItem(DOC_OPS_LOOKUP_CACHE_KEY) || "{}") || {}).updatedAt || "",
+          total: Math.max(downloaded, Number(docOpsLookupMetaMemory.lastRow || 1) - 1),
+          updatedAt: docOpsLookupMetaMemory.updatedAt || "",
           lastError: ""
         };
       } catch (err) {
@@ -7703,6 +7710,7 @@
             scheduleQueueReport();
             const cachedRows = docOpsRowsCache();
             saveDocOpsRowsCache(cachedRows.map(row => String(row.localId || "") === String(updated.localId || "") ? Object.assign({}, row, {syncStatus:"Done", linkAnh: res.linkAnh || row.linkAnh || "", rowNumber: res.rowNumber || row.rowNumber || ""}) : row));
+            if (res.dataVersion) await docOpsLookupWriteMeta({dataVersion:String(res.dataVersion), updatedAt:new Date().toISOString()});
             live.docOpsTodayLoaded = false;
             if (view === "home") loadDocOpsToday(true);
             continue;
@@ -8634,7 +8642,6 @@
         loadReturnThSku(false)
       ]);
       loadReturnThToday(false);
-      loadDocOpsToday(false);
       const currentMonth = currentBusinessMonth();
       if (shouldLiveLoadStore(currentMonth)) loadStoreInfo(currentMonth);
       warmStoreInfoFromDevice();
@@ -9106,7 +9113,10 @@
       if (!silent) setLoading(true, "Đang xử lý chứng từ...");
       const controller = window.AbortController ? new AbortController() : null;
       const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, 120000);
-      return scriptApiFetch(url, {action, params: Object.assign({}, params, {userEmail: currentEmail(), sessionToken: live.token})}, {
+      return fetch(url, {
+        method: "POST",
+        headers: {"Content-Type":"text/plain;charset=utf-8"},
+        body: JSON.stringify({action, params: Object.assign({}, params, {userEmail: currentEmail(), sessionToken: live.token})}),
         signal: controller ? controller.signal : undefined
       }).then(r => readApiJson(r, "API Thao tác CT")).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API Thao tác CT phản hồi quá lâu." : String(err)})).finally(() => {
         clearTimeout(timer);
@@ -9183,80 +9193,175 @@
         </div>
       </section>`;
     }
-    function docOpsLookupRowsCache(){
-      try {
-        const cache = JSON.parse(localStorage.getItem(DOC_OPS_LOOKUP_CACHE_KEY) || "{}") || {};
-        return Array.isArray(cache.records) ? cache.records.filter(row => !isDocOpsTestRow(row)) : [];
-      } catch (err) {
-        return [];
-      }
-    }
+    function docOpsLookupRowsCache(){ return docOpsLookupMemory.filter(row => !isDocOpsTestRow(row)); }
     function isDocOpsTestRow(row){
       if (!row) return false;
       const user = String(row.user || "").toLowerCase();
       const link = String(row.linkAnh || "").toLowerCase();
       return user === "demo@ff.local" || link.includes("/example") || link.endsWith("id=example");
     }
-    function saveDocOpsLookupRowsCache(rows){
-      const clean = (Array.isArray(rows) ? rows : []).filter(Boolean).slice(0, 3000);
-      try {
-        localStorage.setItem(DOC_OPS_LOOKUP_CACHE_KEY, JSON.stringify({day: todayApiDateText(), updatedAt: new Date().toISOString(), records: clean}));
-      } catch (err) {}
-      return clean;
+    function docOpsLookupDb(){
+      return new Promise(resolve => {
+        if (!window.indexedDB) return resolve(null);
+        const req = indexedDB.open(DOC_OPS_LOOKUP_DB, 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(DOC_OPS_LOOKUP_STORE)) {
+            const store = db.createObjectStore(DOC_OPS_LOOKUP_STORE, {keyPath:"rowNumber"});
+            store.createIndex("maDonKey", "maDonKey", {unique:false});
+            store.createIndex("poKey", "poKey", {unique:false});
+            store.createIndex("orderNoKey", "orderNoKey", {unique:false});
+          }
+          if (!db.objectStoreNames.contains(DOC_OPS_LOOKUP_META_STORE)) db.createObjectStore(DOC_OPS_LOOKUP_META_STORE, {keyPath:"key"});
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      });
+    }
+    function docOpsCacheRecord(row){
+      if (!row || isDocOpsTestRow(row)) return null;
+      const rowNumber = Number(row.rowNumber || 0);
+      if (rowNumber < 2) return null;
+      return Object.assign({}, row, {
+        rowNumber,
+        maDonKey:docOpsCacheKey(row.maDon || row.maDonGhtk),
+        poKey:docOpsCacheKey(row.po),
+        orderNoKey:docOpsCacheKey(row.orderNo || row.soDonHang),
+        cachedAt:Date.now()
+      });
+    }
+    async function docOpsLookupReadMeta(){
+      const db = await docOpsLookupDb();
+      if (!db) return docOpsLookupMetaMemory;
+      return new Promise(resolve => {
+        const req = db.transaction(DOC_OPS_LOOKUP_META_STORE, "readonly").objectStore(DOC_OPS_LOOKUP_META_STORE).get("sync");
+        req.onsuccess = () => resolve(req.result || docOpsLookupMetaMemory);
+        req.onerror = () => resolve(docOpsLookupMetaMemory);
+      });
+    }
+    async function docOpsLookupWriteMeta(meta){
+      docOpsLookupMetaMemory = Object.assign({}, docOpsLookupMetaMemory, meta || {}, {key:"sync"});
+      const db = await docOpsLookupDb();
+      if (!db) return docOpsLookupMetaMemory;
+      return new Promise(resolve => {
+        const tx = db.transaction(DOC_OPS_LOOKUP_META_STORE, "readwrite");
+        tx.objectStore(DOC_OPS_LOOKUP_META_STORE).put(docOpsLookupMetaMemory);
+        tx.oncomplete = () => resolve(docOpsLookupMetaMemory);
+        tx.onerror = () => resolve(docOpsLookupMetaMemory);
+      });
+    }
+    async function docOpsLookupPutMany(rows){
+      const clean = (Array.isArray(rows) ? rows : []).map(docOpsCacheRecord).filter(Boolean);
+      if (!clean.length) return 0;
+      const db = await docOpsLookupDb();
+      if (!db) return 0;
+      await new Promise(resolve => {
+        const tx = db.transaction(DOC_OPS_LOOKUP_STORE, "readwrite");
+        const store = tx.objectStore(DOC_OPS_LOOKUP_STORE);
+        clean.forEach(row => store.put(row));
+        tx.oncomplete = resolve;
+        tx.onerror = resolve;
+      });
+      const byRow = {};
+      [...clean, ...docOpsLookupMemory].forEach(row => { if (row && row.rowNumber && !byRow[row.rowNumber]) byRow[row.rowNumber] = row; });
+      docOpsLookupMemory = Object.values(byRow).sort((a,b) => Number(a.rowNumber) - Number(b.rowNumber));
+      return clean.length;
+    }
+    async function hydrateDocOpsLookupCache(){
+      if (docOpsLookupHydrated) return docOpsLookupMemory;
+      if (docOpsLookupHydratePromise) return docOpsLookupHydratePromise;
+      docOpsLookupHydratePromise = (async () => {
+        const db = await docOpsLookupDb();
+        if (!db) return docOpsLookupMemory;
+        const legacy = (() => { try { return JSON.parse(localStorage.getItem(DOC_OPS_LOOKUP_CACHE_KEY) || "{}"); } catch (err) { return {}; } })();
+        if (Array.isArray(legacy.records) && legacy.records.length) {
+          await docOpsLookupPutMany(legacy.records);
+          localStorage.removeItem(DOC_OPS_LOOKUP_CACHE_KEY);
+        }
+        docOpsLookupMemory = await new Promise(resolve => {
+          const rows = [];
+          const req = db.transaction(DOC_OPS_LOOKUP_STORE, "readonly").objectStore(DOC_OPS_LOOKUP_STORE).openCursor();
+          req.onsuccess = event => {
+            const cursor = event.target.result;
+            if (!cursor) return resolve(rows);
+            if (!isDocOpsTestRow(cursor.value)) rows.push(cursor.value);
+            cursor.continue();
+          };
+          req.onerror = () => resolve(rows);
+        });
+        const storedMeta = await docOpsLookupReadMeta();
+        const maxRow = docOpsLookupMemory.reduce((max, row) => Math.max(max, Number(row.rowNumber || 0)), 1);
+        docOpsLookupMetaMemory = Object.assign({}, storedMeta || {}, {lastRow:Math.max(Number(storedMeta && storedMeta.lastRow || 1), maxRow), count:docOpsLookupMemory.length});
+        await docOpsLookupWriteMeta(docOpsLookupMetaMemory);
+        docOpsLookupHydrated = true;
+        return docOpsLookupMemory;
+      })();
+      return docOpsLookupHydratePromise;
+    }
+    async function clearDocOpsLookupCache(){
+      const db = await docOpsLookupDb();
+      if (db) await new Promise(resolve => {
+        const tx = db.transaction([DOC_OPS_LOOKUP_STORE, DOC_OPS_LOOKUP_META_STORE], "readwrite");
+        tx.objectStore(DOC_OPS_LOOKUP_STORE).clear();
+        tx.objectStore(DOC_OPS_LOOKUP_META_STORE).clear();
+        tx.oncomplete = resolve;
+        tx.onerror = resolve;
+      });
+      docOpsLookupMemory = [];
+      docOpsLookupMetaMemory = {lastRow:1, count:0, updatedAt:""};
     }
     function docOpsCacheKey(value){
       return String(value || "").trim().toLowerCase();
     }
-    function docOpsFindCached(query){
+    async function docOpsFindCached(query){
       const q = docOpsCacheKey(query);
       if (!q) return null;
+      await hydrateDocOpsLookupCache();
       return docOpsLookupRowsCache().find(r => [r.maDon, r.maDonGhtk, r.po, r.orderNo, r.soDonHang].some(v => docOpsCacheKey(v) === q)) || null;
     }
-    function docOpsRememberRecords(records){
-      const current = docOpsLookupRowsCache();
-      const byKey = {};
-      [...records, ...current].forEach(row => {
-        if (!row) return;
-        const key = docOpsCacheKey(row.maDon || row.maDonGhtk || row.po || row.orderNo || row.rowNumber);
-        if (key && !byKey[key]) byKey[key] = row;
-      });
-      return saveDocOpsLookupRowsCache(Object.values(byKey));
-    }
-    function docOpsLookupCacheFresh(){
-      try {
-        const cache = JSON.parse(localStorage.getItem(DOC_OPS_LOOKUP_CACHE_KEY) || "{}") || {};
-        return cache.day === todayApiDateText() && Array.isArray(cache.records) && cache.records.length > 0;
-      } catch (err) {
-        return false;
-      }
-    }
+    async function docOpsRememberRecords(records){ return docOpsLookupPutMany(records); }
     async function loadDocOpsLookupCache(force = false){
       if (!docOpsApiUrl()) return Promise.resolve(false);
-      if (!force && docOpsLookupCacheFresh()) return Promise.resolve(true);
-      let startRow = 2;
-      let allRows = [];
+      await hydrateDocOpsLookupCache();
+      let downloaded = 0;
       try {
-        for (let page = 0; page < 20; page++) {
+        const manifest = await docOpsApi("init", {_silent:true});
+        if (!manifest || !manifest.ok) throw new Error((manifest && manifest.message) || "Không kiểm tra được dữ liệu Chứng từ PN");
+        const remoteLastRow = Math.max(1, Number(manifest.lastRow || 1));
+        const remoteVersion = String(manifest.dataVersion || "");
+        const previousVersion = String(docOpsLookupMetaMemory.dataVersion || "");
+        let localLastRow = Math.max(1, Number(docOpsLookupMetaMemory.lastRow || 1));
+        if (localLastRow > remoteLastRow) {
+          await clearDocOpsLookupCache();
+          localLastRow = 1;
+        }
+        let startRow = Math.max(2, localLastRow + 1);
+        while (startRow <= remoteLastRow) {
           const res = await docOpsApi("page", {startRow, pageSize:2000, _silent:true});
           if (!res || !res.ok) {
             await reportDocOpsLookupCacheProgress({
               status:"error",
-              downloaded: allRows.length,
-              total: allRows.length,
+              downloaded: docOpsLookupMemory.length,
+              total:Math.max(0, remoteLastRow - 1),
               lastError:(res && res.message) || "Không tải được cache Chứng từ PN"
             });
             return false;
           }
           const rows = Array.isArray(res.records) ? res.records : [];
-          allRows = allRows.concat(rows);
-          docOpsRememberRecords(allRows);
+          if (rows.length) downloaded += await docOpsRememberRecords(rows);
+          const nextRow = Number(res.nextRow || (startRow + rows.length));
+          const syncedThrough = Math.min(remoteLastRow, Math.max(startRow - 1, nextRow - 1));
+          await docOpsLookupWriteMeta({lastRow:syncedThrough, count:docOpsLookupMemory.length, updatedAt:new Date().toISOString()});
           if (res.done || !res.nextRow || Number(res.nextRow) <= startRow || rows.length === 0) break;
           startRow = Number(res.nextRow);
         }
-        await reportDocOpsLookupCacheProgress({status:"done", downloaded:allRows.length, total:allRows.length});
+        await docOpsLookupWriteMeta({lastRow:remoteLastRow, count:docOpsLookupMemory.length, updatedAt:new Date().toISOString()});
+        await reportDocOpsLookupCacheProgress({status:"done", downloaded:docOpsLookupMemory.length, total:Math.max(0, remoteLastRow - 1), newRecords:downloaded});
+        const checkedToday = String(docOpsLookupMetaMemory.todayCheckedDay || "") === todayApiDateText();
+        if (downloaded > 0 || !checkedToday || (remoteVersion && remoteVersion !== previousVersion)) await loadDocOpsToday(true);
         return true;
       } catch (err) {
-        await reportDocOpsLookupCacheProgress({status:"error", downloaded:allRows.length, total:allRows.length, lastError:String(err && err.message || err)});
+        await reportDocOpsLookupCacheProgress({status:"error", downloaded:docOpsLookupMemory.length, total:docOpsLookupMemory.length, lastError:String(err && err.message || err)});
         return false;
       }
     }
@@ -9269,20 +9374,22 @@
         if (view === "home") setTimeout(home, 0);
       }
       const fresh = live.docOpsTodayDay === day && live.docOpsTodayFetchedAt && Date.now() - live.docOpsTodayFetchedAt < DOC_OPS_TODAY_REFRESH_MS;
-      if (!force && live.docOpsTodayLoaded && fresh) return;
-      if (live.docOpsTodayLoading || !docOpsApiUrl()) return;
+      if (!force && live.docOpsTodayLoaded && fresh) return Promise.resolve(true);
+      if (live.docOpsTodayLoading || !docOpsApiUrl()) return Promise.resolve(false);
       live.docOpsTodayLoading = true;
-      docOpsApi("today", {date: day, _silent:true}).then(res => {
+      return docOpsApi("today", {date: day, _silent:true}).then(async res => {
         if (res && res.ok) {
           const rows = Array.isArray(res.records) ? res.records : (Array.isArray(res.rows) ? res.rows : []);
           rows.forEach(r => r.syncStatus = r.syncStatus || "Done");
           saveDocOpsRowsCache(rows);
-          docOpsRememberRecords(rows);
+          await docOpsRememberRecords(rows);
           live.docOpsTodayRows = rows;
           live.docOpsTodayLoaded = true;
           live.docOpsTodayDay = day;
+          await docOpsLookupWriteMeta({todayCheckedDay:day, dataVersion:String(res.dataVersion || docOpsLookupMetaMemory.dataVersion || ""), updatedAt:new Date().toISOString()});
           reportDocOpsTodayCacheProgress();
           if (view === "home") home();
+          return true;
         }
         else {
           reportDocOpsTodayCacheProgress({
@@ -9291,9 +9398,11 @@
             total:cached.length,
             lastError:(res && res.message) || "Không tải được chứng từ PN hôm nay"
           });
+          return false;
         }
       }).catch(err => {
         reportDocOpsTodayCacheProgress({status:"error", downloaded:cached.length, total:cached.length, lastError:String(err && err.message || err)});
+        return false;
       }).finally(() => {
         live.docOpsTodayFetchedAt = Date.now();
         live.docOpsTodayLoading = false;
@@ -9314,7 +9423,7 @@
         renderDocOpsLookup();
         return;
       }
-      const cached = docOpsFindCached(query);
+      const cached = await docOpsFindCached(query);
       if (cached) {
         docOpsState.record = cached;
         docOpsState.message = "";
@@ -9693,7 +9802,10 @@
       }
     }
     function captureFiles(input, bucket, targetId){
-      live[bucket] = Array.from(input.files || []);
+      const selected = Array.from(input.files || []);
+      const existing = Array.isArray(live[bucket]) ? live[bucket] : [];
+      live[bucket] = [...existing, ...selected].slice(0, 8);
+      input.value = "";
       renderFilePreview(bucket, targetId, input.id);
     }
     async function uploadSelectedImages(rawId, maDon){

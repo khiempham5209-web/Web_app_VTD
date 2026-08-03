@@ -33,7 +33,13 @@ function doPost(e) {
 
 function apiInit_() {
   const sh = sheet_();
-  return ok_({sheetName: sh.getName(), lastRow: sh.getLastRow(), lastColumn: sh.getLastColumn(), headers: headers_(sh)});
+  return ok_({
+    sheetName: sh.getName(),
+    lastRow: sh.getLastRow(),
+    lastColumn: sh.getLastColumn(),
+    headers: headers_(sh),
+    dataVersion: PropertiesService.getScriptProperties().getProperty("PN_DOCOPS_DATA_VERSION") || ""
+  });
 }
 
 function apiLookup_(params) {
@@ -62,14 +68,26 @@ function apiToday_(params) {
   params = params || {};
   const today = clean_(params.date) || Utilities.formatDate(new Date(), CONFIG.timezone, "dd/MM/yyyy");
   const todayKey = dateKey_(today);
-  const rows = apiPage_({startRow: 2, pageSize: 2000}).records || [];
+  const rows = [];
+  let startRow = 2;
+  while (true) {
+    const page = apiPage_({startRow: startRow, pageSize: 2000});
+    Array.prototype.push.apply(rows, page.records || []);
+    if (page.done || !page.nextRow || Number(page.nextRow) <= startRow) break;
+    startRow = Number(page.nextRow);
+  }
   const records = rows.filter(r => dateKey_(r.thoiGian || r.time) === todayKey && (r.user || r.thoiGian || r.time)).map(r => {
     r.date = dateOnly_(r.thoiGian || r.time) || today;
     r.time = timeOnly_(r.thoiGian || r.time) || r.time || "";
     r.syncStatus = "Done";
     return r;
   });
-  return ok_({date: today, records, count: records.length});
+  return ok_({
+    date: today,
+    records,
+    count: records.length,
+    dataVersion: PropertiesService.getScriptProperties().getProperty("PN_DOCOPS_DATA_VERSION") || ""
+  });
 }
 
 function apiSave_(params) {
@@ -98,6 +116,8 @@ function apiSave_(params) {
   setCellByAliases_(sh, found.rowNumber, col, ["user thao tac"], user);
 
   SpreadsheetApp.flush();
+  const dataVersion = String(Date.now());
+  PropertiesService.getScriptProperties().setProperty("PN_DOCOPS_DATA_VERSION", dataVersion);
   return ok_({
     message: "Da luu thao tac chung tu.",
     rowNumber: found.rowNumber,
@@ -105,7 +125,8 @@ function apiSave_(params) {
     fileCount: upload.files.length,
     folderUrl: upload.folderUrl,
     time: timeText,
-    user
+    user,
+    dataVersion
   });
 }
 
