@@ -357,7 +357,11 @@ function vtdApp_saveSystemConfig(params) {
       }
     }
     if (!themeConfig || typeof themeConfig !== "object") return vtdApp_fail_("Cau hinh theme khong hop le.");
-    config.themeConfig = JSON.stringify(themeConfig);
+    let previousThemeConfig = {};
+    if (config.themeConfig) {
+      try { previousThemeConfig = JSON.parse(config.themeConfig); } catch (err) {}
+    }
+    config.themeConfig = JSON.stringify(vtdApp_sanitizeThemeConfig_(themeConfig, previousThemeConfig));
     changed.themeConfig = config.themeConfig;
   }
   vtdApp_saveSystemConfig_(changed, params && params.userEmail);
@@ -387,7 +391,7 @@ function vtdApp_publicSystemConfig_(config) {
   let themeConfig = {};
   if (config.themeConfig) {
     try {
-      themeConfig = JSON.parse(config.themeConfig);
+      themeConfig = vtdApp_sanitizeThemeConfig_(JSON.parse(config.themeConfig), {});
     } catch (err) {
       themeConfig = {};
     }
@@ -399,6 +403,71 @@ function vtdApp_publicSystemConfig_(config) {
     update: update,
     themeConfig: themeConfig
   };
+}
+
+function vtdApp_driveThemeUrl_(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return {url: "", fileId: ""};
+  let fileId = "";
+  const pathMatch = raw.match(/drive\.google\.com\/file\/d\/([\w-]+)/i);
+  const idMatch = raw.match(/[?&]id=([\w-]+)/i);
+  if (pathMatch) fileId = pathMatch[1];
+  else if (idMatch) fileId = idMatch[1];
+  else if (/^[\w-]{20,}$/.test(raw)) fileId = raw;
+  if (fileId) {
+    return {
+      url: "https://drive.usercontent.google.com/download?id=" + encodeURIComponent(fileId) + "&export=download",
+      fileId: fileId
+    };
+  }
+  if (/^https:\/\//i.test(raw)) return {url: raw, fileId: ""};
+  return {url: "", fileId: ""};
+}
+
+function vtdApp_sanitizeThemeAsset_(asset, previousAsset, enabled) {
+  asset = asset && typeof asset === "object" ? asset : {};
+  previousAsset = previousAsset && typeof previousAsset === "object" ? previousAsset : {};
+  const requested = vtdApp_driveThemeUrl_(asset.url || asset.imageUrl || asset.driveUrl || asset.fileId || "");
+  const previous = vtdApp_driveThemeUrl_(previousAsset.url || previousAsset.imageUrl || previousAsset.driveUrl || previousAsset.fileId || "");
+  const selected = requested.url ? requested : (enabled !== false ? previous : {url: "", fileId: ""});
+  const out = {version: String(asset.version || previousAsset.version || ("asset_" + Date.now()))};
+  if (selected.url) {
+    out.url = selected.url;
+    if (selected.fileId) out.fileId = selected.fileId;
+  }
+  return out;
+}
+
+function vtdApp_sanitizeThemeConfig_(themeConfig, previousThemeConfig) {
+  themeConfig = themeConfig && typeof themeConfig === "object" ? themeConfig : {};
+  previousThemeConfig = previousThemeConfig && typeof previousThemeConfig === "object" ? previousThemeConfig : {};
+  let clean = {};
+  try { clean = JSON.parse(JSON.stringify(themeConfig)); } catch (err) { clean = {}; }
+  clean.assets = clean.assets && typeof clean.assets === "object" ? clean.assets : {};
+  clean.assets.app = clean.assets.app && typeof clean.assets.app === "object" ? clean.assets.app : {};
+  clean.assets.app.screens = clean.assets.app.screens && typeof clean.assets.app.screens === "object" ? clean.assets.app.screens : {};
+
+  const previousAssets = previousThemeConfig.assets || {};
+  const previousAppAssets = previousAssets.app || {};
+  const previousScreens = previousAppAssets.screens || {};
+  const loginEnabled = !clean.loginAppearance || clean.loginAppearance.hasImage !== false;
+  clean.assets.login = vtdApp_sanitizeThemeAsset_(clean.assets.login, previousAssets.login, loginEnabled);
+
+  const globalAppearance = clean.appAppearance && clean.appAppearance.global;
+  clean.assets.app.global = vtdApp_sanitizeThemeAsset_(clean.assets.app.global, previousAppAssets.global, !globalAppearance || globalAppearance.hasImage !== false);
+
+  const screenAppearances = clean.appAppearance && clean.appAppearance.screens || {};
+  const targets = {};
+  Object.keys(clean.assets.app.screens).forEach(key => targets[key] = true);
+  Object.keys(previousScreens).forEach(key => targets[key] = true);
+  Object.keys(screenAppearances).forEach(key => targets[key] = true);
+  const cleanScreens = {};
+  Object.keys(targets).forEach(key => {
+    const appearance = screenAppearances[key];
+    cleanScreens[key] = vtdApp_sanitizeThemeAsset_(clean.assets.app.screens[key], previousScreens[key], !appearance || appearance.hasImage !== false);
+  });
+  clean.assets.app.screens = cleanScreens;
+  return clean;
 }
 
 function vtdApp_publicTheme(params) {

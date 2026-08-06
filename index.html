@@ -3093,12 +3093,9 @@
             <h2>Nền đăng nhập</h2>
             <label>Màu nền<input id="loginBgColor" type="color" value="${html(cfg.bgColor || "#e9f3fb")}" oninput="setLoginBgColor(this.value)"></label>
             <label>Độ phủ ảnh nền <output id="bgDimOut">${html(cfg.bgDim || 16)}%</output><input type="range" min="0" max="70" step="1" value="${html(cfg.bgDim || 16)}" oninput="setLoginAppearanceValue('bgDim', this.value)"></label>
-            <div class="file-actions">
-              <button type="button" onclick="openLoginBgPicker()">Chọn ảnh nền</button>
-              <button type="button" onclick="clearLoginBgImage()">Xóa ảnh nền</button>
-            </div>
-            <input id="loginBgFile" class="login-bg-file" type="file" accept="image/*" onchange="setLoginBgImage(this)">
-            <div class="muted">Trạng thái ảnh: ${cfg.hasImage ? "Đã có ảnh nền" : "Chưa có ảnh nền"}. Ảnh được lưu riêng trong bộ nhớ app để tránh lỗi vượt quota.</div>
+            <label>Link ảnh nền Drive<input id="loginBgDriveUrl" type="url" value="${html(cfg.imageUrl || "")}" placeholder="https://drive.google.com/file/d/.../view" onchange="setLoginBgDriveUrl(this.value)"></label>
+            <div class="file-actions"><button type="button" onclick="clearLoginBgImage()">Xóa ảnh nền</button></div>
+            <div class="muted">Trạng thái ảnh: ${cfg.hasImage ? "Đã có link ảnh nền" : "Chưa có ảnh nền"}. Mỗi máy tải ảnh sau khi đăng nhập và lưu vào bộ nhớ riêng.</div>
           </div>
         </div>
       </section>
@@ -4458,9 +4455,6 @@
       if (config.update) {
         appConfig.update = Object.assign({}, appConfig.update || defaultAppConfig.update, config.update);
       }
-      if (config.themeConfig) {
-        applyRemoteThemeConfig(config.themeConfig);
-      }
       ensureCoreConfigEntries(appConfig);
       saveAppConfig(false);
     }
@@ -5067,7 +5061,6 @@
       el("app").classList.add("hidden");
       el("login").classList.remove("hidden");
       if (typeof initLoginAppearance === "function") initLoginAppearance();
-      if (typeof loadPublicThemeConfig === "function") setTimeout(() => loadPublicThemeConfig(false), 0);
     }
     function showApp(){ el("login").classList.add("hidden"); el("app").classList.remove("hidden"); }
     render();
@@ -8035,19 +8028,86 @@
     function themeAssetMetaKey(kind, target){
       return `${kind}:${target || "global"}`;
     }
+    function normalizeThemeAssetUrl(value){
+      const raw = String(value || "").trim();
+      if (!raw) return "";
+      const pathMatch = raw.match(/drive\.google\.com\/file\/d\/([\w-]+)/i);
+      const idMatch = raw.match(/[?&]id=([\w-]+)/i);
+      const fileId = pathMatch ? pathMatch[1] : (idMatch ? idMatch[1] : (/^[\w-]{20,}$/.test(raw) ? raw : ""));
+      if (fileId) return `https://drive.usercontent.google.com/download?id=${encodeURIComponent(fileId)}&export=download`;
+      return /^https:\/\//i.test(raw) ? raw : "";
+    }
+    function themeAssetFileId(value){
+      const raw = String(value || "");
+      const pathMatch = raw.match(/drive\.google\.com\/file\/d\/([\w-]+)/i);
+      const idMatch = raw.match(/[?&]id=([\w-]+)/i);
+      return pathMatch ? pathMatch[1] : (idMatch ? idMatch[1] : "");
+    }
+    function blobAsDataUrl(blob){
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Không đọc được ảnh nền từ Drive."));
+        reader.readAsDataURL(blob);
+      });
+    }
+    async function fetchThemeAsset(url, options, timeoutMs){
+      const controller = window.AbortController ? new AbortController() : null;
+      const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, timeoutMs || 45000);
+      try {
+        return await fetch(url, Object.assign({cache:"no-store"}, options || {}, controller ? {signal:controller.signal} : {}));
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    async function remoteThemeAsset(asset, currentSignature){
+      const url = normalizeThemeAssetUrl(asset && (asset.url || asset.imageUrl || asset.driveUrl || asset.fileId));
+      if (!url) return null;
+      let signature = `${String(asset.version || "")}|${url}`;
+      try {
+        const head = await fetchThemeAsset(url, {method:"HEAD"}, 15000);
+        if (head.ok) {
+          signature += `|${head.headers.get("last-modified") || ""}|${head.headers.get("content-length") || ""}`;
+          if (currentSignature === signature) return {changed:false, signature, dataUrl:""};
+        }
+      } catch (err) {
+        if (currentSignature === signature) return {changed:false, signature, dataUrl:""};
+      }
+      const response = await fetchThemeAsset(url, {method:"GET"}, 60000);
+      if (!response.ok) throw new Error(`Không tải được ảnh nền Drive (${response.status}).`);
+      const type = String(response.headers.get("content-type") || "");
+      if (type && !/^image\//i.test(type)) throw new Error("Link Drive không trả về file ảnh.");
+      const blob = await response.blob();
+      if (blob.size > 12 * 1024 * 1024) throw new Error("Ảnh nền Drive vượt quá 12 MB.");
+      return {changed:true, signature, dataUrl:await blobAsDataUrl(blob)};
+    }
     async function applyThemeAssetIfChanged(kind, target, asset, writer, remover){
-      if (!asset || typeof asset !== "object") return "";
+      if (!asset || typeof asset !== "object") return {changed:false, dataUrl:""};
       const version = String(asset.version || "");
-      if (!version) return "";
       const key = themeAssetMetaKey(kind, target);
       const meta = themeAssetMeta();
+      const remoteUrl = normalizeThemeAssetUrl(asset.url || asset.imageUrl || asset.driveUrl || asset.fileId);
+      if (remoteUrl) {
+        try {
+          const remote = await remoteThemeAsset(asset, String(meta[key] || ""));
+          if (!remote || !remote.changed) return {changed:false, dataUrl:""};
+          await writer(remote.dataUrl);
+          meta[key] = remote.signature;
+          saveThemeAssetMeta(meta);
+          return {changed:true, dataUrl:remote.dataUrl};
+        } catch (err) {
+          console.warn("Theme asset download failed", err);
+          return {changed:false, dataUrl:""};
+        }
+      }
+      if (!version) return {changed:false, dataUrl:""};
       const dataUrl = String(asset.dataUrl || "");
-      if (meta[key] === version) return "";
+      if (meta[key] === version) return {changed:false, dataUrl:""};
       if (dataUrl) await writer(dataUrl);
       else await remover();
       meta[key] = version;
       saveThemeAssetMeta(meta);
-      return dataUrl;
+      return {changed:true, dataUrl};
     }
     function themeConfigWithoutAssets(config){
       const clone = Object.assign({}, config || {});
@@ -8066,9 +8126,9 @@
       }
       const assets = themeConfig.assets || {};
       if (assets.login) {
-        const stored = await applyThemeAssetIfChanged("login", "login", assets.login, writeStoredLoginBgImage, deleteStoredLoginBgImage);
-        if (stored || String(assets.login.dataUrl || "") === "") {
-          loginBgImageCache = stored || "";
+        const result = await applyThemeAssetIfChanged("login", "login", assets.login, writeStoredLoginBgImage, deleteStoredLoginBgImage);
+        if (result.changed) {
+          loginBgImageCache = result.dataUrl || "";
           loginBgImageLoaded = true;
           appConfig.loginAppearance = appConfig.loginAppearance || {};
           appConfig.loginAppearance.hasImage = !!loginBgImageCache;
@@ -8076,9 +8136,9 @@
       }
       const appAssets = assets.app || {};
       if (appAssets.global) {
-        const stored = await applyThemeAssetIfChanged("app", "global", appAssets.global, data => writeStoredAppBgImage("global", data), () => deleteStoredAppBgImage("global"));
-        if (stored || String(appAssets.global.dataUrl || "") === "") {
-          appBgImageCache.global = stored || "";
+        const result = await applyThemeAssetIfChanged("app", "global", appAssets.global, data => writeStoredAppBgImage("global", data), () => deleteStoredAppBgImage("global"));
+        if (result.changed) {
+          appBgImageCache.global = result.dataUrl || "";
           appBgImageLoaded.global = true;
           appAppearanceTargetConfig("global").hasImage = !!appBgImageCache.global;
         }
@@ -8086,9 +8146,9 @@
       const screenAssets = appAssets.screens || {};
       for (const target of Object.keys(screenAssets)) {
         const asset = screenAssets[target];
-        const stored = await applyThemeAssetIfChanged("app", target, asset, data => writeStoredAppBgImage(target, data), () => deleteStoredAppBgImage(target));
-        if (stored || String(asset && asset.dataUrl || "") === "") {
-          appBgImageCache[target] = stored || "";
+        const result = await applyThemeAssetIfChanged("app", target, asset, data => writeStoredAppBgImage(target, data), () => deleteStoredAppBgImage(target));
+        if (result.changed) {
+          appBgImageCache[target] = result.dataUrl || "";
           appBgImageLoaded[target] = true;
           appAppearanceTargetConfig(target).hasImage = !!appBgImageCache[target];
         }
@@ -8219,6 +8279,19 @@
       saveAppConfig(false);
       initLoginAppearance();
     }
+    function setLoginBgDriveUrl(value){
+      const cfg = loginAppearanceConfig();
+      const url = normalizeThemeAssetUrl(value);
+      if (String(value || "").trim() && !url) {
+        toast("Link ảnh nền không hợp lệ.", "err");
+        return;
+      }
+      cfg.imageUrl = url;
+      cfg.hasImage = !!url;
+      cfg.imageVersion = `drive_${Date.now()}`;
+      saveAppConfig(false);
+      if (view === "admin" && adminTab === "appearance") admin();
+    }
     function updateLoginAppearanceOutputs(){
       const cfg = loginAppearanceConfig();
       const map = {
@@ -8244,6 +8317,7 @@
       loginBgImageLoaded = true;
       appConfig.loginAppearance = appConfig.loginAppearance || {};
       appConfig.loginAppearance.hasImage = false;
+      appConfig.loginAppearance.imageUrl = "";
       appConfig.loginAppearance.imageVersion = themeAssetVersion("");
       saveAppConfig(false);
       initLoginAppearance();
@@ -8516,12 +8590,15 @@
       appBgImageLoaded[target] = true;
       return appBgImageCache[target];
     }
-    function themeAssetPayload(dataUrl, version){
-      dataUrl = String(dataUrl || "");
-      return {
-        version: version || themeAssetVersion(dataUrl),
-        dataUrl
-      };
+    function themeAssetPayload(url, version){
+      url = normalizeThemeAssetUrl(url);
+      const payload = {version: version || (url ? `drive_${Date.now()}` : themeAssetVersion(""))};
+      if (url) {
+        payload.url = url;
+        const fileId = themeAssetFileId(url);
+        if (fileId) payload.fileId = fileId;
+      }
+      return payload;
     }
     async function buildThemeConfigPayload(){
       const loginCfg = Object.assign({}, loginAppearanceConfig());
@@ -8539,28 +8616,30 @@
           app: {global: null, screens: {}}
         }
       };
-      const loginImage = await currentLoginBgImage();
-      loginCfg.imageVersion = loginCfg.imageVersion || themeAssetVersion(loginImage);
+      const loginImageUrl = normalizeThemeAssetUrl(loginCfg.imageUrl || "");
+      loginCfg.imageUrl = loginImageUrl;
+      loginCfg.imageVersion = loginCfg.imageVersion || (loginImageUrl ? `drive_${Date.now()}` : themeAssetVersion(""));
       payload.loginAppearance.imageVersion = loginCfg.imageVersion;
-      payload.loginAppearance.hasImage = !!loginImage;
-      payload.assets.login = themeAssetPayload(loginImage, loginCfg.imageVersion);
+      payload.loginAppearance.imageUrl = loginImageUrl;
+      payload.loginAppearance.hasImage = !!loginImageUrl;
+      payload.assets.login = themeAssetPayload(loginImageUrl, loginCfg.imageVersion);
 
-      const globalImage = await currentAppBgImage("global");
-      appCfg.global.imageVersion = appCfg.global.imageVersion || themeAssetVersion(globalImage);
-      appCfg.global.hasImage = !!globalImage;
+      const globalImageUrl = normalizeThemeAssetUrl(appCfg.global.imageUrl || "");
+      appCfg.global.imageVersion = appCfg.global.imageVersion || (globalImageUrl ? `drive_${Date.now()}` : themeAssetVersion(""));
+      appCfg.global.hasImage = !!globalImageUrl;
       payload.appAppearance.global = Object.assign({}, appCfg.global);
-      payload.assets.app.global = themeAssetPayload(globalImage, appCfg.global.imageVersion);
+      payload.assets.app.global = themeAssetPayload(globalImageUrl, appCfg.global.imageVersion);
 
       const targets = new Set(Object.keys(appCfg.screens || {}));
       targets.add(appAppearanceTarget || "global");
       targets.delete("global");
       for (const target of targets) {
         const cfg = appAppearanceTargetConfig(target);
-        const image = await currentAppBgImage(target);
-        cfg.imageVersion = cfg.imageVersion || themeAssetVersion(image);
-        cfg.hasImage = !!image;
+        const imageUrl = normalizeThemeAssetUrl(cfg.imageUrl || "");
+        cfg.imageVersion = cfg.imageVersion || (imageUrl ? `drive_${Date.now()}` : themeAssetVersion(""));
+        cfg.hasImage = !!imageUrl;
         payload.appAppearance.screens[target] = Object.assign({}, cfg);
-        payload.assets.app.screens[target] = themeAssetPayload(image, cfg.imageVersion);
+        payload.assets.app.screens[target] = themeAssetPayload(imageUrl, cfg.imageVersion);
       }
       return payload;
     }
