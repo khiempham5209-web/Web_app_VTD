@@ -396,6 +396,19 @@ function vtdApp_publicSystemConfig_(config) {
       themeConfig = {};
     }
   }
+  const externalThemeImage = vtdApp_driveThemeUrl_(config.themeImageUrl || "");
+  if (externalThemeImage.url) {
+    themeConfig.loginAppearance = themeConfig.loginAppearance && typeof themeConfig.loginAppearance === "object" ? themeConfig.loginAppearance : {};
+    themeConfig.loginAppearance.hasImage = true;
+    themeConfig.loginAppearance.imageUrl = externalThemeImage.url;
+    themeConfig.assets = themeConfig.assets && typeof themeConfig.assets === "object" ? themeConfig.assets : {};
+    const currentLoginAsset = themeConfig.assets.login && typeof themeConfig.assets.login === "object" ? themeConfig.assets.login : {};
+    themeConfig.assets.login = {
+      version: String(currentLoginAsset.version || themeConfig.loginAppearance.imageVersion || ("drive_" + externalThemeImage.fileId)),
+      url: externalThemeImage.url,
+      fileId: externalThemeImage.fileId
+    };
+  }
   return {
     returnThApiUrl: String(config.returnThApiUrl || ""),
     docOpsApiUrl: String(config.docOpsApiUrl || ""),
@@ -495,12 +508,15 @@ function vtdApp_systemConfig_() {
     try { return JSON.parse(cached); } catch (err) {}
   }
   const sh = vtdApp_systemConfigSheet_();
-  const config = {returnThApiUrl: "", docOpsApiUrl: "", uiConfig: "", update: "", themeConfig: ""};
+  const config = {returnThApiUrl: "", docOpsApiUrl: "", uiConfig: "", update: "", themeConfig: "", themeImageUrl: ""};
   if (sh.getLastRow() > 1) {
-    const values = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues();
+    const values = sh.getRange(2, 1, sh.getLastRow() - 1, 4).getValues();
     values.forEach(row => {
       const key = String(row[0] || "").trim();
-      if (key) config[key] = String(row[1] || "").trim();
+      if (key) {
+        config[key] = String(row[1] || "").trim();
+        if (key === "themeConfig" && vtdApp_driveThemeUrl_(row[3]).url) config.themeImageUrl = String(row[3] || "").trim();
+      }
     });
   }
   vtdApp_putSmallCache_("VTD_SYSTEM_CONFIG", config, 120);
@@ -529,16 +545,25 @@ function vtdApp_saveSystemConfig_(config, updatedBy) {
   const sh = vtdApp_systemConfigSheet_();
   const current = {};
   if (sh.getLastRow() > 1) {
-    const keys = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues();
+    const keys = sh.getRange(2, 1, sh.getLastRow() - 1, 4).getValues();
     keys.forEach((row, i) => {
       const key = String(row[0] || "").trim();
-      if (key) current[key] = i + 2;
+      if (key) current[key] = {row: i + 2, extra: String(row[3] || "").trim()};
     });
   }
   Object.keys(config || {}).forEach(key => {
-    const row = current[key];
-    const values = [key, String(config[key] || ""), new Date(), String(updatedBy || "")];
-    if (row) sh.getRange(row, 1, 1, values.length).setValues([values]);
+    const currentRow = current[key];
+    let extra = String(updatedBy || "");
+    if (key === "themeConfig") {
+      let parsed = {};
+      try { parsed = JSON.parse(String(config[key] || "{}")); } catch (err) {}
+      const asset = parsed.assets && parsed.assets.login || {};
+      const appearance = parsed.loginAppearance || {};
+      const configuredLink = String(asset.url || asset.imageUrl || asset.driveUrl || appearance.imageUrl || "").trim();
+      extra = configuredLink || (currentRow && vtdApp_driveThemeUrl_(currentRow.extra).url ? currentRow.extra : "");
+    }
+    const values = [key, String(config[key] || ""), new Date(), extra];
+    if (currentRow) sh.getRange(currentRow.row, 1, 1, values.length).setValues([values]);
     else sh.appendRow(values);
   });
   CacheService.getScriptCache().remove("VTD_SYSTEM_CONFIG");
