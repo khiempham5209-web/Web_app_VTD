@@ -11,6 +11,7 @@ const CONFIG = {
   sheetName: "Chứng từ_FF",
   skuSheetName: "DS SKU",
   productReturnSheetName: "Hoàn sản phẩm",
+  skuSchemaVersion: 2,
   rootFolderId: "",
   rootFolderName: "Chung_tu_FF_Images",
   timezone: "Asia/Saigon"
@@ -72,7 +73,9 @@ function apiSkuInit_() {
     sheetName: sh.getName(),
     lastRow: sh.getLastRow(),
     lastColumn: sh.getLastColumn(),
-    headers: headers_(sh)
+    headers: headers_(sh),
+    schemaVersion: CONFIG.skuSchemaVersion,
+    dataVersion: PropertiesService.getScriptProperties().getProperty("PN_DOCOPS_SKU_DATA_VERSION") || ""
   });
 }
 
@@ -86,13 +89,21 @@ function apiSkuPage_(params) {
   const take = Math.min(pageSize, lastRow - startRow + 1);
   const values = sh.getRange(startRow, 1, take, lastCol).getDisplayValues();
   const col = headerMap_(headers_(sh));
-  const records = values.map((row, index) => ({
-    rowNumber: startRow + index,
-    material: clean_(pick_(row, col, ["ma vat tu", "material", "ma sp"])),
-    barcode: clean_(pick_(row, col, ["barcode", "ma vach"])),
-    name: clean_(pick_(row, col, ["ten vat tu", "ten san pham", "ten sku"])),
-    quyCach: clean_(pick_(row, col, ["quy cach", "don vi"]))
-  })).filter(row => row.material || row.barcode || row.name);
+  const records = values.map((row, index) => {
+    const dimensions = parseSkuDimensions_(pick_(row, col, ["kich thuoc", "kich thuoc cm"]));
+    return {
+      rowNumber: startRow + index,
+      material: clean_(pick_(row, col, ["ma vat tu", "material", "ma sp"])),
+      barcode: clean_(pick_(row, col, ["barcode", "ma vach"])),
+      name: clean_(pick_(row, col, ["ten vat tu", "ten san pham", "ten sku"])),
+      quyCach: clean_(pick_(row, col, ["quy cach", "don vi"])),
+      dimensions: clean_(pick_(row, col, ["kich thuoc", "kich thuoc cm"])),
+      lengthCm: dimensions.lengthCm,
+      widthCm: dimensions.widthCm,
+      heightCm: dimensions.heightCm,
+      weightGram: parseSkuWeightGram_(pick_(row, col, ["khoi luong", "khoi luong g", "trong luong"]))
+    };
+  }).filter(row => row.material || row.barcode || row.name);
   return ok_({records, count: records.length, done: startRow + take > lastRow, nextRow: startRow + take, lastRow});
 }
 
@@ -200,6 +211,15 @@ function apiSave_(params) {
     }
   }
 
+  let skuMeasurementsUpdated = 0;
+  if (hasProducts) {
+    try {
+      skuMeasurementsUpdated = fillBlankSkuMeasurements_(items);
+    } catch (skuUpdateError) {
+      console.error(skuUpdateError && skuUpdateError.stack || skuUpdateError);
+    }
+  }
+
   SpreadsheetApp.flush();
   callRejectSyncLocal_(found.rowNumber);
   const dataVersion = String(Date.now());
@@ -214,6 +234,7 @@ function apiSave_(params) {
     user,
     productCount: productRows.length,
     productLinks: productUploads.map(row => row.linkAnh),
+    skuMeasurementsUpdated,
     dataVersion
   });
   rememberSavedRequest_(clientId, response);
@@ -262,6 +283,81 @@ function formatProductDimensions_(item) {
 
 function formatProductWeight_(weightGram) {
   return cleanNumberText_(weightGram) + " g";
+}
+
+function parseSkuDimensions_(value) {
+  const text = clean_(value).replace(/,/g, ".").replace(/cm/gi, "");
+  const parts = text.split(/[xX×*]/).map(part => Number(String(part).trim())).filter(number => Number.isFinite(number));
+  return {
+    lengthCm: parts.length > 0 && parts[0] > 0 ? parts[0] : 0,
+    widthCm: parts.length > 1 && parts[1] > 0 ? parts[1] : 0,
+    heightCm: parts.length > 2 && parts[2] > 0 ? parts[2] : 0
+  };
+}
+
+function parseSkuWeightGram_(value) {
+  const text = clean_(value).toLowerCase().replace(/,/g, ".");
+  const match = text.match(/-?\d+(?:\.\d+)?/);
+  if (!match) return 0;
+  const number = Number(match[0]);
+  if (!(number > 0)) return 0;
+  return /kg\b/.test(text) ? number * 1000 : number;
+}
+
+function fillBlankSkuMeasurements_(items) {
+  if (!items || !items.length) return 0;
+  const sh = skuSheet_();
+  const lastRow = sh.getLastRow();
+  const lastCol = sh.getLastColumn();
+  if (lastRow < 2 || lastCol < 1) return 0;
+
+  const headers = headers_(sh);
+  const col = headerMap_(headers);
+  const materialCol = findColumnByAliases_(col, ["ma vat tu", "material", "ma sp"]);
+  const barcodeCol = findColumnByAliases_(col, ["barcode", "ma vach"]);
+  const dimensionsCol = findColumnByAliases_(col, ["kich thuoc", "kich thuoc cm"]);
+  const weightCol = findColumnByAliases_(col, ["khoi luong", "khoi luong g", "trong luong"]);
+  if ((!materialCol && !barcodeCol) || (!dimensionsCol && !weightCol)) return 0;
+
+  const values = sh.getRange(2, 1, lastRow - 1, lastCol).getDisplayValues();
+  const byMaterial = {};
+  const byBarcode = {};
+  values.forEach((row, index) => {
+    const sheetRow = index + 2;
+    const material = materialCol ? clean_(row[materialCol - 1]) : "";
+    const barcode = barcodeCol ? clean_(row[barcodeCol - 1]) : "";
+    if (material && !byMaterial[material]) byMaterial[material] = sheetRow;
+    if (barcode && !byBarcode[barcode]) byBarcode[barcode] = sheetRow;
+  });
+
+  let updated = 0;
+  items.forEach(item => {
+    const sheetRow = byMaterial[clean_(item.material)] || byBarcode[clean_(item.barcode)] || 0;
+    if (!sheetRow) return;
+    const current = values[sheetRow - 2];
+    if (dimensionsCol && !clean_(current[dimensionsCol - 1])) {
+      sh.getRange(sheetRow, dimensionsCol).setValue(
+        cleanNumberText_(item.lengthCm) + "x" + cleanNumberText_(item.widthCm) + "x" + cleanNumberText_(item.heightCm)
+      );
+      current[dimensionsCol - 1] = "updated";
+      updated++;
+    }
+    if (weightCol && !clean_(current[weightCol - 1])) {
+      sh.getRange(sheetRow, weightCol).setValue(Number(item.weightGram));
+      current[weightCol - 1] = "updated";
+      updated++;
+    }
+  });
+  if (updated > 0) PropertiesService.getScriptProperties().setProperty("PN_DOCOPS_SKU_DATA_VERSION", String(Date.now()));
+  return updated;
+}
+
+function findColumnByAliases_(columnMap, aliases) {
+  for (let i = 0; i < aliases.length; i++) {
+    const column = Number(columnMap[norm_(aliases[i])] || 0);
+    if (column) return column;
+  }
+  return 0;
 }
 
 function cleanNumberText_(value) {
