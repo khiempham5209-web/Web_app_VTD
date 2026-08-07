@@ -9801,6 +9801,8 @@
     }
     function docOpsReturnTypeChange(value){
       docOpsState.returnType = String(value || "");
+      docOpsState.docCollapsed = false;
+      docOpsState.productCollapsed = false;
       docops();
     }
     function toggleDocOpsSection(type){
