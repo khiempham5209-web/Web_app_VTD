@@ -9,6 +9,8 @@ as Web app. Frontend goi URL /exec cua SCP rieng nay.
 const CONFIG = {
   spreadsheetId: "1V39AVE2JfEtMPYqnG1-J75fKPDXU37fCnJ9Na3UXOco",
   sheetName: "Chứng từ_FF",
+  skuSheetName: "DS SKU",
+  productReturnSheetName: "Hoàn sản phẩm",
   rootFolderId: "",
   rootFolderName: "Chung_tu_FF_Images",
   timezone: "Asia/Saigon"
@@ -23,7 +25,7 @@ function doPost(e) {
     const body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
     const action = String(body.action || "").trim();
     const params = body.params || {};
-    const map = {init: apiInit_, lookup: apiLookup_, page: apiPage_, today: apiToday_, save: apiSave_};
+    const map = {init: apiInit_, lookup: apiLookup_, page: apiPage_, today: apiToday_, skuInit: apiSkuInit_, skuPage: apiSkuPage_, save: apiSave_};
     if (!map[action]) return json_({ok: false, message: "Action khong hop le: " + action});
     return json_(map[action](params));
   } catch (err) {
@@ -64,6 +66,36 @@ function apiPage_(params) {
   return ok_({records, count: records.length, done: startRow + take > lastRow, nextRow: startRow + take, lastRow});
 }
 
+function apiSkuInit_() {
+  const sh = skuSheet_();
+  return ok_({
+    sheetName: sh.getName(),
+    lastRow: sh.getLastRow(),
+    lastColumn: sh.getLastColumn(),
+    headers: headers_(sh)
+  });
+}
+
+function apiSkuPage_(params) {
+  const sh = skuSheet_();
+  const lastRow = sh.getLastRow();
+  const lastCol = Math.min(sh.getLastColumn(), 10);
+  const startRow = Math.max(2, Number(params.startRow || params.cursor || 2));
+  const pageSize = Math.max(1, Math.min(Number(params.pageSize || 500), 2000));
+  if (startRow > lastRow) return ok_({records: [], count: 0, done: true, nextRow: startRow, lastRow});
+  const take = Math.min(pageSize, lastRow - startRow + 1);
+  const values = sh.getRange(startRow, 1, take, lastCol).getDisplayValues();
+  const col = headerMap_(headers_(sh));
+  const records = values.map((row, index) => ({
+    rowNumber: startRow + index,
+    material: clean_(pick_(row, col, ["ma vat tu", "material", "ma sp"])),
+    barcode: clean_(pick_(row, col, ["barcode", "ma vach"])),
+    name: clean_(pick_(row, col, ["ten vat tu", "ten san pham", "ten sku"])),
+    quyCach: clean_(pick_(row, col, ["quy cach", "don vi"]))
+  })).filter(row => row.material || row.barcode || row.name);
+  return ok_({records, count: records.length, done: startRow + take > lastRow, nextRow: startRow + take, lastRow});
+}
+
 function apiToday_(params) {
   params = params || {};
   const today = clean_(params.date) || Utilities.formatDate(new Date(), CONFIG.timezone, "dd/MM/yyyy");
@@ -95,6 +127,15 @@ function apiSave_(params) {
   const rowNumber = Number(params.rowNumber || 0);
   if (!query && !rowNumber) return fail_("Thieu ma don can luu.");
 
+  const clientId = clean_(params.clientId);
+  const saved = readSavedRequest_(clientId);
+  if (saved) return saved;
+
+  const returnType = clean_(params.returnType || params.loaiHoan || "Chung tu");
+  const normalizedType = norm_(returnType);
+  const hasProducts = normalizedType === "san pham + chung tu" || normalizedType === "product-docs";
+  if (normalizedType !== "chung tu" && normalizedType !== "docs" && !hasProducts) return fail_("Loai hoan khong hop le.");
+
   const sh = sheet_();
   const headers = headers_(sh);
   const col = headerMap_(headers);
@@ -103,9 +144,20 @@ function apiSave_(params) {
 
   const maDonForFolder = clean_(query || found.record.maDon || found.record.po || found.record.orderNo);
   const files = Array.isArray(params.files) ? params.files : [];
-  const upload = files.length ? uploadFiles_(maDonForFolder, files) : {linkAnh: "", files: [], folderUrl: ""};
+  if (!files.length) return fail_("Chung tu can it nhat 1 anh.");
+  const items = hasProducts ? normalizeProductItems_(params.items) : [];
+  if (hasProducts && !items.length) return fail_("San pham + chung tu can it nhat 1 SKU.");
+  for (let i = 0; i < items.length; i++) {
+    const invalid = validateProductItem_(items[i], i + 1);
+    if (invalid) return fail_(invalid);
+  }
+
+  const upload = uploadFiles_(maDonForFolder, files);
+  const productUploads = items.map(item => uploadProductFiles_(found.record.orderNo || params.orderNo || maDonForFolder, item));
   const now = new Date();
-  const timeText = Utilities.formatDate(now, CONFIG.timezone, "dd/MM/yyyy HH:mm:ss");
+  const dateText = Utilities.formatDate(now, CONFIG.timezone, "dd/MM/yyyy");
+  const clockText = Utilities.formatDate(now, CONFIG.timezone, "HH:mm:ss");
+  const timeText = dateText + " " + clockText;
   const user = clean_(params.userEmail || params.user || Session.getActiveUser().getEmail() || "");
 
   setCellByAliases_(sh, found.rowNumber, col, ["xac thuc hoa don"], clean_(params.xacThuc || params.xacThucHoaDon));
@@ -115,10 +167,41 @@ function apiSave_(params) {
   setCellByAliases_(sh, found.rowNumber, col, ["thoi gian"], timeText);
   setCellByAliases_(sh, found.rowNumber, col, ["user thao tac"], user);
 
+  const productRows = [];
+  if (hasProducts) {
+    const productSheet = productReturnSheet_();
+    const productHeaders = headers_(productSheet);
+    const productCol = headerMap_(productHeaders);
+    items.forEach((item, index) => {
+      const values = new Array(productHeaders.length).fill("");
+      setArrayByAliases_(values, productCol, ["ngay hoan tra"], dateText);
+      setArrayByAliases_(values, productCol, ["thoi gian"], clockText);
+      setArrayByAliases_(values, productCol, ["ma don", "ma don ghtk"], found.record.maDonGhtk || found.record.maDon || query);
+      setArrayByAliases_(values, productCol, ["ten khach hang", "khach hang"], found.record.customer || "");
+      setArrayByAliases_(values, productCol, ["so don hang", "od"], found.record.orderNo || "");
+      setArrayByAliases_(values, productCol, ["ma po", "po"], found.record.po || "");
+      setArrayByAliases_(values, productCol, ["ma vat tu", "material"], item.material);
+      setArrayByAliases_(values, productCol, ["barcode", "ma vach"], item.barcode);
+      setArrayByAliases_(values, productCol, ["ten san pham", "ten vat tu"], item.name);
+      setArrayByAliases_(values, productCol, ["so luong"], item.quantity);
+      setArrayByAliases_(values, productCol, ["tinh trang ff", "tinh trang"], item.status);
+      setArrayByAliases_(values, productCol, ["ghi chu"], item.note);
+      setArrayByAliases_(values, productCol, ["loai sieu thi"], found.record.storeType || "");
+      setArrayByAliases_(values, productCol, ["hinh anh", "link anh"], productUploads[index].linkAnh);
+      setArrayByAliases_(values, productCol, ["user thao tac", "user"], user);
+      productRows.push(values);
+    });
+    if (productRows.length) {
+      const startRow = Math.max(2, productSheet.getLastRow() + 1);
+      productSheet.getRange(startRow, 1, productRows.length, productHeaders.length).setValues(productRows);
+    }
+  }
+
   SpreadsheetApp.flush();
+  callRejectSyncLocal_(found.rowNumber);
   const dataVersion = String(Date.now());
   PropertiesService.getScriptProperties().setProperty("PN_DOCOPS_DATA_VERSION", dataVersion);
-  return ok_({
+  const response = ok_({
     message: "Da luu thao tac chung tu.",
     rowNumber: found.rowNumber,
     linkAnh: upload.linkAnh,
@@ -126,14 +209,65 @@ function apiSave_(params) {
     folderUrl: upload.folderUrl,
     time: timeText,
     user,
+    productCount: productRows.length,
+    productLinks: productUploads.map(row => row.linkAnh),
     dataVersion
   });
+  rememberSavedRequest_(clientId, response);
+  return response;
+}
+
+function normalizeProductItems_(items) {
+  return (Array.isArray(items) ? items : []).map(item => ({
+    clientItemId: clean_(item.clientItemId),
+    material: clean_(item.material || item.maVatTu),
+    barcode: clean_(item.barcode),
+    name: clean_(item.name || item.tenSanPham),
+    quantity: Number(item.quantity || item.soLuong || 0),
+    status: clean_(item.status || item.tinhTrang),
+    note: clean_(item.note || item.ghiChu),
+    files: Array.isArray(item.files) ? item.files : (Array.isArray(item.images) ? item.images : [])
+  }));
+}
+
+function validateProductItem_(item, number) {
+  const label = "SKU " + number + ": ";
+  if (!item.name) return label + "thieu ten san pham.";
+  if (!item.barcode) return label + "thieu Barcode.";
+  if (!item.material) return label + "thieu ma vat tu.";
+  if (!item.status) return label + "thieu tinh trang.";
+  if (!(item.quantity > 0)) return label + "thieu so luong hop le.";
+  if (!item.note) return label + "thieu ghi chu.";
+  if (!item.files.length) return label + "can it nhat 1 anh.";
+  return "";
+}
+
+function callRejectSyncLocal_(rowNumber) {
+  try {
+    if (typeof syncOneChungTuKhongDatYCBySourceRow_ === "function") {
+      syncOneChungTuKhongDatYCBySourceRow_(rowNumber);
+    }
+  } catch (err) {
+    console.error(err && err.stack || err);
+  }
 }
 
 function sheet_() {
   const ss = SpreadsheetApp.openById(CONFIG.spreadsheetId);
   const sh = ss.getSheetByName(CONFIG.sheetName);
   if (!sh) throw new Error("Khong thay tab " + CONFIG.sheetName);
+  return sh;
+}
+
+function skuSheet_() {
+  const sh = SpreadsheetApp.openById(CONFIG.spreadsheetId).getSheetByName(CONFIG.skuSheetName);
+  if (!sh) throw new Error("Khong thay tab " + CONFIG.skuSheetName);
+  return sh;
+}
+
+function productReturnSheet_() {
+  const sh = SpreadsheetApp.openById(CONFIG.spreadsheetId).getSheetByName(CONFIG.productReturnSheetName);
+  if (!sh) throw new Error("Khong thay tab " + CONFIG.productReturnSheetName);
   return sh;
 }
 
@@ -225,6 +359,36 @@ function uploadFiles_(maDon, files) {
   };
 }
 
+function uploadProductFiles_(orderNo, item) {
+  const files = item.files || [];
+  const root = rootFolder_();
+  const useFolder = files.length > 1;
+  const folder = useFolder ? getOrCreateSubFolder_(root, safeName_(orderNo || "hoan-san-pham")) : root;
+  const uploaded = [];
+  files.forEach((file, index) => {
+    const mimeType = clean_(file.mimeType || file.type || "image/jpeg");
+    const base64 = String(file.base64 || file.data || "").replace(/^data:[^,]+,/, "");
+    if (!base64) throw new Error("Anh san pham " + (index + 1) + " thieu du lieu base64.");
+    const extMatch = safeName_(file.fileName || file.name || "").match(/(\.[a-z0-9]{2,5})$/i);
+    const ext = extMatch ? extMatch[1] : ".jpg";
+    const fileName = "PN_" + safeName_(orderNo || "don") + "_" + safeName_(item.material || item.barcode || "sku") + "_" + (index + 1) + ext;
+    const driveFile = folder.createFile(Utilities.newBlob(Utilities.base64Decode(base64), mimeType, fileName));
+    driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    uploaded.push({
+      id: driveFile.getId(),
+      name: driveFile.getName(),
+      url: driveFile.getUrl(),
+      directUrl: "https://drive.google.com/uc?id=" + driveFile.getId()
+    });
+  });
+  if (useFolder) folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return {
+    linkAnh: useFolder ? folder.getUrl() : uploaded[0].directUrl,
+    folderUrl: useFolder ? folder.getUrl() : "",
+    files: uploaded
+  };
+}
+
 function pnImageFileName_(maDon, name, index) {
   let fileName = safeName_(name || "");
   const extMatch = fileName.match(/(\.[a-z0-9]{2,5})$/i);
@@ -252,6 +416,30 @@ function setCellByAliases_(sh, rowNumber, col, aliases, value) {
   const c = firstCol_(col, aliases);
   if (!c) return;
   sh.getRange(rowNumber, c).setValue(value);
+}
+
+function setArrayByAliases_(row, col, aliases, value) {
+  const c = firstCol_(col, aliases);
+  if (c) row[c - 1] = value;
+}
+
+function readSavedRequest_(clientId) {
+  if (!clientId) return null;
+  const raw = PropertiesService.getScriptProperties().getProperty("PN_SAVE_" + safePropertyKey_(clientId));
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch (err) { return null; }
+}
+
+function rememberSavedRequest_(clientId, response) {
+  if (!clientId) return;
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty("PN_SAVE_" + safePropertyKey_(clientId), JSON.stringify(response));
+  const savedKeys = Object.keys(props.getProperties()).filter(key => key.indexOf("PN_SAVE_") === 0);
+  if (savedKeys.length > 300) props.deleteProperty(savedKeys[0]);
+}
+
+function safePropertyKey_(value) {
+  return clean_(value).replace(/[^a-z0-9_-]/gi, "_").slice(0, 80);
 }
 
 function firstCol_(col, aliases) {
