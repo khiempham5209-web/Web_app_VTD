@@ -1565,8 +1565,8 @@
         staffStatusMap: "DONE/ROUTE_PJ2 = Đã đồng bộ; RUNNING/YES = Đang đồng bộ; ERROR = Lỗi"
       },
       update: {
-        latestVersion: "5.2",
-        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v5.2.apk",
+        latestVersion: "5.3",
+        apkUrl: "https://raw.githubusercontent.com/khiempham5209-web/Web_app_VTD/main/VTD-ChungTu-v5.3.apk",
         folderUrl: "https://drive.google.com/drive/u/0/folders/1IOAYOqkDp1ddfs197F-ozZwdNiokpmDV",
         note: "Bản mới của Chứng từ FF đã sẵn sàng."
       },
@@ -4533,7 +4533,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.2";
+    const APP_VERSION = "5.3";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -7497,6 +7497,9 @@
 
     async function prepareDocOpsQueueImages(imagePayloads){
       await cleanupOrphanedQueueImages();
+      if (window.VTDNative && typeof window.VTDNative === "object") {
+        return (imagePayloads || []).slice();
+      }
       const prepared = [];
       for (const raw of (imagePayloads || [])) {
         const image = raw || {};
@@ -10102,7 +10105,8 @@
         if (error) return toast(error, "err");
       }
       docOpsState.saving = true;
-      docops();
+      const nativeFastQueue = !!(window.VTDNative && typeof window.VTDNative === "object");
+      if (!nativeFastQueue) docops();
       try {
         const imageRefs = files.map((file, index) => Object.assign({}, file || {}, {
           sourceFile: file,
