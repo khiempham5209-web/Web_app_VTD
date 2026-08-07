@@ -186,9 +186,12 @@ function apiSave_(params) {
       setArrayByAliases_(values, productCol, ["so luong"], item.quantity);
       setArrayByAliases_(values, productCol, ["tinh trang ff", "tinh trang"], item.status);
       setArrayByAliases_(values, productCol, ["ghi chu"], item.note);
+      setArrayByAliases_(values, productCol, ["kich thuoc"], formatProductDimensions_(item));
+      setArrayByAliases_(values, productCol, ["khoi luong", "trong luong"], formatProductWeight_(item.weightGram));
       setArrayByAliases_(values, productCol, ["loai sieu thi"], found.record.storeType || "");
       setArrayByAliases_(values, productCol, ["hinh anh", "link anh"], productUploads[index].linkAnh);
       setArrayByAliases_(values, productCol, ["user thao tac", "user"], user);
+      setArrayByAliases_(values, productCol, ["cbm"], calculateProductCbm_(item));
       productRows.push(values);
     });
     if (productRows.length) {
@@ -226,6 +229,10 @@ function normalizeProductItems_(items) {
     quantity: Number(item.quantity || item.soLuong || 0),
     status: clean_(item.status || item.tinhTrang),
     note: clean_(item.note || item.ghiChu),
+    lengthCm: Number(item.lengthCm || item.dai || 0),
+    widthCm: Number(item.widthCm || item.rong || 0),
+    heightCm: Number(item.heightCm || item.cao || 0),
+    weightGram: Number(item.weightGram || item.khoiLuong || 0),
     files: Array.isArray(item.files) ? item.files : (Array.isArray(item.images) ? item.images : [])
   }));
 }
@@ -238,8 +245,28 @@ function validateProductItem_(item, number) {
   if (!item.status) return label + "thieu tinh trang.";
   if (!(item.quantity > 0)) return label + "thieu so luong hop le.";
   if (!item.note) return label + "thieu ghi chu.";
+  if (!(item.lengthCm > 0) || !(item.widthCm > 0) || !(item.heightCm > 0)) return label + "thieu kich thuoc Dai, Rong hoac Cao.";
+  if (!(item.weightGram > 0)) return label + "thieu khoi luong theo gram.";
   if (!item.files.length) return label + "can it nhat 1 anh.";
   return "";
+}
+
+function calculateProductCbm_(item) {
+  const cbm = Number(item.lengthCm) * Number(item.widthCm) * Number(item.heightCm) * Number(item.quantity) / 1000000;
+  return Number(cbm.toFixed(6));
+}
+
+function formatProductDimensions_(item) {
+  return cleanNumberText_(item.lengthCm) + " x " + cleanNumberText_(item.widthCm) + " x " + cleanNumberText_(item.heightCm) + " cm";
+}
+
+function formatProductWeight_(weightGram) {
+  return cleanNumberText_(weightGram) + " g";
+}
+
+function cleanNumberText_(value) {
+  const number = Number(value || 0);
+  return Number.isInteger(number) ? String(number) : String(Number(number.toFixed(2)));
 }
 
 function callRejectSyncLocal_(rowNumber) {
