@@ -208,6 +208,8 @@
     .sku-form { display: grid; gap: 10px; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #fbfdff; }
     .sku-added-list { display: grid; gap: 7px; margin-top: 9px; }
     .sku-added-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); padding: 8px 9px; }
+    .sku-added-item.docops-editable { cursor: pointer; }
+    .sku-added-item.docops-editable.editing { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
     .sku-added-item strong { font-size: .94em; font-weight: 500; overflow-wrap: anywhere; }
     .sku-added-item span { color: var(--muted); font-size: .86em; }
     .sku-added-item button { min-height: 30px; padding: 0 8px; font-size: 12px; }
@@ -1462,7 +1464,7 @@
       xacThuc: "Đã nhận chứng từ", status: "Bình thường", note: "", saving: false,
       productSearch: "", selectedSku: null, productStatus: "", quantity: "", productNote: "", productOtherNote: "",
       lengthCm: "", widthCm: "", heightCm: "", weightGram: "",
-      items: [], docCollapsed: false, productCollapsed: false, skuLoaded: false, loadingSku: false
+      items: [], editingIndex: -1, docCollapsed: false, productCollapsed: false, skuLoaded: false, loadingSku: false
     };
     const loaiBySlog = {
       O1B1: ["Sản phẩm", "Chứng từ"],
@@ -9966,6 +9968,7 @@
       docOpsState.widthCm = "";
       docOpsState.heightCm = "";
       docOpsState.weightGram = "";
+      docOpsState.editingIndex = -1;
       live.docOpsProductFiles = [];
     }
     function validateDocOpsProduct(item, label){
@@ -10007,24 +10010,66 @@
     }
     function docOpsProductsForSave(){
       const items = (docOpsState.items || []).slice();
-      if (docOpsProductDraftHasValue()) items.push(docOpsProductDraftItem());
+      if (docOpsProductDraftHasValue()) {
+        const draft = docOpsProductDraftItem();
+        const editingIndex = Number(docOpsState.editingIndex);
+        if (editingIndex >= 0 && editingIndex < items.length) items[editingIndex] = draft;
+        else items.push(draft);
+      }
       return items;
     }
     function addDocOpsProduct(){
       const item = docOpsProductDraftItem();
-      const error = validateDocOpsProduct(item, `SKU ${(docOpsState.items || []).length + 1}`);
+      const editingIndex = Number(docOpsState.editingIndex);
+      const itemNumber = editingIndex >= 0 ? editingIndex + 1 : (docOpsState.items || []).length + 1;
+      const error = validateDocOpsProduct(item, `SKU ${itemNumber}`);
       if (error) return toast(error, "err");
-      docOpsState.items.push(item);
+      if (editingIndex >= 0 && editingIndex < docOpsState.items.length) docOpsState.items[editingIndex] = item;
+      else docOpsState.items.push(item);
+      resetDocOpsProductDraft();
+      docops();
+    }
+    function editDocOpsProduct(index){
+      const item = docOpsState.items[index];
+      if (!item) return;
+      docOpsState.selectedSku = normalizeDocOpsSku({
+        material:item.material,
+        barcode:item.barcode,
+        name:item.name,
+        rowNumber:item.rowNumber || ""
+      });
+      docOpsState.productSearch = String(item.name || "");
+      docOpsState.productStatus = String(item.status || "");
+      docOpsState.quantity = String(item.quantity || "");
+      const standardNotes = ["Hàng cận date", "Xẹp hơi"];
+      docOpsState.productNote = standardNotes.includes(String(item.note || "")) ? String(item.note || "") : "Khác";
+      docOpsState.productOtherNote = docOpsState.productNote === "Khác" ? String(item.note || "") : "";
+      docOpsState.lengthCm = String(item.lengthCm || "");
+      docOpsState.widthCm = String(item.widthCm || "");
+      docOpsState.heightCm = String(item.heightCm || "");
+      docOpsState.weightGram = String(item.weightGram || "");
+      docOpsState.editingIndex = index;
+      docOpsState.productCollapsed = false;
+      live.docOpsProductFiles = Array.isArray(item.images) ? item.images.slice() : [];
+      docops();
+      setTimeout(() => {
+        const form = el("docOpsProductForm");
+        if (form && typeof form.scrollIntoView === "function") form.scrollIntoView({behavior:"smooth", block:"start"});
+      }, 0);
+    }
+    function cancelEditDocOpsProduct(){
       resetDocOpsProductDraft();
       docops();
     }
     function removeDocOpsProduct(index){
       docOpsState.items.splice(index, 1);
+      if (Number(docOpsState.editingIndex) === index) resetDocOpsProductDraft();
+      else if (Number(docOpsState.editingIndex) > index) docOpsState.editingIndex -= 1;
       docops();
     }
     function docOpsAddedProductsHtml(){
       if (!docOpsState.items.length) return "";
-      return `<div class="sku-added-list">${docOpsState.items.map((item, index) => `<div class="sku-added-item"><div><strong>${html(item.name)}</strong><span>${html(item.material)} · SL ${html(item.quantity)} · ${html(item.lengthCm)}×${html(item.widthCm)}×${html(item.heightCm)} cm · ${html(item.weightGram)} g · CBM ${html(docOpsCbmText(Number(item.lengthCm) * Number(item.widthCm) * Number(item.heightCm) * Number(item.quantity) / 1000000))} · ${html(item.status)} · ${html(item.note)} · ${(item.images || []).length} ảnh</span></div><button type="button" onclick="removeDocOpsProduct(${index})">Xóa</button></div>`).join("")}</div>`;
+      return `<div class="sku-added-list">${docOpsState.items.map((item, index) => `<div class="sku-added-item docops-editable${Number(docOpsState.editingIndex) === index ? " editing" : ""}" role="button" tabindex="0" aria-label="Sửa SKU ${html(item.name)}" onclick="editDocOpsProduct(${index})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();editDocOpsProduct(${index})}"><div><strong>${html(item.name)}</strong><span>${html(item.material)} · SL ${html(item.quantity)} · ${html(item.lengthCm)}×${html(item.widthCm)}×${html(item.heightCm)} cm · ${html(item.weightGram)} g · CBM ${html(docOpsCbmText(Number(item.lengthCm) * Number(item.widthCm) * Number(item.heightCm) * Number(item.quantity) / 1000000))} · ${html(item.status)} · ${html(item.note)} · ${(item.images || []).length} ảnh</span></div><button type="button" onclick="event.stopPropagation();removeDocOpsProduct(${index})">Xóa</button></div>`).join("")}</div>`;
     }
     function resetDocOpsForm(){
       docOpsState.maDon = "";
@@ -10121,7 +10166,7 @@
           <input id="docOpsCamera" class="hidden-file" type="file" accept="image/*" capture="environment" multiple onchange="captureFiles(this, 'docOpsFiles', 'docOpsPreview')"><input id="docOpsLibrary" class="hidden-file" type="file" accept="image/*" multiple onchange="captureFiles(this, 'docOpsFiles', 'docOpsPreview')"><div id="docOpsPreview" class="preview-grid"></div>`}
         </div>` : `<div class="lookup" style="margin-top:12px">Chọn loại hoàn để tiếp tục thao tác.</div>`}
         ${showProduct ? `<div class="docops-section"><button class="docops-section-toggle ${docOpsState.productCollapsed?"collapsed":""}" type="button" aria-expanded="${!docOpsState.productCollapsed}" onclick="toggleDocOpsSection('product')"><h2>Sản phẩm hoàn</h2><span class="chevron">▼</span></button>
-          ${docOpsState.productCollapsed ? "" : `<div class="docops-product-box"><div class="docops-product-heading"><h3>Thông tin SKU</h3><span class="muted">* Mỗi SKU cần ít nhất 1 ảnh</span></div>
+          ${docOpsState.productCollapsed ? "" : `<div id="docOpsProductForm" class="docops-product-box"><div class="docops-product-heading"><h3>${Number(docOpsState.editingIndex) >= 0 ? "Sửa thông tin SKU" : "Thông tin SKU"}</h3><span class="muted">* Mỗi SKU cần ít nhất 1 ảnh</span></div>
             <div class="grid cols-2"><label>Tên sản phẩm${docOpsSkuPickerHtml()}</label><label>Barcode hoặc Mã vật tư<div class="scan-row"><input id="docOpsProductCode" value="${html(selectedSku.barcode || selectedSku.material || "")}" placeholder="Quét Barcode/Mã vật tư" oninput="setDocOpsProductCode(this.value)"><button class="scan-btn" type="button" title="Quét sản phẩm" aria-label="Quét sản phẩm" onclick="openCodeScanner('docOpsProductCode', 'setDocOpsProductCode')">${scanIcon("Quét sản phẩm")}</button></div></label></div>
             <div class="grid cols-2 docops-compact-pair"><label>Barcode<input readonly value="${html(selectedSku.barcode || "")}" placeholder="Tự điền từ DS SKU"></label><label>Mã vật tư<input readonly value="${html(selectedSku.material || "")}" placeholder="Tự điền từ DS SKU"></label></div>
             <div class="grid cols-3"><label>Tình trạng sản phẩm<select onchange="docOpsState.productStatus=this.value"><option value="">Chọn tình trạng</option><option ${docOpsState.productStatus==="Bình thường"?"selected":""}>Bình thường</option><option ${docOpsState.productStatus==="Hỏng/lỗi sản phẩm"?"selected":""}>Hỏng/lỗi sản phẩm</option></select></label><label>Số lượng<input type="number" min="1" inputmode="numeric" value="${html(docOpsState.quantity)}" placeholder="Nhập số lượng" oninput="updateDocOpsMeasurement('quantity', this.value)"></label><label>Ghi chú<select onchange="docOpsState.productNote=this.value; docops()"><option value="">Chọn ghi chú</option><option ${docOpsState.productNote==="Hàng cận date"?"selected":""}>Hàng cận date</option><option ${docOpsState.productNote==="Xẹp hơi"?"selected":""}>Xẹp hơi</option><option ${docOpsState.productNote==="Khác"?"selected":""}>Khác</option></select></label></div>
@@ -10130,7 +10175,7 @@
             <div id="docOpsCbmPreview" class="docops-cbm-preview">CBM dự kiến: ${html(docOpsCbmText(docOpsDraftCbm()))} m³</div>
             <h2 style="margin-top:6px">Ảnh sản phẩm</h2><div class="file-actions"><button type="button" onclick="openFilePicker('docOpsProductCamera')">Chụp ảnh SP</button><button type="button" onclick="openFilePicker('docOpsProductLibrary')">Chọn ảnh SP</button></div>
             <input id="docOpsProductCamera" class="hidden-file" type="file" accept="image/*" capture="environment" multiple onchange="captureFiles(this, 'docOpsProductFiles', 'docOpsProductPreview')"><input id="docOpsProductLibrary" class="hidden-file" type="file" accept="image/*" multiple onchange="captureFiles(this, 'docOpsProductFiles', 'docOpsProductPreview')"><div id="docOpsProductPreview" class="preview-grid"></div>
-            <div style="display:flex;justify-content:flex-end"><button type="button" class="primary" onclick="addDocOpsProduct()">Thêm SKU</button></div>
+            <div style="display:flex;justify-content:flex-end;gap:8px">${Number(docOpsState.editingIndex) >= 0 ? `<button type="button" onclick="cancelEditDocOpsProduct()">Hủy sửa</button>` : ""}<button type="button" class="primary" onclick="addDocOpsProduct()">${Number(docOpsState.editingIndex) >= 0 ? "Cập nhật SKU" : "Thêm SKU"}</button></div>
           </div>${docOpsAddedProductsHtml()}`}
         </div>` : ""}
         ${showDocument ? `<div class="docops-actions"><button type="button" onclick="resetDocOpsForm(); docops()" ${docOpsState.saving ? "disabled" : ""}>Hủy</button><button type="button" class="success" onclick="saveDocOps()" ${docOpsState.saving ? "disabled" : ""}>${docOpsState.saving ? "Đang lưu..." : "OK"}</button></div>` : ""}
