@@ -6766,6 +6766,24 @@
       if (!id) return Promise.resolve();
       return queueImageStore("readwrite", store => store.delete(id)).catch(() => null);
     }
+    function queueImageKeys(){
+      return new Promise(async (resolve, reject) => {
+        try {
+          const db = await queueImageDb();
+          const tx = db.transaction(QUEUE_IMAGE_STORE, "readonly");
+          const req = tx.objectStore(QUEUE_IMAGE_STORE).getAllKeys();
+          req.onsuccess = () => resolve(Array.isArray(req.result) ? req.result : []);
+          req.onerror = () => reject(req.error || new Error("Không đọc được danh sách ảnh offline."));
+          tx.oncomplete = () => db.close();
+          tx.onerror = () => {
+            db.close();
+            reject(tx.error || new Error("Không đọc được danh sách ảnh offline."));
+          };
+        } catch (err) {
+          reject(err);
+        }
+      });
+    }
     async function queueImagesDelete(ids){
       const list = (ids || []).filter(Boolean);
       if (!list.length) return;
@@ -6773,6 +6791,16 @@
         await queueImageStore("readwrite", store => {
           list.forEach(id => store.delete(id));
         });
+      } catch (err) {}
+    }
+    async function cleanupOrphanedQueueImages(){
+      try {
+        const referenced = new Set();
+        localQueue().forEach(item => (item && Array.isArray(item.images) ? item.images : []).forEach(image => {
+          if (image && image.id) referenced.add(String(image.id));
+        }));
+        const keys = await queueImageKeys();
+        await queueImagesDelete(keys.filter(key => !referenced.has(String(key))));
       } catch (err) {}
     }
     function recoverLocalQueue(){
@@ -7441,23 +7469,45 @@
     async function persistQueueImages(localIdValue, imagePayloads){
       const refs = [];
       const images = imagePayloads || [];
-      for (let i = 0; i < images.length; i++) {
-        const image = images[i] || {};
-        const id = `${localIdValue}_img_${i}`;
-        await queueImagePut(Object.assign({}, image, {id, localId: localIdValue, index: i, createdAt: Date.now()}));
-        refs.push({
-          id,
-          index: i,
-          fileName: image.fileName || image.name || `VTD_${Date.now()}_${i}.jpg`,
-          mimeType: image.mimeType || image.type || "image/jpeg",
-          imageType: image.imageType || "",
-          skuIndex: image.skuIndex,
-          skuName: image.skuName || "",
-          skuCount: image.skuCount,
-          productImageCount: image.productImageCount
-        });
+      try {
+        for (let i = 0; i < images.length; i++) {
+          const image = images[i] || {};
+          const id = `${localIdValue}_img_${i}`;
+          await queueImagePut(Object.assign({}, image, {id, localId: localIdValue, index: i, createdAt: Date.now()}));
+          refs.push({
+            id,
+            index: i,
+            fileName: image.fileName || image.name || `VTD_${Date.now()}_${i}.jpg`,
+            mimeType: image.mimeType || image.type || "image/jpeg",
+            imageType: image.imageType || "",
+            skuIndex: image.skuIndex,
+            skuName: image.skuName || "",
+            skuCount: image.skuCount,
+            productImageCount: image.productImageCount
+          });
+        }
+      } catch (err) {
+        await queueImagesDelete(refs.map(ref => ref.id));
+        throw err;
       }
       return refs;
+    }
+
+    async function prepareDocOpsQueueImages(imagePayloads){
+      await cleanupOrphanedQueueImages();
+      const prepared = [];
+      for (const raw of (imagePayloads || [])) {
+        const image = raw || {};
+        const source = image.sourceFile || image.file || image.blob || image;
+        const normalized = await filePayload(source, image);
+        const clean = Object.assign({}, image, normalized);
+        delete clean.sourceFile;
+        delete clean.file;
+        delete clean.blob;
+        delete clean.data;
+        prepared.push(clean);
+      }
+      return prepared;
     }
     async function queuedImagePayload(ref){
       if (!ref) return null;
@@ -7594,7 +7644,8 @@
     async function enqueueDocOpsSave(record, payload, imagePayloads){
       const itemLocalId = localId();
       const maDon = String(payload && payload.maDon || record && (record.maDon || record.po || record.orderNo) || "").trim();
-      const imageRefs = await persistQueueImages(itemLocalId, imagePayloads || []);
+      const preparedImages = await prepareDocOpsQueueImages(imagePayloads || []);
+      const imageRefs = await persistQueueImages(itemLocalId, preparedImages);
       const clientBatchId = payload.clientBatchId || itemLocalId;
       const sourceItems = Array.isArray(payload.items) ? payload.items : [];
       const cleanItems = sourceItems.map((sku, skuIndex) => Object.assign({}, sku, {
@@ -9929,9 +9980,10 @@
       if (!Array.isArray(item.images) || !item.images.length) return `${label}: cần ít nhất 1 ảnh sản phẩm.`;
       return "";
     }
-    function addDocOpsProduct(){
+    function docOpsProductDraftItem(){
       const sku = docOpsState.selectedSku;
-      const item = sku ? {
+      if (!sku) return null;
+      return {
         material:String(sku.material || "").trim(),
         barcode:String(sku.barcode || "").trim(),
         name:String(sku.name || "").trim(),
@@ -9943,7 +9995,23 @@
         heightCm:String(docOpsState.heightCm || "").trim(),
         weightGram:String(docOpsState.weightGram || "").trim(),
         images:(live.docOpsProductFiles || []).slice()
-      } : null;
+      };
+    }
+    function docOpsProductDraftHasValue(){
+      return !!(
+        docOpsState.selectedSku || docOpsState.productSearch || docOpsState.productStatus ||
+        docOpsState.quantity || docOpsState.productNote || docOpsState.productOtherNote ||
+        docOpsState.lengthCm || docOpsState.widthCm || docOpsState.heightCm || docOpsState.weightGram ||
+        (live.docOpsProductFiles || []).length
+      );
+    }
+    function docOpsProductsForSave(){
+      const items = (docOpsState.items || []).slice();
+      if (docOpsProductDraftHasValue()) items.push(docOpsProductDraftItem());
+      return items;
+    }
+    function addDocOpsProduct(){
+      const item = docOpsProductDraftItem();
       const error = validateDocOpsProduct(item, `SKU ${(docOpsState.items || []).length + 1}`);
       if (error) return toast(error, "err");
       docOpsState.items.push(item);
@@ -9982,7 +10050,12 @@
       const files = live.docOpsFiles || [];
       if (!docOpsState.returnType) return toast("Vui lòng chọn Loại hoàn.", "err");
       if (!files.length) return toast("Chứng từ cần ít nhất 1 ảnh để hoàn tất.", "err");
-      if (docOpsState.returnType === "Sản phẩm + chứng từ" && !docOpsState.items.length) return toast("Sản phẩm + chứng từ cần ít nhất 1 SKU hoàn chỉnh.", "err");
+      const products = docOpsState.returnType === "Sản phẩm + chứng từ" ? docOpsProductsForSave() : [];
+      if (docOpsState.returnType === "Sản phẩm + chứng từ" && !products.length) return toast("Sản phẩm + chứng từ cần ít nhất 1 SKU hoàn chỉnh.", "err");
+      for (let i = 0; i < products.length; i++) {
+        const error = validateDocOpsProduct(products[i], `SKU ${i + 1}`);
+        if (error) return toast(error, "err");
+      }
       docOpsState.saving = true;
       docops();
       try {
@@ -9993,7 +10066,7 @@
           mimeType: file && (file.mimeType || file.type) || "image/jpeg"
         }));
         const orderNo = String(record.orderNo || record.soDonHang || maDon).trim();
-        docOpsState.items.forEach((item, skuIndex) => {
+        products.forEach((item, skuIndex) => {
           (item.images || []).forEach((file, imageIndex) => imageRefs.push(Object.assign({}, file || {}, {
             sourceFile:file,
             imageType:"product",
@@ -10010,7 +10083,7 @@
           xacThuc: docOpsState.xacThuc,
           status: docOpsState.status,
           note: el("docOpsNote")?.value || docOpsState.note || "",
-          items:docOpsState.items.map(item => Object.assign({}, item, {images:[]}))
+          items:products.map(item => Object.assign({}, item, {images:[]}))
         };
         await enqueueDocOpsSave(record, payload, imageRefs);
         resetDocOpsForm();
@@ -10018,7 +10091,10 @@
       } catch (err) {
         docOpsState.saving = false;
         docops();
-        toast(err && err.message ? err.message : "Chưa lưu được vào bộ nhớ máy.", "err");
+        const message = err && err.message ? err.message : "Chưa lưu được vào bộ nhớ máy.";
+        toast((err && err.name === "QuotaExceededError") || /quota/i.test(message)
+          ? "Bộ nhớ ảnh offline trên máy đã đầy. App đã dọn ảnh lỗi cũ; vui lòng bấm OK lại."
+          : message, "err");
       }
     }
     function docops(){
