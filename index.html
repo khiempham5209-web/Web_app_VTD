@@ -234,9 +234,14 @@
     .docops-dimension-inputs input, .docops-measurement-detail input { min-width: 0; padding-left: 7px; padding-right: 7px; text-align: center; }
     .docops-measurement-footer { display: grid; grid-template-columns: minmax(0, 2fr) minmax(120px, 1fr); gap: 12px; align-items: start; }
     .docops-measurement-note { color: var(--muted); font-size: 13px; font-weight: 600; }
-    .docops-measurement-warning { margin-top: 4px; color: var(--danger); font-size: 13px; font-weight: 700; }
+    .docops-measurement-warning { margin-top: 4px; color: var(--err) !important; font-size: 13px; font-weight: 700; }
     .docops-cbm-preview { color: var(--muted); font-size: 13px; font-weight: 700; text-align: right; }
-    .docops-sku-index { display: block; margin-bottom: 3px; color: var(--danger) !important; font-size: 12px !important; font-weight: 800; text-transform: uppercase; }
+    .docops-sku-index { display: block; margin-bottom: 3px; color: var(--err) !important; font-size: 12px !important; font-weight: 800; text-transform: uppercase; }
+    .docops-detail-products { display: grid; gap: 9px; margin-top: 10px; }
+    .docops-detail-product { border: 1px solid var(--line); border-radius: 8px; padding: 10px 11px; background: var(--surface); }
+    .docops-detail-product strong { display: block; overflow-wrap: anywhere; }
+    .docops-detail-product .record-meta { margin-top: 5px; }
+    .docops-detail-product a { display: inline-block; margin-top: 7px; color: var(--brand); font-weight: 800; }
     .docops-actions { margin-top: 14px; display: flex; gap: 10px; justify-content: flex-end; }
     .docops-actions button { min-width: 96px; }
     .product-row { width: 100%; display: grid; grid-template-columns: 50px 1fr auto; gap: 10px; align-items: center; text-align: left; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
@@ -9399,17 +9404,54 @@
       const today = todayApiDateText();
       const localRows = docOpsRowsCache().filter(row => dateTextDdMmYyyy(row.date || row.thoiGian || row.time) === today);
       const remoteRows = Array.isArray(live.docOpsTodayRows) ? live.docOpsTodayRows : [];
-      const seen = {};
-      return [...localRows, ...remoteRows].filter(row => {
-        const key = [row.maDon || row.po || row.orderNo, row.time || row.thoiGian || "", row.user || ""].join("|");
-        if (seen[key]) return false;
-        seen[key] = true;
-        return dateTextDdMmYyyy(row.date || row.thoiGian || row.time) === today;
-      }).sort((a, b) => String(b.time || b.thoiGian || "").localeCompare(String(a.time || a.thoiGian || "")));
+      const merged = {};
+      [...remoteRows, ...localRows].forEach(row => {
+        if (dateTextDdMmYyyy(row.date || row.thoiGian || row.time) !== today) return;
+        const orderKey = String(row.maDonGhtk || row.maDon || row.orderNo || row.po || row.localId || "").trim().toLowerCase();
+        const key = `${today}|${orderKey}`;
+        const previous = merged[key] || {};
+        const previousProducts = Array.isArray(previous.products) && previous.products.length ? previous.products : previous.items;
+        const rowProducts = Array.isArray(row.products) && row.products.length ? row.products : row.items;
+        merged[key] = Object.assign({}, previous, row, {
+          products: Array.isArray(rowProducts) && rowProducts.length ? rowProducts : (Array.isArray(previousProducts) ? previousProducts : [])
+        });
+      });
+      return Object.values(merged).sort((a, b) => String(b.time || b.thoiGian || "").localeCompare(String(a.time || a.thoiGian || "")));
     }
     function docOpsSyncLabel(status){
       const s = String(status || "").toLowerCase();
       return s === "pending" || s === "error" || s === "fail" ? "Pending" : "Done";
+    }
+    function docOpsDetailProducts(row){
+      const source = Array.isArray(row && row.products) ? row.products : (Array.isArray(row && row.items) ? row.items : []);
+      return source.map(item => {
+        item = item || {};
+        const dimensions = String(item.dimensions || item.kichThuoc || "").trim() ||
+          ([item.lengthCm, item.widthCm, item.heightCm].every(value => Number(value) > 0) ? `${item.lengthCm} × ${item.widthCm} × ${item.heightCm} cm` : "");
+        const weight = String(item.weight || item.khoiLuong || "").trim() || (Number(item.weightGram) > 0 ? `${item.weightGram} g` : "");
+        const images = Array.isArray(item.images) ? item.images : [];
+        return {
+          name:String(item.name || item.tenSanPham || item.tenVatTu || "").trim(),
+          material:String(item.material || item.maVatTu || "").trim(),
+          barcode:String(item.barcode || item.maVach || "").trim(),
+          quantity:String(item.quantity || item.soLuong || "").trim(),
+          status:String(item.status || item.tinhTrang || "").trim(),
+          note:String(item.note || item.ghiChu || "").trim(),
+          dimensions,
+          weight,
+          cbm:String(item.cbm || "").trim(),
+          imageLink:String(item.imageLink || item.linkAnh || item.hinhAnh || "").trim(),
+          imageCount:Number(item.imageCount || images.length || 0),
+          user:String(item.user || row.user || "").trim()
+        };
+      });
+    }
+    function docOpsProductDetailHtml(products){
+      if (!products.length) return "";
+      return `<h2 style="margin-top:18px">Sản phẩm hoàn</h2><div class="docops-detail-products">${products.map((item, index) => {
+        const imageText = item.imageLink ? `<a href="${html(item.imageLink)}" target="_blank" rel="noopener">Mở ảnh sản phẩm${item.imageCount ? ` (${item.imageCount})` : ""}</a>` : (item.imageCount ? `<span>${item.imageCount} ảnh đang chờ đồng bộ</span>` : "");
+        return `<div class="docops-detail-product"><span class="docops-sku-index">SKU ${index + 1}:</span><strong>${html(item.name || "-")}</strong><div class="record-meta"><span>Mã vật tư: ${html(item.material || "-")}</span><span>Barcode: ${html(item.barcode || "-")}</span><span>Số lượng: ${html(item.quantity || "-")}</span><span>Tình trạng: ${html(item.status || "-")}</span><span>Ghi chú: ${html(item.note || "-")}</span><span>Kích thước: ${html(item.dimensions || "-")}</span><span>Khối lượng: ${html(item.weight || "-")}</span><span>CBM: ${html(item.cbm || "-")}</span><span>User: ${html(item.user || "-")}</span></div>${imageText}</div>`;
+      }).join("")}</div>`;
     }
     function docOpsTodayTable(data){
       const rows = Array.isArray(data) ? data : docOpsTodayRecords();
@@ -9426,6 +9468,7 @@
     function docOpsDetail(index){
       const row = docOpsTodayRecords()[index];
       if (!row) return;
+      const products = docOpsDetailProducts(row);
       navState.fromView = "home";
       navState.scrollY = window.scrollY || document.documentElement.scrollTop || 0;
       view = "detail";
@@ -9435,11 +9478,13 @@
         ["Mã PO", row.po],
         ["Số đơn hàng", row.orderNo || row.soDonHang],
         ["Địa chỉ nhận hàng", row.address || row.diaChi],
+        ["Loại hoàn", row.returnType || (products.length ? "Sản phẩm + chứng từ" : "Chứng từ")],
         ["Trạng thái", row.status || row.trangThai],
         ["Ghi chú", row.note || row.ghiChu],
         ["Xác thực chứng từ", row.xacThuc],
         ["User thao tác", row.user]
       ]);
+      const documentImage = row.linkAnh ? `<a class="image-link" href="${html(row.linkAnh)}" target="_blank" rel="noopener"><strong>Mở ảnh chứng từ</strong></a>` : "";
       el("view").className = "content";
       el("title").textContent = "Chi tiết chứng từ Phạm Nguyên";
       el("view").innerHTML = `<section class="section detail">
@@ -9447,6 +9492,8 @@
           <button onclick="backToList()">← Quay lại</button>
           <h2 style="margin-top:14px">Chứng từ Phạm Nguyên</h2>
           <div class="kv">${detailKv}</div>
+          ${documentImage}
+          ${docOpsProductDetailHtml(products)}
         </div>
       </section>`;
     }

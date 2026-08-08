@@ -11,7 +11,7 @@ const CONFIG = {
   sheetName: "Chứng từ_FF",
   skuSheetName: "DS SKU",
   productReturnSheetName: "Hoàn sản phẩm",
-  skuSchemaVersion: 2,
+  skuSchemaVersion: 3,
   rootFolderId: "",
   rootFolderName: "Chung_tu_FF_Images",
   timezone: "Asia/Saigon"
@@ -75,7 +75,7 @@ function apiSkuInit_() {
     lastColumn: sh.getLastColumn(),
     headers: headers_(sh),
     schemaVersion: CONFIG.skuSchemaVersion,
-    dataVersion: PropertiesService.getScriptProperties().getProperty("PN_DOCOPS_SKU_DATA_VERSION") || ""
+    dataVersion: skuDataVersion_(sh)
   });
 }
 
@@ -90,18 +90,18 @@ function apiSkuPage_(params) {
   const values = sh.getRange(startRow, 1, take, lastCol).getDisplayValues();
   const col = headerMap_(headers_(sh));
   const records = values.map((row, index) => {
-    const dimensions = parseSkuDimensions_(pick_(row, col, ["kich thuoc", "kich thuoc cm"]));
+    const dimensions = parseSkuDimensions_(pick_(row, col, ["kich thuoc", "kich thuoc cm", "kich thuoc (cm)"]));
     return {
       rowNumber: startRow + index,
       material: clean_(pick_(row, col, ["ma vat tu", "material", "ma sp"])),
       barcode: clean_(pick_(row, col, ["barcode", "ma vach"])),
       name: clean_(pick_(row, col, ["ten vat tu", "ten san pham", "ten sku"])),
       quyCach: clean_(pick_(row, col, ["quy cach", "don vi"])),
-      dimensions: clean_(pick_(row, col, ["kich thuoc", "kich thuoc cm"])),
+      dimensions: clean_(pick_(row, col, ["kich thuoc", "kich thuoc cm", "kich thuoc (cm)"])),
       lengthCm: dimensions.lengthCm,
       widthCm: dimensions.widthCm,
       heightCm: dimensions.heightCm,
-      weightGram: parseSkuWeightGram_(pick_(row, col, ["khoi luong", "khoi luong g", "trong luong"]))
+      weightGram: parseSkuWeightGram_(pick_(row, col, ["khoi luong", "khoi luong g", "khoi luong (g)", "trong luong"]))
     };
   }).filter(row => row.material || row.barcode || row.name);
   return ok_({records, count: records.length, done: startRow + take > lastRow, nextRow: startRow + take, lastRow});
@@ -119,10 +119,17 @@ function apiToday_(params) {
     if (page.done || !page.nextRow || Number(page.nextRow) <= startRow) break;
     startRow = Number(page.nextRow);
   }
+  const productIndex = productReturnIndexForDate_(today);
   const records = rows.filter(r => dateKey_(r.thoiGian || r.time) === todayKey && (r.user || r.thoiGian || r.time)).map(r => {
+    const maDonKey = norm_(r.maDonGhtk || r.maDon);
+    const orderNoKey = norm_(r.orderNo);
+    const products = (maDonKey && productIndex.byMaDon[maDonKey]) || (orderNoKey && productIndex.byOrderNo[orderNoKey]) || [];
     r.date = dateOnly_(r.thoiGian || r.time) || today;
     r.time = timeOnly_(r.thoiGian || r.time) || r.time || "";
     r.syncStatus = "Done";
+    r.products = products;
+    r.productCount = products.length;
+    r.returnType = products.length ? "Sản phẩm + chứng từ" : "Chứng từ";
     return r;
   });
   return ok_({
@@ -131,6 +138,53 @@ function apiToday_(params) {
     count: records.length,
     dataVersion: PropertiesService.getScriptProperties().getProperty("PN_DOCOPS_DATA_VERSION") || ""
   });
+}
+
+function productReturnIndexForDate_(dateText) {
+  const out = {byMaDon: {}, byOrderNo: {}};
+  const sh = productReturnSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return out;
+  const headers = headers_(sh);
+  const col = headerMap_(headers);
+  const rows = sh.getRange(2, 1, lastRow - 1, headers.length).getDisplayValues();
+  const targetDateKey = dateKey_(dateText);
+  rows.forEach((row, index) => {
+    const date = clean_(pick_(row, col, ["ngay hoan tra", "ngay"]));
+    if (dateKey_(date) !== targetDateKey) return;
+    const maDon = clean_(pick_(row, col, ["ma don ghtk", "ma don"]));
+    const orderNo = clean_(pick_(row, col, ["so don hang", "od"]));
+    const dimensions = clean_(pick_(row, col, ["kich thuoc", "kich thuoc cm", "kich thuoc (cm)"]));
+    const parsedDimensions = parseSkuDimensions_(dimensions);
+    const product = {
+      rowNumber: index + 2,
+      maDon,
+      orderNo,
+      date,
+      time: clean_(pick_(row, col, ["thoi gian", "gio"])),
+      customer: clean_(pick_(row, col, ["ten khach hang", "khach hang"])),
+      po: clean_(pick_(row, col, ["ma po", "po"])),
+      material: clean_(pick_(row, col, ["ma vat tu", "material"])),
+      barcode: clean_(pick_(row, col, ["barcode", "ma vach"])),
+      name: clean_(pick_(row, col, ["ten san pham", "ten vat tu"])),
+      quantity: clean_(pick_(row, col, ["so luong"])),
+      status: clean_(pick_(row, col, ["tinh trang ff", "tinh trang"])),
+      note: clean_(pick_(row, col, ["ghi chu"])),
+      dimensions,
+      lengthCm: parsedDimensions.lengthCm,
+      widthCm: parsedDimensions.widthCm,
+      heightCm: parsedDimensions.heightCm,
+      weight: clean_(pick_(row, col, ["khoi luong", "khoi luong g", "khoi luong (g)", "trong luong"])),
+      cbm: clean_(pick_(row, col, ["cbm"])),
+      imageLink: clean_(pick_(row, col, ["hinh anh", "link anh"])),
+      user: clean_(pick_(row, col, ["user thao tac", "user"]))
+    };
+    const maDonKey = norm_(maDon);
+    const orderNoKey = norm_(orderNo);
+    if (maDonKey) (out.byMaDon[maDonKey] || (out.byMaDon[maDonKey] = [])).push(product);
+    if (orderNoKey) (out.byOrderNo[orderNoKey] || (out.byOrderNo[orderNoKey] = [])).push(product);
+  });
+  return out;
 }
 
 function apiSave_(params) {
@@ -197,8 +251,8 @@ function apiSave_(params) {
       setArrayByAliases_(values, productCol, ["so luong"], item.quantity);
       setArrayByAliases_(values, productCol, ["tinh trang ff", "tinh trang"], item.status);
       setArrayByAliases_(values, productCol, ["ghi chu"], item.note);
-      setArrayByAliases_(values, productCol, ["kich thuoc"], formatProductDimensions_(item));
-      setArrayByAliases_(values, productCol, ["khoi luong", "trong luong"], formatProductWeight_(item.weightGram));
+      setArrayByAliases_(values, productCol, ["kich thuoc", "kich thuoc cm", "kich thuoc (cm)"], formatProductDimensions_(item));
+      setArrayByAliases_(values, productCol, ["khoi luong", "khoi luong g", "khoi luong (g)", "trong luong"], formatProductWeight_(item.weightGram));
       setArrayByAliases_(values, productCol, ["loai sieu thi"], found.record.storeType || "");
       setArrayByAliases_(values, productCol, ["hinh anh", "link anh"], productUploads[index].linkAnh);
       setArrayByAliases_(values, productCol, ["user thao tac", "user"], user);
@@ -315,8 +369,8 @@ function fillBlankSkuMeasurements_(items) {
   const col = headerMap_(headers);
   const materialCol = findColumnByAliases_(col, ["ma vat tu", "material", "ma sp"]);
   const barcodeCol = findColumnByAliases_(col, ["barcode", "ma vach"]);
-  const dimensionsCol = findColumnByAliases_(col, ["kich thuoc", "kich thuoc cm"]);
-  const weightCol = findColumnByAliases_(col, ["khoi luong", "khoi luong g", "trong luong"]);
+  const dimensionsCol = findColumnByAliases_(col, ["kich thuoc", "kich thuoc cm", "kich thuoc (cm)"]);
+  const weightCol = findColumnByAliases_(col, ["khoi luong", "khoi luong g", "khoi luong (g)", "trong luong"]);
   if ((!materialCol && !barcodeCol) || (!dimensionsCol && !weightCol)) return 0;
 
   const values = sh.getRange(2, 1, lastRow - 1, lastCol).getDisplayValues();
@@ -363,6 +417,15 @@ function findColumnByAliases_(columnMap, aliases) {
 function cleanNumberText_(value) {
   const number = Number(value || 0);
   return Number.isInteger(number) ? String(number) : String(Number(number.toFixed(2)));
+}
+
+function skuDataVersion_(sh) {
+  const lastRow = sh.getLastRow();
+  const lastCol = Math.min(sh.getLastColumn(), 10);
+  const values = lastRow > 0 && lastCol > 0 ? sh.getRange(1, 1, lastRow, lastCol).getDisplayValues() : [];
+  const text = JSON.stringify(values);
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, text, Utilities.Charset.UTF_8);
+  return digest.map(value => (value + 256).toString(16).slice(-2)).join("");
 }
 
 function callRejectSyncLocal_(rowNumber) {
