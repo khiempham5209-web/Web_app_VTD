@@ -5229,9 +5229,6 @@
       catch (err) { pair.resolve({ok:false, message:String(err)}); }
     };
     function activeApiUrl(){
-      const profile = (appConfig.sheetProfiles || []).find(x => x.active) || {};
-      const url = String(profile.apiUrl || "").trim();
-      if (/^https:\/\/script\.google\.com\/macros\/s\/[-\w]+\/exec/i.test(url)) return url;
       return DEFAULT_API_URL;
     }
     function scriptApiFetch(apiUrl, payload, options = {}){
@@ -8040,7 +8037,7 @@
       }
       if (hasSyncableQueueWork()) scheduleSyncQueue(0);
     }
-    function showApp(){
+    function showApp(skipSessionRefresh = false){
       clearLoading();
       el("login").classList.add("hidden");
       el("app").classList.remove("hidden");
@@ -8053,7 +8050,7 @@
       hydrateStoreInfoCache();
       refreshLocalRows();
       render();
-      refreshSessionAuth();
+      if (!skipSessionRefresh) refreshSessionAuth();
       dynamicLoadConfig(false);
       startQueueWatchdog();
       startActivityReporter();
@@ -8107,12 +8104,13 @@
       live.passwordPolicy = res.passwordPolicy || (live.user && live.user.passwordPolicy) || null;
       if (res.config && res.config.system) {
         mergeSystemConfig(res.config.system);
-        if (res.config.system.themeConfig) await applyRemoteThemeConfig(res.config.system.themeConfig);
       }
       localStorage.setItem("vtd_token", live.token);
       localStorage.setItem("vtd_user", JSON.stringify(live.user));
       localStorage.setItem("vtd_session_day", sessionDay());
-      showApp();
+      showApp(true);
+      const loginTheme = res.config && res.config.system && res.config.system.themeConfig;
+      if (loginTheme) setTimeout(() => Promise.resolve(applyRemoteThemeConfig(loginTheme)).catch(() => {}), 250);
       evaluateFirstPassPolicy();
     }
     async function forgotPass(){
@@ -8897,19 +8895,21 @@
       } catch (err) {}
     }
     async function warmLiveData(){
-      await Promise.allSettled([
-        loadDashboard({silent:true}),
-        loadProducts(true),
-        loadReturnThSku(false),
-        loadDocOpsSkuCache(false)
-      ]);
-      loadReturnThToday(false);
-      const currentMonth = currentBusinessMonth();
-      if (shouldLiveLoadStore(currentMonth)) loadStoreInfo(currentMonth);
-      warmStoreInfoFromDevice();
-      warmOrderLookupCache().then(() => warmStoreInfoFromDevice());
-      loadDocOpsLookupCache(false);
-      warmAllDataCaches();
+      await Promise.resolve(loadDashboard({silent:true})).catch(() => {});
+      setTimeout(() => Promise.resolve(loadProducts(true)).catch(() => {}), 500);
+      setTimeout(() => Promise.resolve(loadReturnThSku(false)).catch(() => {}), 1200);
+      setTimeout(() => Promise.resolve(loadDocOpsSkuCache(false)).catch(() => {}), 1900);
+      setTimeout(() => {
+        Promise.resolve(loadReturnThToday(false)).catch(() => {});
+        const currentMonth = currentBusinessMonth();
+        if (shouldLiveLoadStore(currentMonth)) Promise.resolve(loadStoreInfo(currentMonth)).catch(() => {});
+        warmStoreInfoFromDevice();
+      }, 2700);
+      setTimeout(() => {
+        Promise.resolve(warmOrderLookupCache()).then(() => warmStoreInfoFromDevice()).catch(() => {});
+        Promise.resolve(loadDocOpsLookupCache(false)).catch(() => {});
+        Promise.resolve(warmAllDataCaches()).catch(() => {});
+      }, 4000);
       render();
     }
     function hydrateStoreInfoCache(){
