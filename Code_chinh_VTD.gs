@@ -730,6 +730,26 @@ function vtdApp_getRecord(params) {
   return vtdApp_fail_("Không tìm thấy chứng từ.");
 }
 
+function vtdApp_findRawById_(ss, rawId) {
+  rawId = String(rawId || "").trim();
+  if (!rawId) return null;
+  const sheets = [ss.getSheetByName(VTD_APP.rawSheet), ss.getSheetByName(VTD_APP.rawFullSheet)];
+  for (let i = 0; i < sheets.length; i++) {
+    const sheet = sheets[i];
+    if (!sheet || sheet.getLastRow() <= 1 || sheet.getLastColumn() < 1) continue;
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const col = vtdApp_headerMap_(headers);
+    const idIndex = col[vtdApp_norm_("id")];
+    if (idIndex == null) continue;
+    const match = sheet.getRange(2, idIndex + 1, sheet.getLastRow() - 1, 1)
+      .createTextFinder(rawId)
+      .matchEntireCell(true)
+      .findNext();
+    if (match) return {sheet: sheet, rowNumber: match.getRow(), source: sheet.getName()};
+  }
+  return null;
+}
+
 function vtdApp_saveRaw(params) {
   const denied = vtdApp_requireAction_("saveRaw", params);
   if (denied) return denied;
@@ -2251,6 +2271,17 @@ function vtdApp_saveSkuRows_(ss, rawId, maDon, items, auth) {
   }
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const col = vtdApp_headerMap_(headers);
+  const existingIds = {};
+  const idIndex = col[vtdApp_norm_("id")];
+  const rawIdIndex = col[vtdApp_norm_("raw_id")];
+  if (idIndex != null && rawIdIndex != null && sheet.getLastRow() > 1) {
+    const existingRows = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getDisplayValues();
+    existingRows.forEach(existingRow => {
+      if (String(existingRow[rawIdIndex] || "").trim() !== String(rawId || "").trim()) return;
+      const existingId = String(existingRow[idIndex] || "").trim();
+      if (existingId) existingIds[existingId] = true;
+    });
+  }
   let count = 0;
   items.forEach(item => {
     item = vtdApp_normalizeSkuItem_(item);
@@ -2260,7 +2291,9 @@ function vtdApp_saveSkuRows_(ss, rawId, maDon, items, auth) {
     const ngayText = Utilities.formatDate(now, "Asia/Saigon", "dd/MM/yyyy");
     const gioText = Utilities.formatDate(now, "Asia/Saigon", "HH:mm:ss");
     const row = new Array(headers.length).fill("");
-    vtdApp_setByAliases_(row, col, ["id"], item.id || vtdApp_makeId_());
+    const itemId = String(item.id || "").trim() || vtdApp_makeId_();
+    if (existingIds[itemId]) return;
+    vtdApp_setByAliases_(row, col, ["id"], itemId);
     vtdApp_setByAliases_(row, col, ["raw_id", "raw id"], rawId);
     vtdApp_setByAliases_(row, col, ["ma don", "mã đơn", "ma don ghtk", "mã đơn ghtk"], maDon);
     vtdApp_setByAliases_(row, col, ["ten san pham hoan", "tên sản phẩm hoàn về", "ten san pham", "tên sản phẩm", "sku"], skuName);
@@ -2275,6 +2308,7 @@ function vtdApp_saveSkuRows_(ss, rawId, maDon, items, auth) {
     vtdApp_setByAliases_(row, col, ["ngay", "ngày", "date"], ngayText);
     vtdApp_setByAliases_(row, col, ["gio", "giờ", "thoi gian", "thời gian", "timestamp", "time"], gioText);
     sheet.appendRow(row);
+    existingIds[itemId] = true;
     count++;
   });
   return count;
@@ -2928,13 +2962,38 @@ function vtdApp_saveRaw(params) {
   const ss = vtdApp_ss_();
   const sheet = ss.getSheetByName(VTD_APP.rawSheet);
   if (!sheet) return vtdApp_fail_("Khong thay sheet " + VTD_APP.rawSheet);
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+  } catch (lockErr) {
+    return vtdApp_fail_("He thong dang xu ly don nay. Vui long thu lai.");
+  }
 
+  try {
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const row = new Array(headers.length).fill("");
   const col = vtdApp_headerMap_(headers);
   const now = new Date();
-  const id = params.id || params.ID || vtdApp_makeId_();
+  const id = String(params.id || params.ID || params.rawId || "").trim() || vtdApp_makeId_();
   const maDon = vtdApp_cleanMaDonParam_(params);
+  const existing = vtdApp_findRawById_(ss, id);
+  if (existing) {
+    const retrySkuItems = Array.isArray(params.skuItems) ? params.skuItems.map(vtdApp_normalizeSkuItem_) : [];
+    const retryMasterSkuCount = vtdApp_syncNewMasterSku_(ss, retrySkuItems);
+    const retrySkuCount = vtdApp_saveSkuRows_(ss, id, maDon, retrySkuItems, auth);
+    if (existing.source === VTD_APP.rawSheet) vtdApp_queueRow_(existing.sheet, existing.rowNumber);
+    vtdApp_log_("INFO", "saveRaw", auth.email, id, maDon, "IDEMPOTENT", "existing row " + existing.rowNumber, existing.source);
+    return vtdApp_ok_({
+      id: id,
+      maDon: maDon,
+      rowNumber: existing.rowNumber,
+      source: existing.source,
+      existing: true,
+      skuCount: retrySkuCount,
+      masterSkuCount: retryMasterSkuCount,
+      message: "Don da duoc luu truoc do. Tiep tuc dong bo anh vao ID cu."
+    });
+  }
   const slog = String(params.slog || params.SLOG || "").trim();
   const loaiHoan = String(params.loaiHoan || "").trim();
   const xacThuc = String(params.xacThucHoaDon || params.xacThucChungTu || params.xacThuc || "").trim();
@@ -2984,6 +3043,9 @@ function vtdApp_saveRaw(params) {
     warnings: warnings,
     message: "Da luu chung tu" + (skuCount ? " va " + skuCount + " SKU." : ".")
   });
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function vtdApp_storeInfo(params) {

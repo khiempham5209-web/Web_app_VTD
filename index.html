@@ -6816,6 +6816,14 @@
       const queue = localQueue();
       let changed = false;
       queue.forEach(item => {
+        if (item && item.status !== "done" && item.kind !== "returnTh" && item.kind !== "docOps") {
+          const previousPayloadId = String(item.payload && (item.payload.id || item.payload.ID) || "").trim();
+          const previousPlannedId = String(item.plannedRawId || "").trim();
+          const previousSkuIds = JSON.stringify((item.payload && item.payload.skuItems || []).map(sku => sku && sku.id || ""));
+          const rawId = ensureVtdQueueRawId(item);
+          const nextSkuIds = JSON.stringify((item.payload && item.payload.skuItems || []).map(sku => sku && sku.id || ""));
+          if (rawId && (rawId !== previousPayloadId || rawId !== previousPlannedId || previousSkuIds !== nextSkuIds)) changed = true;
+        }
         if (item && item.status === "syncing" && (!item.lastTryAt || Date.now() - Number(item.lastTryAt) > 120000)) {
           item.status = item.remoteId && item.images && item.images.length && !item.imagesUploaded ? "pendingImage" : "pending";
           item.lastError = item.lastError || "Tự mở khóa do sync quá 2 phút chưa xong.";
@@ -7118,6 +7126,44 @@
     }
     function localId(){
       return "LOCAL-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+    }
+    function vtdRawId(){
+      const parts = {};
+      new Intl.DateTimeFormat("en-GB", {
+        timeZone:"Asia/Ho_Chi_Minh",
+        year:"numeric",
+        month:"2-digit",
+        day:"2-digit",
+        hour:"2-digit",
+        minute:"2-digit",
+        second:"2-digit",
+        hour12:false,
+        hourCycle:"h23"
+      }).formatToParts(new Date()).forEach(part => {
+        if (part.type !== "literal") parts[part.type] = part.value;
+      });
+      let suffix = "";
+      try {
+        const bytes = new Uint8Array(4);
+        crypto.getRandomValues(bytes);
+        suffix = Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+      } catch (err) {
+        suffix = Math.random().toString(16).slice(2, 10).padEnd(8, "0");
+      }
+      return `WEB-${parts.year}${parts.month}${parts.day}-${parts.hour}${parts.minute}${parts.second}-${suffix}`;
+    }
+    function ensureVtdQueueRawId(item){
+      if (!item || item.kind === "returnTh" || item.kind === "docOps") return "";
+      item.payload = item.payload || {};
+      const rawId = String(item.payload.id || item.payload.ID || item.plannedRawId || "").trim() || vtdRawId();
+      item.plannedRawId = rawId;
+      item.payload.id = rawId;
+      if (Array.isArray(item.payload.skuItems)) {
+        item.payload.skuItems = item.payload.skuItems.map((sku, index) => Object.assign({}, sku, {
+          id: sku && sku.id || `${rawId}-SKU-${index + 1}`
+        }));
+      }
+      return rawId;
     }
     function todayText(){
       return new Date().toLocaleDateString("vi-VN", {timeZone:"Asia/Ho_Chi_Minh"});
@@ -7585,12 +7631,20 @@
         return duplicateItem;
       }
       const itemLocalId = localId();
+      const plannedRawId = String(payload.id || payload.ID || "").trim() || vtdRawId();
+      payload.id = plannedRawId;
+      if (Array.isArray(payload.skuItems)) {
+        payload.skuItems = payload.skuItems.map((sku, index) => Object.assign({}, sku, {
+          id: sku && sku.id || `${plannedRawId}-SKU-${index + 1}`
+        }));
+      }
       payload.clientId = payload.clientId || itemLocalId;
       payload.clientBatchId = payload.clientBatchId || itemLocalId;
       payload.idempotencyKey = payload.idempotencyKey || clientDedupKey || itemLocalId;
       const imageRefs = await persistQueueImages(itemLocalId, imagePayloads || []);
       const item = {
         localId: itemLocalId,
+        plannedRawId,
         clientDedupKey,
         createdAt: Date.now(),
         dateText: todayText(),
