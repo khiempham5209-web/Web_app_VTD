@@ -120,18 +120,55 @@ function apiToday_(params) {
     startRow = Number(page.nextRow);
   }
   const productIndex = productReturnIndexForDate_(today);
+  const consumedProductActions = {};
   const records = rows.filter(r => dateKey_(r.thoiGian || r.time) === todayKey && (r.user || r.thoiGian || r.time)).map(r => {
-    const maDonKey = norm_(r.maDonGhtk || r.maDon);
-    const orderNoKey = norm_(r.orderNo);
-    const products = (maDonKey && productIndex.byMaDon[maDonKey]) || (orderNoKey && productIndex.byOrderNo[orderNoKey]) || [];
     r.date = dateOnly_(r.thoiGian || r.time) || today;
     r.time = timeOnly_(r.thoiGian || r.time) || r.time || "";
+    const actionKey = productActionKey_(r.maDonGhtk || r.maDon, r.orderNo, r.date, r.time, r.user);
+    const productAction = productIndex.byAction[actionKey];
+    const products = productAction ? productAction.products : [];
+    if (productAction) consumedProductActions[actionKey] = true;
     r.syncStatus = "Done";
     r.products = products;
     r.productCount = products.length;
     r.returnType = products.length ? "Sản phẩm + chứng từ" : "Chứng từ";
     return r;
   });
+  const orderLookup = {};
+  rows.forEach(r => {
+    const maDonKey = norm_(r.maDonGhtk || r.maDon);
+    const orderNoKey = norm_(r.orderNo);
+    if (maDonKey) orderLookup["ma:" + maDonKey] = r;
+    if (orderNoKey) orderLookup["od:" + orderNoKey] = r;
+  });
+  productIndex.groups.forEach(action => {
+    if (consumedProductActions[action.key]) return;
+    const source = orderLookup["ma:" + norm_(action.maDon)] || orderLookup["od:" + norm_(action.orderNo)] || {};
+    records.push({
+      rowNumber: action.rowNumber,
+      maDon: action.maDon || source.maDon || source.maDonGhtk || "",
+      maDonGhtk: action.maDon || source.maDonGhtk || source.maDon || "",
+      orderNo: action.orderNo || source.orderNo || "",
+      customer: action.customer || source.customer || "",
+      khachHang: action.customer || source.customer || "",
+      po: action.po || source.po || "",
+      address: source.address || "",
+      storeType: source.storeType || "",
+      date: action.date || today,
+      time: action.time || "",
+      thoiGian: (action.date || today) + " " + (action.time || ""),
+      user: action.user || "",
+      status: "",
+      note: "",
+      xacThuc: "",
+      linkAnh: "",
+      syncStatus: "Done",
+      products: action.products,
+      productCount: action.products.length,
+      returnType: "Sản phẩm"
+    });
+  });
+  records.sort((a, b) => String(a.time || "").localeCompare(String(b.time || "")));
   return ok_({
     date: today,
     records,
@@ -140,8 +177,13 @@ function apiToday_(params) {
   });
 }
 
+function productActionKey_(maDon, orderNo, date, time, user) {
+  const orderKey = norm_(maDon) || ("od:" + norm_(orderNo));
+  return [orderKey, dateKey_(date), timeOnly_(time), norm_(user)].join("|");
+}
+
 function productReturnIndexForDate_(dateText) {
-  const out = {byMaDon: {}, byOrderNo: {}};
+  const out = {byMaDon: {}, byOrderNo: {}, byAction: {}, groups: []};
   const sh = productReturnSheet_();
   const lastRow = sh.getLastRow();
   if (lastRow < 2) return out;
@@ -183,6 +225,23 @@ function productReturnIndexForDate_(dateText) {
     const orderNoKey = norm_(orderNo);
     if (maDonKey) (out.byMaDon[maDonKey] || (out.byMaDon[maDonKey] = [])).push(product);
     if (orderNoKey) (out.byOrderNo[orderNoKey] || (out.byOrderNo[orderNoKey] = [])).push(product);
+    const actionKey = productActionKey_(maDon, orderNo, date, product.time, product.user);
+    if (!out.byAction[actionKey]) {
+      out.byAction[actionKey] = {
+        key: actionKey,
+        rowNumber: product.rowNumber,
+        maDon,
+        orderNo,
+        date,
+        time: product.time,
+        user: product.user,
+        customer: product.customer,
+        po: product.po,
+        products: []
+      };
+      out.groups.push(out.byAction[actionKey]);
+    }
+    out.byAction[actionKey].products.push(product);
   });
   return out;
 }
@@ -198,8 +257,9 @@ function apiSave_(params) {
 
   const returnType = clean_(params.returnType || params.loaiHoan || "Chung tu");
   const normalizedType = norm_(returnType);
-  const hasProducts = normalizedType === "san pham + chung tu" || normalizedType === "product-docs";
-  if (normalizedType !== "chung tu" && normalizedType !== "docs" && !hasProducts) return fail_("Loai hoan khong hop le.");
+  const hasProducts = normalizedType === "san pham" || normalizedType === "product" || normalizedType === "san pham + chung tu" || normalizedType === "product-docs";
+  const hasDocuments = normalizedType === "chung tu" || normalizedType === "docs" || normalizedType === "san pham + chung tu" || normalizedType === "product-docs";
+  if (!hasDocuments && !hasProducts) return fail_("Loai hoan khong hop le.");
 
   const sh = sheet_();
   const headers = headers_(sh);
@@ -209,15 +269,15 @@ function apiSave_(params) {
 
   const maDonForFolder = clean_(query || found.record.maDon || found.record.po || found.record.orderNo);
   const files = Array.isArray(params.files) ? params.files : [];
-  if (!files.length) return fail_("Chung tu can it nhat 1 anh.");
+  if (hasDocuments && !files.length) return fail_("Chung tu can it nhat 1 anh.");
   const items = hasProducts ? normalizeProductItems_(params.items) : [];
-  if (hasProducts && !items.length) return fail_("San pham + chung tu can it nhat 1 SKU.");
+  if (hasProducts && !items.length) return fail_("Loai hoan san pham can it nhat 1 SKU.");
   for (let i = 0; i < items.length; i++) {
     const invalid = validateProductItem_(items[i], i + 1);
     if (invalid) return fail_(invalid);
   }
 
-  const upload = uploadFiles_(maDonForFolder, files);
+  const upload = hasDocuments ? uploadFiles_(maDonForFolder, files) : {linkAnh: "", files: [], folderUrl: ""};
   const productUploads = items.map(item => uploadProductFiles_(found.record.orderNo || params.orderNo || maDonForFolder, item));
   const now = new Date();
   const dateText = Utilities.formatDate(now, CONFIG.timezone, "dd/MM/yyyy");
@@ -225,12 +285,14 @@ function apiSave_(params) {
   const timeText = dateText + " " + clockText;
   const user = clean_(params.userEmail || params.user || Session.getActiveUser().getEmail() || "");
 
-  setCellByAliases_(sh, found.rowNumber, col, ["xac thuc hoa don"], clean_(params.xacThuc || params.xacThucHoaDon));
-  setCellByAliases_(sh, found.rowNumber, col, ["ghi chu chung tu"], String(params.note || params.ghiChu || ""));
-  if (upload.linkAnh) setCellByAliases_(sh, found.rowNumber, col, ["link anh"], upload.linkAnh);
-  setCellByAliases_(sh, found.rowNumber, col, ["trang thai"], clean_(params.status || params.trangThai));
-  setCellByAliases_(sh, found.rowNumber, col, ["thoi gian"], timeText);
-  setCellByAliases_(sh, found.rowNumber, col, ["user thao tac"], user);
+  if (hasDocuments) {
+    setCellByAliases_(sh, found.rowNumber, col, ["xac thuc hoa don"], clean_(params.xacThuc || params.xacThucHoaDon));
+    setCellByAliases_(sh, found.rowNumber, col, ["ghi chu chung tu"], String(params.note || params.ghiChu || ""));
+    if (upload.linkAnh) setCellByAliases_(sh, found.rowNumber, col, ["link anh"], upload.linkAnh);
+    setCellByAliases_(sh, found.rowNumber, col, ["trang thai"], clean_(params.status || params.trangThai));
+    setCellByAliases_(sh, found.rowNumber, col, ["thoi gian"], timeText);
+    setCellByAliases_(sh, found.rowNumber, col, ["user thao tac"], user);
+  }
 
   const productRows = [];
   if (hasProducts) {
@@ -275,11 +337,11 @@ function apiSave_(params) {
   }
 
   SpreadsheetApp.flush();
-  callRejectSyncLocal_(found.rowNumber);
+  if (hasDocuments) callRejectSyncLocal_(found.rowNumber);
   const dataVersion = String(Date.now());
   PropertiesService.getScriptProperties().setProperty("PN_DOCOPS_DATA_VERSION", dataVersion);
   const response = ok_({
-    message: "Da luu thao tac chung tu.",
+    message: "Da luu thao tac Pham Nguyen.",
     rowNumber: found.rowNumber,
     linkAnh: upload.linkAnh,
     fileCount: upload.files.length,
@@ -289,6 +351,7 @@ function apiSave_(params) {
     productCount: productRows.length,
     productLinks: productUploads.map(row => row.linkAnh),
     skuMeasurementsUpdated,
+    returnType,
     dataVersion
   });
   rememberSavedRequest_(clientId, response);

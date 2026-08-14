@@ -10257,9 +10257,11 @@
       if (!record) return toast("Chưa có thông tin đơn. Vui lòng nhập mã đơn để hệ thống tìm dữ liệu trước.", "err");
       const files = live.docOpsFiles || [];
       if (!docOpsState.returnType) return toast("Vui lòng chọn Loại hoàn.", "err");
-      if (!files.length) return toast("Chứng từ cần ít nhất 1 ảnh để hoàn tất.", "err");
-      const products = docOpsState.returnType === "Sản phẩm + chứng từ" ? docOpsProductsForSave() : [];
-      if (docOpsState.returnType === "Sản phẩm + chứng từ" && !products.length) return toast("Sản phẩm + chứng từ cần ít nhất 1 SKU hoàn chỉnh.", "err");
+      const hasDocument = docOpsState.returnType === "Chứng từ" || docOpsState.returnType === "Sản phẩm + chứng từ";
+      const hasProduct = docOpsState.returnType === "Sản phẩm" || docOpsState.returnType === "Sản phẩm + chứng từ";
+      if (hasDocument && !files.length) return toast("Chứng từ cần ít nhất 1 ảnh để hoàn tất.", "err");
+      const products = hasProduct ? docOpsProductsForSave() : [];
+      if (hasProduct && !products.length) return toast(`${docOpsState.returnType} cần ít nhất 1 SKU hoàn chỉnh.`, "err");
       for (let i = 0; i < products.length; i++) {
         const error = validateDocOpsProduct(products[i], `SKU ${i + 1}`);
         if (error) return toast(error, "err");
@@ -10268,7 +10270,7 @@
       const nativeFastQueue = !!(window.VTDNative && typeof window.VTDNative === "object");
       if (!nativeFastQueue) docops();
       try {
-        const imageRefs = files.map((file, index) => Object.assign({}, file || {}, {
+        const imageRefs = (hasDocument ? files : []).map((file, index) => Object.assign({}, file || {}, {
           sourceFile: file,
           imageType: "document",
           fileName: `PN_${maDon}_${index + 1}.jpg`,
@@ -10309,14 +10311,14 @@
     function docops(){
       el("view").className = "content";
       if (!docOpsState.skuLoaded && !docOpsState.loadingSku) setTimeout(() => loadDocOpsSkuCache(false), 0);
-      const showDocument = !!docOpsState.returnType;
-      const showProduct = docOpsState.returnType === "Sản phẩm + chứng từ";
+      const showDocument = docOpsState.returnType === "Chứng từ" || docOpsState.returnType === "Sản phẩm + chứng từ";
+      const showProduct = docOpsState.returnType === "Sản phẩm" || docOpsState.returnType === "Sản phẩm + chứng từ";
       const selectedSku = docOpsState.selectedSku || {};
       el("view").innerHTML = `<section class="section form-sheet">
         <div class="form-head"><h2>Thao tác Phạm Nguyên</h2>${docOpsState.loadingSku ? `<span class="muted">Đang tải DS SKU...</span>` : ""}</div>
         <div class="grid cols-2">
           <label>Mã đơn<div class="scan-row"><input id="docOpsMaDon" placeholder="Scan hoặc nhập mã đơn" value="${html(docOpsState.maDon)}" oninput="docOpsState.maDon=this.value; lookupDocOpsOrder(this.value)"><button class="scan-btn" type="button" title="Quét mã đơn" aria-label="Quét mã đơn" onclick="openCodeScanner('docOpsMaDon', 'setDocOpsMaDon')">${scanIcon("Quét mã đơn")}</button></div></label>
-          <label>Loại hoàn<select onchange="docOpsReturnTypeChange(this.value)"><option value="">Chọn loại hoàn</option><option ${docOpsState.returnType==="Sản phẩm + chứng từ"?"selected":""}>Sản phẩm + chứng từ</option><option ${docOpsState.returnType==="Chứng từ"?"selected":""}>Chứng từ</option></select></label>
+          <label>Loại hoàn<select onchange="docOpsReturnTypeChange(this.value)"><option value="">Chọn loại hoàn</option><option ${docOpsState.returnType==="Chứng từ"?"selected":""}>Chứng từ</option><option ${docOpsState.returnType==="Sản phẩm"?"selected":""}>Sản phẩm</option><option ${docOpsState.returnType==="Sản phẩm + chứng từ"?"selected":""}>Sản phẩm + chứng từ</option></select></label>
         </div>
         <div id="docOpsLookupBox" class="lookup" style="margin-top:8px"></div>
         ${showDocument ? `<div class="docops-section"><button class="docops-section-toggle ${docOpsState.docCollapsed?"collapsed":""}" type="button" aria-expanded="${!docOpsState.docCollapsed}" onclick="toggleDocOpsSection('document')"><h2>Chứng từ</h2><span class="chevron">▼</span></button>
@@ -10328,7 +10330,7 @@
           <h2 style="margin-top:16px">Ảnh chứng từ</h2>
           <div class="file-actions"><button type="button" onclick="openFilePicker('docOpsCamera')">Chụp ảnh</button><button type="button" onclick="openFilePicker('docOpsLibrary')">Chọn từ thư viện</button></div>
           <input id="docOpsCamera" class="hidden-file" type="file" accept="image/*" capture="environment" multiple onchange="captureFiles(this, 'docOpsFiles', 'docOpsPreview')"><input id="docOpsLibrary" class="hidden-file" type="file" accept="image/*" multiple onchange="captureFiles(this, 'docOpsFiles', 'docOpsPreview')"><div id="docOpsPreview" class="preview-grid"></div>`}
-        </div>` : `<div class="lookup" style="margin-top:12px">Chọn loại hoàn để tiếp tục thao tác.</div>`}
+        </div>` : (!docOpsState.returnType ? `<div class="lookup" style="margin-top:12px">Chọn loại hoàn để tiếp tục thao tác.</div>` : "")}
         ${showProduct ? `<div class="docops-section"><button class="docops-section-toggle ${docOpsState.productCollapsed?"collapsed":""}" type="button" aria-expanded="${!docOpsState.productCollapsed}" onclick="toggleDocOpsSection('product')"><h2>Sản phẩm hoàn</h2><span class="chevron">▼</span></button>
           ${docOpsState.productCollapsed ? "" : `<div id="docOpsProductForm" class="docops-product-box"><div class="docops-product-heading"><h3>${Number(docOpsState.editingIndex) >= 0 ? "Sửa thông tin SKU" : "Thông tin SKU"}</h3><span class="muted">* Mỗi SKU cần ít nhất 1 ảnh</span></div>
             <div class="grid cols-2"><label>Tên sản phẩm${docOpsSkuPickerHtml()}</label><label>Barcode hoặc Mã vật tư<div class="scan-row"><input id="docOpsProductCode" value="${html(selectedSku.barcode || selectedSku.material || "")}" placeholder="Quét Barcode/Mã vật tư" oninput="setDocOpsProductCode(this.value)"><button class="scan-btn" type="button" title="Quét sản phẩm" aria-label="Quét sản phẩm" onclick="openCodeScanner('docOpsProductCode', 'setDocOpsProductCode')">${scanIcon("Quét sản phẩm")}</button></div></label></div>
@@ -10342,7 +10344,7 @@
             <div style="display:flex;justify-content:flex-end;gap:8px">${Number(docOpsState.editingIndex) >= 0 ? `<button type="button" onclick="cancelEditDocOpsProduct()">Hủy sửa</button>` : ""}<button type="button" class="primary" onclick="addDocOpsProduct()">${Number(docOpsState.editingIndex) >= 0 ? "Cập nhật SKU" : "Thêm SKU"}</button></div>
           </div>${docOpsAddedProductsHtml()}`}
         </div>` : ""}
-        ${showDocument ? `<div class="docops-actions"><button type="button" onclick="resetDocOpsForm(); docops()" ${docOpsState.saving ? "disabled" : ""}>Hủy</button><button type="button" class="success" onclick="saveDocOps()" ${docOpsState.saving ? "disabled" : ""}>${docOpsState.saving ? "Đang lưu..." : "OK"}</button></div>` : ""}
+        ${docOpsState.returnType ? `<div class="docops-actions"><button type="button" onclick="resetDocOpsForm(); docops()" ${docOpsState.saving ? "disabled" : ""}>Hủy</button><button type="button" class="success" onclick="saveDocOps()" ${docOpsState.saving ? "disabled" : ""}>${docOpsState.saving ? "Đang lưu..." : "OK"}</button></div>` : ""}
       </section>`;
       renderDocOpsLookup();
       renderFilePreview("docOpsFiles", "docOpsPreview", "docOpsCamera");
