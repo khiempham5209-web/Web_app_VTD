@@ -264,7 +264,7 @@ function apiSave_(params) {
   const sh = sheet_();
   const headers = headers_(sh);
   const col = headerMap_(headers);
-  const found = rowNumber >= 2 ? {rowNumber, record: getRecordByRow_(sh, col, rowNumber)} : findRecord_(query);
+  const found = resolveRecordForSave_(sh, col, rowNumber, query);
   if (!found || !found.rowNumber) return fail_("Khong tim thay dong can cap nhat trong Chung tu_FF.");
 
   const maDonForFolder = clean_(query || found.record.maDon || found.record.po || found.record.orderNo);
@@ -352,6 +352,7 @@ function apiSave_(params) {
     productLinks: productUploads.map(row => row.linkAnh),
     skuMeasurementsUpdated,
     returnType,
+    rowRelocated: rowNumber >= 2 && found.rowNumber !== rowNumber,
     dataVersion
   });
   rememberSavedRequest_(clientId, response);
@@ -553,6 +554,20 @@ function findRecord_(query) {
 function getRecordByRow_(sh, col, rowNumber) {
   const row = sh.getRange(rowNumber, 1, 1, Math.min(sh.getLastColumn(), 23)).getDisplayValues()[0];
   return recordFromRow_(row, col, rowNumber);
+}
+
+function resolveRecordForSave_(sh, col, rowNumber, query) {
+  if (rowNumber >= 2 && rowNumber <= sh.getLastRow()) {
+    const record = getRecordByRow_(sh, col, rowNumber);
+    if (!query || recordMatchesQuery_(record, query)) return {rowNumber, record};
+  }
+  return query ? findRecord_(query) : null;
+}
+
+function recordMatchesQuery_(record, query) {
+  const q = norm_(query);
+  if (!record || !q) return false;
+  return [record.maDonGhtk, record.maDon, record.po, record.orderNo].some(value => norm_(value) === q);
 }
 
 function recordFromRow_(row, col, rowNumber) {
