@@ -6002,7 +6002,7 @@
         const cache = JSON.parse(localStorage.getItem(PRODUCT_CACHE_KEY) || "{}") || {};
         if (Number(cache.version || 0) !== PRODUCT_CACHE_VERSION) return {status:"pending", downloaded:0, total:0};
         const downloaded = Array.isArray(cache.products) ? cache.products.filter(p => productNameFrom(normalizeProductOption(p))).length : 0;
-        const total = downloaded;
+        const total = Number(cache.total || 0) || downloaded;
         return {
           status: total && downloaded >= total ? "done" : downloaded ? "downloading" : "pending",
           downloaded,
@@ -9056,14 +9056,14 @@
       const knownCount = !cacheHasMissingName && cachedProducts.length ? cachedProducts.length : 0;
       const res = await api("listProducts", {limit: 5000, knownCount, cacheDay: cache.day || "", _silent: !!silent});
       if (res.ok && res.unchanged && cachedProducts.length) {
-        localStorage.setItem(PRODUCT_CACHE_KEY, JSON.stringify(Object.assign({}, cache, {version: PRODUCT_CACHE_VERSION, day: today, updatedAt: new Date().toISOString(), count: cachedProducts.length, products: cachedProducts})));
+        localStorage.setItem(PRODUCT_CACHE_KEY, JSON.stringify(Object.assign({}, cache, {version: PRODUCT_CACHE_VERSION, day: today, updatedAt: new Date().toISOString(), count: cachedProducts.length, total: Number(res.count || cachedProducts.length), products: cachedProducts})));
         reportMasterSkuCacheProgress();
         return;
       }
       if (res.ok && Array.isArray(res.products)) {
         const mapped = res.products.map(normalizeProductOption).filter(p => productNameFrom(p));
         products.splice(0, products.length, ...mapped);
-        localStorage.setItem(PRODUCT_CACHE_KEY, JSON.stringify({version: PRODUCT_CACHE_VERSION, day: today, updatedAt: new Date().toISOString(), count: mapped.length, products: mapped}));
+        localStorage.setItem(PRODUCT_CACHE_KEY, JSON.stringify({version: PRODUCT_CACHE_VERSION, day: today, updatedAt: new Date().toISOString(), count: mapped.length, total: Number(res.count || mapped.length), products: mapped}));
         reportMasterSkuCacheProgress();
       }
     }
