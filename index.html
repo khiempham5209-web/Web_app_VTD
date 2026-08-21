@@ -213,6 +213,15 @@
     .sku-added-item strong { font-size: .94em; font-weight: 500; overflow-wrap: anywhere; }
     .vtd-sku-index { display: block; margin-bottom: 3px; color: var(--err) !important; font-size: 12px !important; font-weight: 800; text-transform: uppercase; }
     .grid.vtd-input-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .grid.vtd-input-pair > label { width: 100%; min-width: 0; align-content: start; }
+    .grid.vtd-input-pair > label > input,
+    .grid.vtd-input-pair > label > select,
+    .grid.vtd-input-pair > label > .scan-row { width: 100%; min-width: 0; max-width: 100%; }
+    .grid.vtd-input-pair input,
+    .grid.vtd-input-pair select { height: 54px; min-height: 54px; }
+    .grid.vtd-input-pair .scan-row { grid-template-columns: minmax(0, 1fr) 42px; gap: 5px; }
+    .grid.vtd-input-pair .scan-btn { width: 42px; min-width: 42px; max-width: 42px; height: 54px; min-height: 54px; padding: 0; font-size: 18px; }
+    .grid.vtd-input-pair .scan-icon { transform: scale(.78); }
     .sku-added-item span { color: var(--muted); font-size: .86em; }
     .sku-added-item button { min-height: 30px; padding: 0 8px; font-size: 12px; }
     .docops-order-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 16px; }
@@ -1250,6 +1259,12 @@
     html.desktop .scan-btn {
       min-height: 42px;
       font-size: 20px;
+    }
+    html.desktop .grid.vtd-input-pair input,
+    html.desktop .grid.vtd-input-pair select,
+    html.desktop .grid.vtd-input-pair .scan-btn {
+      height: 42px;
+      min-height: 42px;
     }
     html.desktop .table-wrap,
     html.desktop body.vtd-flat .table-wrap {
