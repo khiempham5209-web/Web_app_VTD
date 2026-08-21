@@ -8162,6 +8162,7 @@
       localStorage.setItem("vtd_token", live.token);
       localStorage.setItem("vtd_user", JSON.stringify(live.user));
       localStorage.setItem("vtd_session_day", sessionDay());
+      await new Promise(r => setTimeout(r, 600));
       showApp(true);
       const loginTheme = res.config && res.config.system && res.config.system.themeConfig;
       if (loginTheme) setTimeout(() => Promise.resolve(applyRemoteThemeConfig(loginTheme)).catch(() => {}), 250);
