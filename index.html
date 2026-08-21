@@ -211,6 +211,7 @@
     .sku-added-item.docops-editable { cursor: pointer; }
     .sku-added-item.docops-editable.editing { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
     .sku-added-item strong { font-size: .94em; font-weight: 500; overflow-wrap: anywhere; }
+    .vtd-sku-index { display: block; margin-bottom: 3px; color: var(--err) !important; font-size: 12px !important; font-weight: 800; text-transform: uppercase; }
     .sku-added-item span { color: var(--muted); font-size: .86em; }
     .sku-added-item button { min-height: 30px; padding: 0 8px; font-size: 12px; }
     .docops-order-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 16px; }
@@ -1500,7 +1501,7 @@
       {code:"510000080", name:"ColosBaby Gold 0+ 800g - S (Mới)", type:"Sữa"},
       {code:"510000098", name:"Colosbaby IQ Gold 2+ 800g - S", type:"Sữa"}
     ];
-    const skuState = { productIndex: "", productSearch: "", qty: "", type: "", status: "Bình thường", newMaterial: "", newName: "", items: [] };
+    const skuState = { productIndex: "", productSearch: "", materialSearch: "", qty: "", type: "", status: "Bình thường", newMaterial: "", newName: "", items: [] };
     const returnThProducts = ["BALO ONE PIECE", "BỘ QUÀ THỜI TRANG ONE PIECE"];
     let showProductPicker = false;
     let searchRan = false;
@@ -2098,9 +2099,10 @@
       const raw = r.skuItems || r.skus || r.products || r.sanPham || [];
       if (!Array.isArray(raw)) return [];
       return raw.filter(Boolean).map(x => typeof x === "string"
-        ? {name:x, type:"", qty:"", serial:"", lot:"", status:"", note:""}
+        ? {name:x, material:"", type:"", qty:"", serial:"", lot:"", status:"", note:""}
         : {
             name:productNameFrom(x) || x.ma || x.code || "",
+            material:productCodeFrom(x),
             type:x.type || x.loai || x["Type"] || "",
             qty:x.soLuong || x.qty || x.quantity || x["Số lượng"] || "",
             serial:x.serial || x.maSerial || x.maQr || x.qr || x["Mã serial"] || "",
@@ -2212,6 +2214,7 @@
       const key = `${navState.detailKey || "detail"}_${index}`;
       const open = !!expandedSku[key];
       const meta = [
+        ["Mã vật tư", item.material],
         ["Type", item.type],
         ["Số lượng", item.qty],
         ["Tình trạng", item.status],
@@ -2221,7 +2224,7 @@
       ].filter(x => x[1]);
       return `<div class="sku-card ${open ? "open" : ""}" onclick="toggleSku('${key}')">
         <div class="thumb" style="display:grid;place-items:center;font-weight:900;color:#64748b">SP</div>
-        <div><strong>${html(item.name)}</strong><br><span>${html([item.status, item.type, item.qty ? `SL ${item.qty}` : ""].filter(Boolean).join(" · "))}</span>
+        <div><span class="vtd-sku-index">SKU ${index + 1}:</span><strong>${html(item.name)}</strong><br><span>${html([item.status, item.type, item.qty ? `SL ${item.qty}` : ""].filter(Boolean).join(" · "))}</span>
           ${meta.length ? `<div class="sku-meta">${meta.map(([k,v]) => `<span>${html(k)}</span><strong>${html(v)}</strong>`).join("")}</div>` : ""}
         </div>
       </div>`;
@@ -4773,6 +4776,7 @@
       skuState.productIndex = index;
       if (index === "new") {
         skuState.productSearch = "";
+        skuState.materialSearch = "";
         skuState.type = skuState.type || "";
         showProductPicker = false;
         input();
@@ -4781,6 +4785,7 @@
       const p = products[index];
       if (p) {
         skuState.productSearch = productNameFrom(p) || productCodeFrom(p) || "";
+        skuState.materialSearch = productCodeFrom(p);
         skuState.type = productTypeFrom(p) === "Sữa" ? "Sữa" : "Quà/đồ chơi";
       }
       showProductPicker = false;
@@ -4852,7 +4857,10 @@
         returnThState.product = "";
       } else {
         skuState.productSearch = value;
-        if (skuState.productIndex !== "new") skuState.productIndex = "";
+        if (skuState.productIndex !== "new") {
+          skuState.productIndex = "";
+          skuState.materialSearch = "";
+        }
       }
       const box = skuComboBox(scope);
       const clearButton = el(scope === "returnth" ? "returnThProductSearchClear" : "skuProductSearchClear");
@@ -4875,6 +4883,7 @@
       }
       skuState.productIndex = "";
       skuState.productSearch = "";
+      skuState.materialSearch = "";
       skuState.type = "";
       skuState.newMaterial = "";
       skuState.newName = "";
@@ -4993,9 +5002,41 @@
       const p = products[skuState.productIndex];
       return skuState.type || (p && productTypeFrom(p) === "Sữa" ? "Sữa" : "Quà/đồ chơi");
     }
+    function currentProductMaterial(){
+      if (skuState.productIndex === "new") return skuState.newMaterial || skuState.materialSearch || "";
+      const p = products[skuState.productIndex];
+      return (p && productCodeFrom(p)) || skuState.materialSearch || "";
+    }
+    function findProductByMaterial(value){
+      const code = String(value || "").trim();
+      if (!code) return -1;
+      return products.findIndex(product => productCodeFrom(product) === code);
+    }
+    function updateSkuMaterial(value){
+      const code = String(value || "").trim();
+      skuState.materialSearch = code;
+      const index = findProductByMaterial(code);
+      if (index < 0) return;
+      skuState.productIndex = String(index);
+      const product = products[index];
+      skuState.productSearch = productNameFrom(product) || code;
+      skuState.type = productTypeFrom(product) === "Sữa" ? "Sữa" : "Quà/đồ chơi";
+      input();
+    }
+    function validateSkuMaterial(value){
+      const code = String(value || "").trim();
+      skuState.materialSearch = code;
+      if (!code || findProductByMaterial(code) >= 0) return;
+      skuState.productIndex = "";
+      skuState.productSearch = "";
+      skuState.type = "";
+      input();
+      toast("Không tìm thấy mã vật tư trong cache Master SKU trên máy.", "err");
+    }
     function resetSkuDraft(){
       skuState.productIndex = "";
       skuState.productSearch = "";
+      skuState.materialSearch = "";
       skuState.qty = "";
       skuState.type = "";
       skuState.status = "Bình thường";
@@ -5055,7 +5096,7 @@
     }
     function addedSkuList(){
       if (!skuState.items.length) return "";
-      return `<div class="sku-added-list">${skuState.items.map((item, i) => `<div class="sku-added-item"><div><strong>${html(productNameFrom(item) || "-")}</strong><span>${html(item.type || "-")} · SL ${html(item.soLuong || item.qty || "-")} · ${html(item.tinhTrang || "-")} · ${Number(item.imageCount || (item.images || []).length || 0)} ảnh</span></div><button type="button" onclick="removeSkuItem(${i})">Xóa</button></div>`).join("")}</div>`;
+      return `<div class="sku-added-list">${skuState.items.map((item, i) => `<div class="sku-added-item"><div><span class="vtd-sku-index">SKU ${i + 1}:</span><strong>${html(productNameFrom(item) || "-")}</strong><span>${html(productCodeFrom(item) ? `Mã vật tư ${productCodeFrom(item)} · ` : "")}${html(item.type || "-")} · SL ${html(item.soLuong || item.qty || "-")} · ${html(item.tinhTrang || "-")} · ${Number(item.imageCount || (item.images || []).length || 0)} ảnh</span></div><button type="button" onclick="removeSkuItem(${i})">Xóa</button></div>`).join("")}</div>`;
     }
     function previewFiles(input, targetId){
       const target = el(targetId);
@@ -9399,8 +9440,10 @@
         <div class="form-head"><h2>Nhập thông tin</h2>${inputSyncBadge()}</div>
         <div class="grid">
           <label>Mã đơn GHTK<div class="scan-row"><input id="inMaDon" placeholder="Scan hoặc nhập mã đơn" value="${html(inputLookup.query)}" oninput="scheduleInputLookup(this.value)"><button class="scan-btn" type="button" title="Quét mã đơn" aria-label="Quét mã đơn" onclick="openCodeScanner('inMaDon', 'scheduleInputLookup')">${scanIcon("Quét mã đơn")}</button></div></label>
-          <label>Slog<select id="inSlog" onchange="inputState.slog=this.value; input()"><option value="">Chọn SLOG</option>${["O1B1","O1B3","O1BH","Ecom"].map(x => `<option ${x===inputState.slog?"selected":""}>${x}</option>`).join("")}</select></label>
-          <label>Loại hoàn<select id="inLoai" onchange="inputState.loai=this.value; if(this.value!=='Chứng từ') inputState.xacThuc=''; input()"><option value="">Chọn loại hoàn</option>${loaiOptions.map(x => `<option ${x===inputState.loai?"selected":""}>${x}</option>`).join("")}</select></label>
+          <div class="grid cols-2">
+            <label>Slog<select id="inSlog" onchange="inputState.slog=this.value; input()"><option value="">Chọn SLOG</option>${["O1B1","O1B3","O1BH","Ecom"].map(x => `<option ${x===inputState.slog?"selected":""}>${x}</option>`).join("")}</select></label>
+            <label>Loại hoàn<select id="inLoai" onchange="inputState.loai=this.value; if(this.value!=='Chứng từ') inputState.xacThuc=''; input()"><option value="">Chọn loại hoàn</option>${loaiOptions.map(x => `<option ${x===inputState.loai?"selected":""}>${x}</option>`).join("")}</select></label>
+          </div>
         </div>
         <div id="inputLookupBox" class="lookup ${inputLookup.loading || inputLookup.record || inputLookup.message ? "" : "hidden"}" style="margin-top:8px"></div>
         ${showDoc ? `<div class="grid cols-2" style="margin-top:12px">
@@ -9414,9 +9457,9 @@
         <div class="sku-form">
           <label>Tên sản phẩm${skuComboHtml("vtd")}</label>
           ${skuState.productIndex === "new" ? `<div class="grid cols-3"><label>Material / Mã SP<input id="newSkuMaterial" value="${html(skuState.newMaterial)}" placeholder="Nhập mã material" oninput="skuState.newMaterial=this.value"></label><label>Tên sản phẩm<input id="newSkuName" value="${html(skuState.newName)}" placeholder="Nhập tên sản phẩm" oninput="skuState.newName=this.value"></label><label>Type<select onchange="skuState.type=this.value; input()"><option value="">Chọn type</option>${["Quà/đồ chơi","Sữa"].map(x=>`<option ${x===currentProductType()?"selected":""}>${x}</option>`).join("")}</select></label></div>` : ""}
-          <div class="grid cols-2">${skuState.productIndex === "new" ? "" : `<label>Type<select onchange="skuState.type=this.value; input()"><option value="">Chọn type</option>${["Quà/đồ chơi","Sữa"].map(x=>`<option ${x===currentProductType()?"selected":""}>${x}</option>`).join("")}</select></label>`}<label>Số lượng<input type="number" min="1" value="${html(skuState.qty)}" placeholder="Nhập số lượng" oninput="skuState.qty=this.value"></label></div>
-          <label>Tình trạng<select onchange="skuState.status=this.value">${["Bình thường","Móp, lỗi, hỏng sản phẩm","Sai/thiếu sản phẩm"].map(x=>`<option ${x===skuState.status?"selected":""}>${x}</option>`).join("")}</select></label>
-          ${currentProductType()==="Sữa" ? `<div class="grid cols-2"><label>Mã serial<div class="scan-row"><input id="skuSerial" placeholder="Nhập hoặc quét mã serial"><button class="scan-btn" type="button" title="Quét serial" aria-label="Quét serial" onclick="openCodeScanner('skuSerial')">${scanIcon("Quét serial")}</button></div></label><label>Mã lô / HSD<input id="skuLot" placeholder="Mã lô hoặc hạn sử dụng"></label></div>` : `<label>Mã lô / HSD<input id="skuLot" placeholder="Nếu có"></label>`}
+          ${skuState.productIndex === "new" ? "" : `<div class="grid cols-2"><label>Type<select onchange="skuState.type=this.value; input()"><option value="">Chọn type</option>${["Quà/đồ chơi","Sữa"].map(x=>`<option ${x===currentProductType()?"selected":""}>${x}</option>`).join("")}</select></label><label>Mã vật tư<div class="scan-row"><input id="skuMaterial" value="${html(currentProductMaterial())}" inputmode="numeric" placeholder="Quét hoặc nhập mã vật tư" oninput="updateSkuMaterial(this.value)" onchange="validateSkuMaterial(this.value)"><button class="scan-btn" type="button" title="Quét mã vật tư" aria-label="Quét mã vật tư" onclick="openCodeScanner('skuMaterial')">${scanIcon("Quét mã vật tư")}</button></div></label></div>`}
+          <div class="grid cols-2"><label>Tình trạng<select onchange="skuState.status=this.value">${["Bình thường","Móp, lỗi, hỏng sản phẩm","Sai/thiếu sản phẩm"].map(x=>`<option ${x===skuState.status?"selected":""}>${x}</option>`).join("")}</select></label><label>Số lượng<input type="number" min="1" value="${html(skuState.qty)}" placeholder="Nhập số lượng" oninput="skuState.qty=this.value"></label></div>
+          <div class="grid cols-2"><label>Mã lô / HSD<input id="skuLot" placeholder="Mã lô hoặc hạn sử dụng"></label><label>Mã serial<div class="scan-row"><input id="skuSerial" placeholder="Nhập hoặc quét mã serial"><button class="scan-btn" type="button" title="Quét serial" aria-label="Quét serial" onclick="openCodeScanner('skuSerial')">${scanIcon("Quét serial")}</button></div></label></div>
           <label>Ghi chú SKU<textarea id="skuNote" placeholder="Ghi chú thêm cho SKU nếu có"></textarea></label>
           <div class="file-actions" style="margin-top:2px"><button type="button" onclick="openFilePicker('productCamera')">Chụp ảnh SP</button><button type="button" onclick="openFilePicker('productLibrary')">Chọn ảnh SP</button></div>
           <input id="productCamera" class="hidden-file" type="file" accept="image/*" capture="environment" multiple onchange="captureFiles(this, 'productFiles', 'productPreview')"><input id="productLibrary" class="hidden-file" type="file" accept="image/*" multiple onchange="captureFiles(this, 'productFiles', 'productPreview')"><div id="productPreview" class="preview-grid"></div>
