@@ -3952,6 +3952,7 @@
       }
     }
     async function runLookupCacheNow(){
+      keySyncState.forceDaily=true;
       await warmOrderLookupCache(true);
       await warmAllDataCaches(true);
       await loadReturnThToday(true);
@@ -4564,7 +4565,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.2";
+    const APP_VERSION = "5.9.3";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -6091,20 +6092,7 @@
         return {status:"error", downloaded:0, total:0, lastError:String(err && err.message || err)};
       }
     }
-    function docOpsSkuCacheProgress(){
-      try {
-        const downloaded = docOpsSkuMemory.length;
-        return {
-          status: docOpsState.loadingSku ? "downloading" : (downloaded ? "done" : "pending"),
-          downloaded,
-          total: Math.max(downloaded, Number(docOpsSkuMetaMemory.lastRow || 1) - 1),
-          updatedAt: docOpsSkuMetaMemory.updatedAt || "",
-          lastError: ""
-        };
-      } catch (err) {
-        return {status:"error", downloaded:0, total:0, lastError:String(err && err.message || err)};
-      }
-    }
+    function docOpsSkuCacheProgress(){return Object.assign({},keyedProgress('docOpsSku'),{downloaded:docOpsSkuMemory.length});}
     function reportMasterSkuCacheProgress(progress){
       progress = progress || masterSkuCacheProgress();
       return api("reportLookupCacheStatus", Object.assign({}, progress, {
@@ -6175,7 +6163,7 @@
         {key:"returnThToday", label:"TH Truemilk hôm nay", status:cacheStatusLabel(returnTh.status), progress:(Number(returnTh.downloaded || 0) + "/" + Number(returnTh.total || 0))},
         {key:"docOpsLookup", error:docOpsLookup.lastError || "", label:"Chứng từ PN lookup", status:cacheStatusLabel(docOpsLookup.status), progress:(Number(docOpsLookup.downloaded || 0) + "/" + Number(docOpsLookup.total || 0))},
         {key:"docOpsToday", label:"Chứng từ PN hôm nay", status:cacheStatusLabel(docOpsToday.status), progress:(Number(docOpsToday.downloaded || 0) + "/" + Number(docOpsToday.total || 0))},
-        {key:"docOpsSku", label:"DS SKU Phạm Nguyên", status:cacheStatusLabel(docOpsSku.status), progress:(Number(docOpsSku.downloaded || 0) + "/" + Number(docOpsSku.total || 0))},
+        {key:"docOpsSku", error:docOpsSku.lastError || "", label:"DS SKU Phạm Nguyên", status:cacheStatusLabel(docOpsSku.status), progress:(Number(docOpsSku.downloaded || 0) + "/" + Number(docOpsSku.total || 0))},
         {key:"queueSync", label:"Queue sync", status:qTotal ? (q.error ? "Lỗi" : q.syncing ? "Đang sync" : "Đang chờ") : "Đã đủ", progress:`${qTotal} đơn`}
       ];
     }
@@ -9786,55 +9774,47 @@
       docOpsSkuMemory = [];
       docOpsSkuMetaMemory = {lastRow:1, count:0, updatedAt:""};
     }
+    async function cacheDailyClaim(type,force=false) {
+      const db=await keySyncDb(), day=todayApiDateText();
+      return new Promise((resolve,reject)=>{
+        const tx=db.transaction('meta','readwrite'), os=tx.objectStore('meta'), key='attempt:'+type;
+        let claimed=false;const req=os.get(key);
+        req.onsuccess=()=>{if(force || !req.result || req.result.day!==day){os.put({key,day});claimed=true;}};
+        tx.oncomplete=()=>resolve(claimed);tx.onerror=tx.onabort=()=>reject(tx.error || Error('Không ghi được mốc kiểm tra ngày.'));
+      });
+    }
     async function loadDocOpsSkuCache(force = false){
-      if (!docOpsApiUrl()) return false;
-      await hydrateDocOpsSkuCache();
-      if (docOpsState.loadingSku) return false;
-      docOpsState.loadingSku = true;
-      let downloaded = 0;
+      if (!docOpsApiUrl() || docOpsState.loadingSku) return false;
+      docOpsState.loadingSku=true;
       try {
-        const manifest = await docOpsApi("skuInit", {_silent:true});
-        if (!manifest || !manifest.ok) throw new Error((manifest && manifest.message) || "Không kiểm tra được DS SKU Phạm Nguyên");
-        const remoteLastRow = Math.max(1, Number(manifest.lastRow || 1));
-        const remoteSchemaVersion = Math.max(1, Number(manifest.schemaVersion || 1));
-        const remoteDataVersion = String(manifest.dataVersion || "");
-        const localSchemaVersion = Number(docOpsSkuMetaMemory.schemaVersion || 0);
-        const localDataVersion = String(docOpsSkuMetaMemory.dataVersion || "");
-        let localLastRow = Math.max(1, Number(docOpsSkuMetaMemory.lastRow || 1));
-        if ((localSchemaVersion && localSchemaVersion !== remoteSchemaVersion) ||
-            (!localSchemaVersion && docOpsSkuMemory.length) ||
-            (remoteDataVersion && remoteDataVersion !== localDataVersion)) {
-          await clearDocOpsSkuCache();
-          localLastRow = 1;
+        await hydrateDocOpsSkuCache();
+        const saved=await keySyncRead('pnSku');
+        const oldProgress=await keySyncRead('meta','progress:docOpsSku');
+        if(saved.length || (oldProgress && oldProgress.verifiedAt))docOpsSkuMemory=saved;
+        if(oldProgress)keySyncState.progress.docOpsSku=oldProgress;
+        if(!await cacheDailyClaim('docOpsSku',force))return false;
+        await keySyncProgress('docOpsSku',{status:'checking',downloaded:docOpsSkuMemory.length,lastError:''});
+        const versions=Object.fromEntries(saved.map(r=>[r.syncKey,r.contentVersion]));
+        const res=await docOpsApi('skuSync',{versions,_silent:true});
+        if(!res || !res.ok || res.protocol!==1)throw Error(res && res.message || 'API PN chưa hỗ trợ skuSync.');
+        if(!Array.isArray(res.entries) || !Array.isArray(res.records) || res.entries.length!==res.total)throw Error('Danh sách SKU chưa đủ.');
+        const byKey=new Map(saved.map(r=>[r.syncKey,r]));
+        for(const row of res.records)byKey.set(row.syncKey,row);
+        const keys=new Set(), next=[];
+        for(const entry of res.entries){
+          const row=byKey.get(entry.key);
+          if(keys.has(entry.key) || !row || row.contentVersion!==entry.version || 'MATERIAL:'+String(row.material).trim().toLowerCase()!==entry.key)throw Error('Dữ liệu SKU thiếu hoặc không khớp mã vật tư.');
+          keys.add(entry.key);next.push(Object.assign({},row,{rowNumber:entry.rowNumber}));
         }
-        if (!docOpsSkuMemory.length && remoteLastRow > 1) localLastRow = 1;
-        if (localLastRow > remoteLastRow) {
-          await clearDocOpsSkuCache();
-          localLastRow = 1;
-        }
-        let startRow = Math.max(2, localLastRow + 1);
-        while (startRow <= remoteLastRow) {
-          const res = await docOpsApi("skuPage", {startRow, pageSize:2000, _silent:true});
-          if (!res || !res.ok) throw new Error((res && res.message) || "Không tải được DS SKU Phạm Nguyên");
-          const rows = Array.isArray(res.records) ? res.records : [];
-          if (rows.length) downloaded += await docOpsSkuPutMany(rows);
-          const nextRow = Number(res.nextRow || (startRow + rows.length));
-          const syncedThrough = Math.min(remoteLastRow, Math.max(startRow - 1, nextRow - 1));
-          await docOpsSkuWriteMeta({lastRow:syncedThrough, count:docOpsSkuMemory.length, schemaVersion:remoteSchemaVersion, dataVersion:remoteDataVersion, updatedAt:new Date().toISOString()});
-          if (res.done || !res.nextRow || Number(res.nextRow) <= startRow || rows.length === 0) break;
-          startRow = Number(res.nextRow);
-        }
-        await docOpsSkuWriteMeta({lastRow:remoteLastRow, count:docOpsSkuMemory.length, schemaVersion:remoteSchemaVersion, dataVersion:remoteDataVersion, updatedAt:new Date().toISOString()});
-        docOpsState.skuLoaded = true;
-        await reportDocOpsSkuCacheProgress({status:"done", downloaded:docOpsSkuMemory.length, total:Math.max(0, remoteLastRow - 1), newRecords:downloaded});
+        await keySyncWrite('pnSku',next,saved.filter(r=>!keys.has(r.syncKey)).map(r=>r.syncKey));
+        docOpsSkuMemory=next;
+        docOpsState.skuLoaded=true;
+        await keySyncProgress('docOpsSku',{status:'done',downloaded:next.length,total:res.total,lastError:'',verifiedAt:new Date().toISOString()});
         return true;
-      } catch (err) {
-        await reportDocOpsSkuCacheProgress({status:"error", downloaded:docOpsSkuMemory.length, total:docOpsSkuMemory.length, lastError:String(err && err.message || err)});
+      } catch(err) {
+        await keySyncProgress('docOpsSku',{status:'error',downloaded:docOpsSkuMemory.length,lastError:String(err.message || err)}).catch(()=>{});
         return false;
-      } finally {
-        docOpsState.loadingSku = false;
-        if (view === "docops") docops();
-      }
+      } finally {docOpsState.loadingSku=false;docOpsState.skuLoaded=true;if(view==='docops')docops();}
     }
     function loadDocOpsToday(force = false){
       const day = todayApiDateText();
@@ -10756,12 +10736,12 @@
       if (keySyncState.opening) return keySyncState.opening;
       keySyncState.opening = new Promise((resolve,reject) => {
         if (!window.indexedDB) return reject(new Error('Máy không mở được IndexedDB.'));
-        const req = indexedDB.open('VTD_KEYED_CACHE_V1',1);
+        const req = indexedDB.open('VTD_KEYED_CACHE_V1',2);
         let expired = false;
         const timer = setTimeout(() => { expired=true; reject(new Error('Mở cache DB quá lâu.')); },15000);
         req.onupgradeneeded = () => {
-          for (const name of ['records','masterSku']) req.result.createObjectStore(name,{keyPath:'syncKey'});
-          req.result.createObjectStore('meta',{keyPath:'key'});
+          for (const name of ['records','masterSku','pnSku']) if(!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name,{keyPath:'syncKey'});
+          if(!req.result.objectStoreNames.contains('meta')) req.result.createObjectStore('meta',{keyPath:'key'});
         };
         req.onblocked = () => { clearTimeout(timer); expired=true; reject(new Error('Cache DB bị khóa bởi phiên app khác.')); };
         req.onerror = () => { clearTimeout(timer); reject(req.error || new Error('Không mở được cache DB.')); };
@@ -10824,7 +10804,7 @@
       catch(err) {progress.status='error';progress.lastError='Không lưu được trạng thái cache: '+String(err.message || err);}
       keySyncState.progress[type]=progress;
       refreshLocalCacheProgressUi();
-      const params=Object.assign({},progress,{cacheType:type,deviceId:deviceId(),appVersion:APP_VERSION,label:type==='masterSku'?'Master SKU':'Chứng từ PN lookup',_silent:true});
+      const params=Object.assign({},progress,{cacheType:type,deviceId:deviceId(),appVersion:APP_VERSION,label:type==='masterSku'?'Master SKU':type==='docOpsSku'?'DS SKU Phạm Nguyên':'Chứng từ PN lookup',_silent:true});
       // Reporting failure must not turn a successfully committed cache into a download failure.
       try { await api('reportLookupCacheStatus',params); } catch(err) {}
       return progress;
@@ -10945,16 +10925,18 @@
       let failed=false;
       try {
         if (keySyncState.pnLoad) await keySyncState.pnLoad;
+        await loadDocOpsSkuCache(false);
         for (const type of (Number(keyedProgress('masterSku').downloaded || 0)===0 ? ['masterSku','docOpsLookup'] : ['docOpsLookup','masterSku'])) {
           if (type==='docOpsLookup' && !docOpsApiUrl()) continue;
-          try { await keySyncIdle(); if (!await keySyncReconcile(type)) failed=true; }
+          try { if(!await cacheDailyClaim(type,!!keySyncState.forceDaily))continue; await keySyncIdle(); if (!await keySyncReconcile(type)) failed=true; }
           catch(err) {failed=true; await keySyncProgress(type,{status:err.sourceChanged?'pending':'error',lastError:String(err.message || err)}).catch(()=>{});}
         }
       } finally {
         keySyncState.active=false;
+        keySyncState.forceDaily=false;
         keySyncState.failures=failed?Math.min(5,keySyncState.failures+1):0;
         const nextDay=new Date();nextDay.setHours(24,0,30,0);
-        keySyncSchedule(failed?Math.min(600000,30000*Math.pow(2,keySyncState.failures)):Math.max(30000,nextDay.getTime()-Date.now())+Math.floor(Math.random()*60000));
+        keySyncSchedule(Math.max(30000,nextDay.getTime()-Date.now())+Math.floor(Math.random()*60000));
       }
     }
     function keyTracked(call) {
@@ -11006,7 +10988,7 @@
     async function loadDocOpsLookupCache(force=false){
       if(keySyncState.active)return false;
       if(keySyncState.pnLoad)return keySyncState.pnLoad;
-      keySyncState.pnLoad=loadDocOpsLookupCacheAppend(force).finally(()=>{keySyncState.pnLoad=null;keySyncSchedule(30000);});
+      keySyncState.pnLoad=cacheDailyClaim('pnAppend',force).then(go=>go?loadDocOpsLookupCacheAppend(force):false).finally(()=>{keySyncState.pnLoad=null;keySyncSchedule(30000);});
       return keySyncState.pnLoad;
     }
     (function bootLive(){

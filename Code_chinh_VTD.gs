@@ -5642,7 +5642,7 @@ function vtdApp_masterSkuKeySync(params) {
   return ks_reply(ks_pack(records,invalid,ss.getId()+':MASTER SKU',sh.getLastRow()),params);
 }
 
-// One alert per cache/error signature across devices in six hours. No credentials in email.
+// Send each received error report immediately. No credentials in email.
 function vtdApp_cacheErrorEmail_(p) {
   if (p.status !== 'error') return;
   const sender='fulfillment.wms.3pl@gmail.com', recipient='khiempham5209@gmail.com';
@@ -5650,9 +5650,6 @@ function vtdApp_cacheErrorEmail_(p) {
   const lock=LockService.getScriptLock();
   if (!lock.tryLock(10000)) throw new Error('Chưa lấy được khóa gửi cảnh báo.');
   try {
-    const props=PropertiesService.getScriptProperties(), key='CACHE_ALERT_'+ks_hash([p.cacheType,p.lastError || 'Unknown']);
-    const now=Date.now(), sent=Number(props.getProperty(key) || 0);
-    if (sent && now-sent < 6*60*60*1000) return;
     MailApp.sendEmail({to:recipient,subject:'[VTD] Lỗi cache: '+String(p.label || p.cacheType),body:[
       'Máy nhân viên báo lỗi đồng bộ dữ liệu.',
       'User: '+p.email,'Máy: '+p.deviceId,'Dữ liệu: '+(p.label || p.cacheType),
@@ -5661,8 +5658,7 @@ function vtdApp_cacheErrorEmail_(p) {
       'Đối soát thành công gần nhất: '+String(p.verifiedAt || 'Chưa có'),
       'Phiên bản: '+String(p.appVersion || ''),
       'Thời gian: '+Utilities.formatDate(new Date(),'Asia/Ho_Chi_Minh','yyyy-MM-dd HH:mm:ss'),
-      'Mở Quản lý thiết bị để xem báo cáo. Cùng lỗi được giới hạn một email mỗi 6 giờ cho toàn bộ máy.'
+      'Mở Quản lý thiết bị để xem báo cáo.'
     ].join('\n')});
-    props.setProperty(key,String(now));
   } finally { lock.releaseLock(); }
 }

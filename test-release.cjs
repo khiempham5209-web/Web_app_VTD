@@ -70,12 +70,35 @@ function sheet(data){return {getLastRow:()=>data.length,getLastColumn:()=>data[0
    const ctx={docOpsState:{productNotes:['Xẹp hơi','Hết hạn sử dụng'],notesOpen:true},PN_PRODUCT_NOTES:c.PN_PRODUCT_NOTES,html:x=>String(x)};vm.createContext(ctx);vm.runInContext(extract('pnNotesHtml'),ctx);
    const markup=ctx.pnNotesHtml();assert.equal(markup.includes('type="checkbox"'),false);assert.ok(markup.includes('aria-multiselectable="true"'));assert.equal((markup.match(/aria-selected="true"/g)||[]).length,2);
  });
- await test('Cache email suppresses repeated errors across devices and retries failed sends',()=>{
+ await test('Cache email sends every received error report and retries failed sends',()=>{
    let count=0, fail=false;const props=new Map();const ctx={console,Date,Session:{getEffectiveUser:()=>({getEmail:()=> 'fulfillment.wms.3pl@gmail.com'})},LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock:()=>{}})},PropertiesService:{getScriptProperties:()=>({getProperty:k=>props.get(k),setProperty:(k,v)=>props.set(k,v)})},Utilities:{formatDate:()=> 'today'},MailApp:{sendEmail:m=>{assert.equal(m.to,'khiempham5209@gmail.com');if(fail)throw Error('mail unavailable');count++;}}};vm.createContext(ctx);vm.runInContext(vtd,ctx);
    const p={status:'error',cacheType:'masterSku',lastError:'duplicate',email:'worker',deviceId:'one'};
    ctx.vtdApp_cacheErrorEmail_({...p,status:'done'});assert.equal(count,0);
-   ctx.vtdApp_cacheErrorEmail_(p);ctx.vtdApp_cacheErrorEmail_({...p,deviceId:'two'});assert.equal(count,1);
-   fail=true;assert.throws(()=>ctx.vtdApp_cacheErrorEmail_({...p,lastError:'network'}));fail=false;ctx.vtdApp_cacheErrorEmail_({...p,lastError:'network'});assert.equal(count,2);
+   ctx.vtdApp_cacheErrorEmail_(p);ctx.vtdApp_cacheErrorEmail_({...p,deviceId:'two'});assert.equal(count,2);
+   fail=true;assert.throws(()=>ctx.vtdApp_cacheErrorEmail_({...p,lastError:'network'}));fail=false;ctx.vtdApp_cacheErrorEmail_({...p,lastError:'network'});assert.equal(count,3);
+ });
+ await test('PN SKU delta by material coalesces duplicates and sends zero unchanged records',()=>{
+   const ctx={console};vm.createContext(ctx);vm.runInContext(pn,ctx);
+   const data=[['Mã vật tư','Tên vật tư','Barcode'],['M1','Name','123'],['M1','Name','123']];ctx.skuSheet_=()=>sheet(data);
+   const first=ctx.apiSkuSync_({});assert.equal(first.total,1);assert.equal(first.records.length,1);
+   const versions=Object.fromEntries(first.records.map(r=>[r.syncKey,r.contentVersion]));assert.equal(ctx.apiSkuSync_({versions}).records.length,0);
+   data.push(['M2','New','456']);assert.equal(ctx.apiSkuSync_({versions}).records.length,1);
+   data.push(['M1','Conflict','999']);assert.equal(ctx.apiSkuSync_({}).ok,false);
+ });
+ await test('PN SKU timeout and commit failure retain old in-memory cache',async()=>{
+   const old=[{syncKey:'MATERIAL:m1',material:'M1',name:'Old',contentVersion:'a',rowNumber:2}];let failCommit=false;
+   const ctx={Map,Set,Object,Date,docOpsState:{},docOpsSkuMemory:old.slice(),docOpsApiUrl:()=> 'api',hydrateDocOpsSkuCache:async()=>{},keySyncRead:async store=>store==='pnSku'?old:undefined,keySyncState:{progress:{}},cacheDailyClaim:async()=>true,keySyncProgress:async()=>{},view:'home',docOpsApi:async()=>{if(!failCommit)throw Error('timeout');return {ok:true,protocol:1,total:1,entries:[{key:'MATERIAL:m1',version:'b',rowNumber:3}],records:[{syncKey:'MATERIAL:m1',material:'M1',name:'New',contentVersion:'b'}]};},keySyncWrite:async()=>{throw Error('quota');}};
+   vm.createContext(ctx);vm.runInContext(extract('loadDocOpsSkuCache'),ctx);
+   assert.equal(await ctx.loadDocOpsSkuCache(),false);assert.equal(ctx.docOpsSkuMemory[0].name,'Old');
+   failCommit=true;assert.equal(await ctx.loadDocOpsSkuCache(),false);assert.equal(ctx.docOpsSkuMemory[0].name,'Old');
+ });
+ await test('Daily claim persists across reload and failures; manual run and next day allowed',async()=>{
+   const rows=new Map();let day='11/09/2026';
+   const db={transaction:()=>{const tx={};tx.objectStore=()=>({get:key=>{const req={};setImmediate(()=>{req.result=rows.get(key);req.onsuccess();setImmediate(()=>tx.oncomplete());});return req;},put:row=>rows.set(row.key,row)});return tx;}};
+   const ctx={keySyncDb:async()=>db,todayApiDateText:()=>day};vm.createContext(ctx);vm.runInContext(extract('cacheDailyClaim'),ctx);
+   assert.equal(await ctx.cacheDailyClaim('docOpsSku'),true);assert.equal(await ctx.cacheDailyClaim('docOpsSku'),false);
+   vm.runInContext(extract('cacheDailyClaim'),ctx);assert.equal(await ctx.cacheDailyClaim('docOpsSku'),false);
+   assert.equal(await ctx.cacheDailyClaim('docOpsSku',true),true);day='12/09/2026';assert.equal(await ctx.cacheDailyClaim('docOpsSku'),true);
  });
  console.log('TOTAL '+passed+' tests passed');
 })().catch(err=>{console.error(err);process.exitCode=1;});

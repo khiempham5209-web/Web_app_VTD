@@ -26,7 +26,7 @@ function doPost(e) {
     const body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
     const action = String(body.action || "").trim();
     const params = body.params || {};
-    const map = {keySync: apiKeySync_, init: apiInit_, lookup: apiLookup_, page: apiPage_, today: apiToday_, skuInit: apiSkuInit_, skuPage: apiSkuPage_, save: apiSave_};
+    const map = {keySync: apiKeySync_, init: apiInit_, lookup: apiLookup_, page: apiPage_, today: apiToday_, skuSync: apiSkuSync_, skuInit: apiSkuInit_, skuPage: apiSkuPage_, save: apiSave_};
     if (!map[action]) return json_({ok: false, message: "Action khong hop le: " + action});
     return json_(map[action](params));
   } catch (err) {
@@ -840,4 +840,20 @@ function pnValidExpiry_(text) {
   if (!m) return false;
   const d = new Date(Number(m[3]),Number(m[2])-1,Number(m[1]));
   return d.getFullYear() === Number(m[3]) && d.getMonth() === Number(m[2])-1 && d.getDate() === Number(m[1]);
+}
+
+function apiSkuSync_(params) {
+  const sh=skuSheet_(), lastRow=sh.getLastRow(), records=[], seen=Object.create(null);
+  for(let startRow=2;startRow<=lastRow;startRow+=2000) {
+    const page=apiSkuPage_({startRow,pageSize:2000});
+    for(const row of page.records) {
+      if(!row.material) return {ok:false,message:'DS SKU có dòng thiếu mã vật tư: '+row.rowNumber};
+      const key='MATERIAL:'+ks_key(row.material), content=Object.assign({},row);delete content.rowNumber;
+      const signature=JSON.stringify(content);
+      if(seen[key]) {if(seen[key]===signature)continue;return {ok:false,message:'DS SKU trùng mã vật tư khác nội dung: '+row.material};}
+      seen[key]=signature;records.push(Object.assign({},row,{syncKey:key,contentVersion:ks_hash(content)}));
+    }
+  }
+  const versions=(params || {}).versions || {};
+  return {ok:true,protocol:1,total:records.length,entries:records.map(r=>({key:r.syncKey,version:r.contentVersion,rowNumber:r.rowNumber})),records:records.filter(r=>versions[r.syncKey]!==r.contentVersion)};
 }
