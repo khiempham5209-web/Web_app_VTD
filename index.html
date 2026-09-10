@@ -3934,7 +3934,7 @@
       const localRows = localCacheSummaryRows();
       return `<section class="section"><h2>Cache chứng từ trên máy user</h2>
         <div class="config-actions" style="margin-bottom:8px"><button onclick="loadLookupCacheStatus(true)">Tải lại báo cáo</button><button onclick="runLookupCacheNow()">Chạy cache máy này</button></div>
-        <div class="lookup" style="margin-bottom:8px">${localRows.map(r => `<div data-local-cache-row="${html(r.key)}" style="display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:4px 0"><span>${html(r.label)}</span><strong>${html(r.status)} · ${html(r.progress)}</strong></div>`).join("")}</div>
+        <div class="lookup" style="margin-bottom:8px">${localRows.map(r => `<div data-local-cache-row="${html(r.key)}" style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:4px 0"><span>${html(r.label)}</span><strong>${html(r.status)} · ${html(r.progress)}</strong><small data-cache-error style="flex-basis:100%;color:#b42318;text-align:left">${html(r.error || "")}</small></div>`).join("")}</div>
         <div class="table-wrap"><table><thead><tr><th>User</th><th>Máy</th><th>Cache</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead><tbody>${body}</tbody></table></div></section>`;
     }
     async function loadLookupCacheStatus(force){
@@ -4564,7 +4564,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9";
+    const APP_VERSION = "5.9.1";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -5098,6 +5098,7 @@
       return normalizeSkuPayload(item);
     }
     async function addSkuDraft(){
+      if(Object.values(live.capturePending || {}).some(Boolean))return toast("Đang nhận ảnh, vui lòng đợi ảnh hiện đủ.","err");
       const item = collectSkuDraft(true);
       if (!item) return;
       if (!live.productFiles || !live.productFiles.length) return toast("SKU cần ít nhất 1 ảnh sản phẩm", "err");
@@ -5116,15 +5117,9 @@
       if (!skuState.items.length) return "";
       return `<div class="sku-added-list">${skuState.items.map((item, i) => `<div class="sku-added-item"><div><span class="vtd-sku-index">SKU ${i + 1}:</span><strong>${html(productNameFrom(item) || "-")}</strong><span>${html(productCodeFrom(item) ? `Mã vật tư ${productCodeFrom(item)} · ` : "")}${html(item.type || "-")} · SL ${html(item.soLuong || item.qty || "-")} · ${html(item.tinhTrang || "-")} · ${Number(item.imageCount || (item.images || []).length || 0)} ảnh</span></div><button type="button" onclick="removeSkuItem(${i})">Xóa</button></div>`).join("")}</div>`;
     }
-    function previewFiles(input, targetId){
-      const target = el(targetId);
-      if (!target) return;
-      const files = Array.from(input.files || []);
-      if (!files.length) return;
-      target.innerHTML = files.slice(0, 8).map(file => {
-        const url = URL.createObjectURL(file);
-        return `<div class="preview-item"><img src="${url}" alt="${html(file.name)}"><small>${html(file.name)}</small></div>`;
-      }).join("");
+    function previewFiles(input,targetId){
+      const mapping=nativeImagePickerMap[input.id];
+      if(mapping)return captureFiles(input,mapping[1],targetId);
     }
     function renderFilePreview(bucket, targetId, pickerId){
       const target = el(targetId);
@@ -5135,7 +5130,7 @@
         return `<div class="preview-item"><img src="${url}" alt="${html(file.name)}"><button type="button" onclick="removeCapturedFile('${bucket}', ${index}, '${targetId}', '${pickerId}')">×</button><small>${html(file.name)}</small></div>`;
       }).join("");
       if (files.length) {
-        target.insertAdjacentHTML("beforeend", `<button type="button" onclick="retakeFiles('${bucket}', '${targetId}', '${pickerId}')">Chụp/chọn lại</button>`);
+        target.insertAdjacentHTML("beforeend", `<button type="button" onclick="retakeFiles('${bucket}', '${targetId}', '${pickerId}')">Chụp/chọn thêm</button>`);
       }
     }
     function removeCapturedFile(bucket, index, targetId, pickerId){
@@ -5144,12 +5139,10 @@
       if (picker) picker.value = "";
       renderFilePreview(bucket, targetId, pickerId);
     }
-    function retakeFiles(bucket, targetId, pickerId){
-      live[bucket] = [];
-      const picker = el(pickerId);
-      if (picker) picker.value = "";
-      renderFilePreview(bucket, targetId, pickerId);
-      openFilePicker(pickerId);
+    function retakeFiles(bucket,targetId,pickerId){
+      // Adding or cancelling a capture must never delete existing photos.
+      const fallback=Object.keys(nativeImagePickerMap).find(id=>nativeImagePickerMap[id][1]===bucket && nativeImagePickerMap[id][0]==='camera');
+      openFilePicker(pickerId || fallback || '');
     }
     function sessionDay(){
       const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -5574,6 +5567,8 @@
         localCacheSummaryRows().forEach(row => {
           const node = document.querySelector(`[data-local-cache-row="${row.key}"] strong`);
           if (node) node.textContent = `${row.status} · ${row.progress}`;
+          const errorNode=document.querySelector(`[data-local-cache-row="${row.key}"] [data-cache-error]`);
+          if(errorNode)errorNode.textContent=row.error || "";
         });
       } catch (err) {}
     }
@@ -6176,9 +6171,9 @@
           const p = data[type] || {};
           return {key:type, label:DATA_CACHE_TYPES[type].label, status:cacheStatusLabel(p.status), progress:(Number(p.downloaded || 0) + "/" + Number(p.total || 0))};
         }),
-        {key:"masterSku", label:"Master SKU", status:cacheStatusLabel(masterSku.status), progress:(Number(masterSku.downloaded || 0) + "/" + Number(masterSku.total || 0))},
+        {key:"masterSku", error:masterSku.lastError || "", label:"Master SKU", status:cacheStatusLabel(masterSku.status), progress:(Number(masterSku.downloaded || 0) + "/" + Number(masterSku.total || 0))},
         {key:"returnThToday", label:"TH Truemilk hôm nay", status:cacheStatusLabel(returnTh.status), progress:(Number(returnTh.downloaded || 0) + "/" + Number(returnTh.total || 0))},
-        {key:"docOpsLookup", label:"Chứng từ PN lookup", status:cacheStatusLabel(docOpsLookup.status), progress:(Number(docOpsLookup.downloaded || 0) + "/" + Number(docOpsLookup.total || 0))},
+        {key:"docOpsLookup", error:docOpsLookup.lastError || "", label:"Chứng từ PN lookup", status:cacheStatusLabel(docOpsLookup.status), progress:(Number(docOpsLookup.downloaded || 0) + "/" + Number(docOpsLookup.total || 0))},
         {key:"docOpsToday", label:"Chứng từ PN hôm nay", status:cacheStatusLabel(docOpsToday.status), progress:(Number(docOpsToday.downloaded || 0) + "/" + Number(docOpsToday.total || 0))},
         {key:"docOpsSku", label:"DS SKU Phạm Nguyên", status:cacheStatusLabel(docOpsSku.status), progress:(Number(docOpsSku.downloaded || 0) + "/" + Number(docOpsSku.total || 0))},
         {key:"queueSync", label:"Queue sync", status:qTotal ? (q.error ? "Lỗi" : q.syncing ? "Đang sync" : "Đang chờ") : "Đã đủ", progress:`${qTotal} đơn`}
@@ -9322,6 +9317,7 @@
       box.classList.add("hidden");
     }
     async function saveInput(){
+      if(Object.values(live.capturePending || {}).some(Boolean))return toast('Đang nhận ảnh, vui lòng đợi ảnh hiện đủ rồi lưu.','err');
       if (live.inputSaving) return;
       const maDon = (el("inMaDon")?.value || inputLookup.query || "").trim();
       if (!maDon) return toast("Thiếu mã đơn", "err");
@@ -9661,7 +9657,7 @@
         while (startRow <= remoteLastRow) {
           const res = await docOpsApi("page", {startRow, pageSize:2000, _silent:true});
           if (!res || !res.ok) {
-            await reportDocOpsLookupCacheProgress({
+            await keySyncProgress("docOpsLookup",{
               status:"error",
               downloaded: docOpsLookupMemory.length,
               total:Math.max(0, remoteLastRow - 1),
@@ -9685,7 +9681,7 @@
         if (downloaded > 0 || !checkedToday || (remoteVersion && remoteVersion !== previousVersion)) await loadDocOpsToday(true);
         return true;
       } catch (err) {
-        await reportDocOpsLookupCacheProgress({status:"error", downloaded:docOpsLookupMemory.length, total:docOpsLookupMemory.length, lastError:String(err && err.message || err)});
+        await keySyncProgress("docOpsLookup",{status:"error", downloaded:docOpsLookupMemory.length, total:docOpsLookupMemory.length, lastError:String(err && err.message || err)});
         return false;
       }
     }
@@ -10079,6 +10075,7 @@
       docOpsState.quantity = "";
       docOpsState.productNote = "";
       docOpsState.productNotes = [];
+      docOpsState.notesOpen = false;
       docOpsState.classification = "";
       docOpsState.expiryDate = "";
       docOpsState.productOtherNote = "";
@@ -10146,6 +10143,7 @@
       return items;
     }
     function addDocOpsProduct(){
+      if(Object.values(live.capturePending || {}).some(Boolean))return toast("Đang nhận ảnh, vui lòng đợi ảnh hiện đủ.","err");
       const item = docOpsProductDraftItem();
       const editingIndex = Number(docOpsState.editingIndex);
       const itemNumber = editingIndex >= 0 ? editingIndex + 1 : (docOpsState.items || []).length + 1;
@@ -10218,6 +10216,7 @@
       live.docOpsFiles = [];
     }
     async function saveDocOps(){
+      if(Object.values(live.capturePending || {}).some(Boolean))return toast('Đang nhận ảnh, vui lòng đợi ảnh hiện đủ rồi lưu.','err');
       if (docOpsState.saving) return;
       const maDon = String(el("docOpsMaDon")?.value || docOpsState.maDon || "").trim();
       if (!maDon) return toast("Vui lòng nhập mã đơn.", "err");
@@ -10557,6 +10556,7 @@
       renderFilePreview("returnThFiles", "returnThPreview", "returnThCamera");
     }
     async function saveReturnTh(){
+      if(Object.values(live.capturePending || {}).some(Boolean))return toast('Đang nhận ảnh, vui lòng đợi ảnh hiện đủ rồi lưu.','err');
       if (returnThState.saving) return;
       const maDon = String(returnThState.maDon || "").trim();
       const items = returnThItemsForSave();
@@ -10583,12 +10583,29 @@
         returnThState.saving = false;
       }
     }
-    function captureFiles(input, bucket, targetId){
-      const selected = Array.from(input.files || []);
-      const existing = Array.isArray(live[bucket]) ? live[bucket] : [];
-      live[bucket] = [...existing, ...selected].slice(0, 8);
-      input.value = "";
-      renderFilePreview(bucket, targetId, input.id);
+    async function captureFiles(input,bucket,targetId){
+      const selected=Array.from(input.files || []);input.value='';
+      if(!selected.length)return;
+      const owner=Array.isArray(live[bucket])?live[bucket]:(live[bucket]=[]);
+      const pending=live.capturePending || (live.capturePending={});
+      pending[bucket]=(pending[bucket] || 0)+1;
+      const previous=live.captureChain || Promise.resolve();
+      const task=previous.catch(()=>{}).then(async()=>{
+        if(live[bucket]!==owner)return;
+        const room=Math.max(0,8-owner.length);
+        if(selected.length>room)toast('Mỗi nhóm tối đa 8 ảnh. Ảnh cũ vẫn được giữ.','err');
+        for(const file of selected.slice(0,room)){
+          const dataUrl=await readFileAsDataUrl(file), data=splitDataUrl(dataUrl);
+          const name=file.name || 'image.jpg';
+          const photo={nativeImage:true,name,fileName:name,type:data.mimeType,mimeType:data.mimeType,base64:data.base64,data:data.base64};
+          if(live[bucket]!==owner)return;
+          owner.push(photo);
+          renderFilePreview(bucket,targetId,input.id);
+        }
+      });
+      live.captureChain=task;
+      try{await task;}catch(err){toast('Không đọc được ảnh mới: '+String(err.message || err)+'. Ảnh cũ vẫn được giữ.','err');}
+      finally{pending[bucket]=Math.max(0,(pending[bucket] || 1)-1);}
     }
     async function uploadSelectedImages(rawId, maDon){
       const files = [...live.docFiles, ...live.productFiles].slice(0, 8);
@@ -10829,7 +10846,10 @@
     async function keySyncCall(type,params) {
       await keySyncIdle();
       const res=type==='masterSku' ? await api('masterSkuKeySync',Object.assign({_silent:true},params)) : await docOpsApi('keySync',Object.assign({_silent:true},params));
-      if (!res || !res.ok || res.protocol!==1) throw new Error(res && res.message || 'API chưa hỗ trợ đối soát theo mã.');
+      if (!res || !res.ok || res.protocol!==1) {
+        const err=new Error(res && res.message || 'API chưa hỗ trợ đối soát theo mã.');
+        err.sourceChanged=!!(res && res.changed);throw err;
+      }
       return res;
     }
     async function keySyncManifest(type) {
@@ -10878,7 +10898,9 @@
           if (type==='masterSku' && 'MATERIAL:'+String(row.code).trim().toLowerCase()!==row.syncKey) throw new Error('Khóa mã vật tư không khớp dữ liệu.');
         }
         await keySyncWrite(store,res.records);
-        if (type!=='masterSku') docOpsLookupMemory=await keySyncRead(store);
+        const committed=await keySyncRead(store), remaining=keySyncDiff(manifest.entries,committed);
+        if (type!=='masterSku') docOpsLookupMemory=committed;
+        await keySyncProgress(type,Object.assign({},base,{status:'downloading',downloaded:committed.length,matched:remaining.matched,missing:remaining.missing.length,changed:remaining.changed.length}));
       }
       // This call verifies that the source did not change during downloads.
       await keySyncCall(type,{version:manifest.version,offset:0});
@@ -10923,10 +10945,10 @@
       let failed=false;
       try {
         if (keySyncState.pnLoad) await keySyncState.pnLoad;
-        for (const type of ['docOpsLookup','masterSku']) {
+        for (const type of (Number(keyedProgress('masterSku').downloaded || 0)===0 ? ['masterSku','docOpsLookup'] : ['docOpsLookup','masterSku'])) {
           if (type==='docOpsLookup' && !docOpsApiUrl()) continue;
           try { await keySyncIdle(); if (!await keySyncReconcile(type)) failed=true; }
-          catch(err) {failed=true; await keySyncProgress(type,{status:'error',lastError:String(err.message || err)}).catch(()=>{});}
+          catch(err) {failed=true; await keySyncProgress(type,{status:err.sourceChanged?'pending':'error',lastError:String(err.message || err)}).catch(()=>{});}
         }
       } finally {
         keySyncState.active=false;
@@ -10963,8 +10985,10 @@
       docops();
     }
     function pnNotesHtml() {
-      const notes=docOpsState.productNotes || [];
-      return `<fieldset style="border:0;padding:0;margin:0"><legend>Ghi chú</legend><div style="display:flex;flex-wrap:wrap;gap:12px">${PN_PRODUCT_NOTES.map((note,i)=>`<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" style="width:18px;min-height:18px;height:18px" ${notes.includes(note)?'checked':''} onchange="togglePnNote(PN_PRODUCT_NOTES[${i}],this.checked)">${html(note)}</label>`).join('')}</div></fieldset>`;
+      const notes=docOpsState.productNotes || [], open=!!docOpsState.notesOpen;
+      return `<div class="pn-notes-picker" style="position:relative"><span style="display:block;margin-bottom:6px">Ghi chú</span>
+        <button type="button" aria-label="Chọn ghi chú" aria-haspopup="listbox" aria-expanded="${open}" style="width:100%;display:flex;justify-content:space-between;gap:10px;text-align:left;font-weight:normal" onclick="docOpsState.notesOpen=!docOpsState.notesOpen;docops()"><span>${html(notes.length?notes.join('; '):'Chọn ghi chú')}</span><span aria-hidden="true">▾</span></button>
+        ${open?`<div style="position:absolute;left:0;right:0;top:100%;z-index:80;background:var(--panel,#fff);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 20px #0002;padding:6px"><div role="listbox" aria-label="Ghi chú sản phẩm" aria-multiselectable="true" style="max-height:270px;overflow:auto">${PN_PRODUCT_NOTES.map((note,i)=>`<button type="button" role="option" aria-selected="${notes.includes(note)}" style="display:flex;gap:10px;width:100%;text-align:left;border:0;font-weight:normal;background:${notes.includes(note)?'var(--soft,#eef7ff)':'transparent'}" onclick="togglePnNote(PN_PRODUCT_NOTES[${i}],!(docOpsState.productNotes || []).includes(PN_PRODUCT_NOTES[${i}]))"><span aria-hidden="true" style="width:18px">${notes.includes(note)?'✓':''}</span>${html(note)}</button>`).join('')}</div><button type="button" style="width:100%;margin-top:5px" onclick="docOpsState.notesOpen=false;docops()">Xong</button></div>`:''}</div>`;
     }
 
     async function loadDocOpsLookupCache(force=false){

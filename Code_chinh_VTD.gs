@@ -5623,13 +5623,17 @@ function vtdApp_masterSkuKeySync(params) {
   const ss = vtdApp_ss_(), sh = ss.getSheetByName('MASTER SKU');
   if (!sh) return vtdApp_fail_('Không tìm thấy MASTER SKU.');
   const values = sh.getDataRange().getDisplayValues(), col = vtdApp_headerMap_(values[0] || []);
-  const records = [], invalid = [];
+  const records = [], invalid = [], seenMaterials = Object.create(null);
   values.slice(1).forEach((row,index) => {
     if (!row.some(v => String(v).trim())) return;
     const code = String(vtdApp_pickFromArray_(row,col,['ma vat tu','mã vật tư','ma sku','sku','id','material','ma sp','mã sp']) || '').trim();
     const name = String(vtdApp_pickFromArray_(row,col,['ten san pham','tên sản phẩm','ten sku','san pham','tên sản phẩm hoàn về','ten san pham hoan ve','product name','name']) || '').trim();
     const type = String(vtdApp_pickFromArray_(row,col,['loai','loại','type']) || '').trim();
     if (!code) { invalid.push(index+2); return; }
+    const materialKey = 'MATERIAL:'+ks_key(code);
+    const signature = JSON.stringify([name || code,type]);
+    if (seenMaterials[materialKey] === signature) return;
+    if (!Object.prototype.hasOwnProperty.call(seenMaterials,materialKey)) seenMaterials[materialKey] = signature;
     records.push({syncKey:'MATERIAL:'+ks_key(code),code,ma:code,name:name || code,ten:name || code,type,loai:type,source:'MASTER SKU',rowNumber:index+2,contentVersion:ks_hash([code,name,type])});
   });
   return ks_reply(ks_pack(records,invalid,ss.getId()+':MASTER SKU',sh.getLastRow()),params);
