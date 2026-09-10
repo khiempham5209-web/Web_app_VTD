@@ -26,7 +26,7 @@ function doPost(e) {
     const body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
     const action = String(body.action || "").trim();
     const params = body.params || {};
-    const map = {init: apiInit_, lookup: apiLookup_, page: apiPage_, today: apiToday_, skuInit: apiSkuInit_, skuPage: apiSkuPage_, save: apiSave_};
+    const map = {keySync: apiKeySync_, init: apiInit_, lookup: apiLookup_, page: apiPage_, today: apiToday_, skuInit: apiSkuInit_, skuPage: apiSkuPage_, save: apiSave_};
     if (!map[action]) return json_({ok: false, message: "Action khong hop le: " + action});
     return json_(map[action](params));
   } catch (err) {
@@ -56,7 +56,7 @@ function apiLookup_(params) {
 function apiPage_(params) {
   const sh = sheet_();
   const lastRow = sh.getLastRow();
-  const lastCol = Math.min(sh.getLastColumn(), 23);
+  const lastCol = sh.getLastColumn();
   const startRow = Math.max(2, Number(params.startRow || params.cursor || 2));
   const pageSize = Math.max(1, Math.min(Number(params.pageSize || 500), 2000));
   if (startRow > lastRow) return ok_({records: [], count: 0, done: true, nextRow: startRow, lastRow});
@@ -82,7 +82,7 @@ function apiSkuInit_() {
 function apiSkuPage_(params) {
   const sh = skuSheet_();
   const lastRow = sh.getLastRow();
-  const lastCol = Math.min(sh.getLastColumn(), 10);
+  const lastCol = sh.getLastColumn();
   const startRow = Math.max(2, Number(params.startRow || params.cursor || 2));
   const pageSize = Math.max(1, Math.min(Number(params.pageSize || 500), 2000));
   if (startRow > lastRow) return ok_({records: [], count: 0, done: true, nextRow: startRow, lastRow});
@@ -212,6 +212,8 @@ function productReturnIndexForDate_(dateText) {
       quantity: clean_(pick_(row, col, ["so luong"])),
       status: clean_(pick_(row, col, ["tinh trang ff", "tinh trang"])),
       note: clean_(pick_(row, col, ["ghi chu"])),
+      classification: clean_(pick_(row, col, ["phan loai"])),
+      expiryDate: clean_(pick_(row, col, ["han su dung"])),
       dimensions,
       lengthCm: parsedDimensions.lengthCm,
       widthCm: parsedDimensions.widthCm,
@@ -278,6 +280,10 @@ function apiSave_(params) {
   }
 
   const upload = hasDocuments ? uploadFiles_(maDonForFolder, files) : {linkAnh: "", files: [], folderUrl: ""};
+  if (items.some(item => item.productSchema >= 2)) {
+    const hc = headerMap_(headers_(productReturnSheet_()));
+    if (!firstCol_(hc,['phan loai']) || !firstCol_(hc,['han su dung'])) return fail_('Thiếu header Phân loại hoặc Hạn sử dụng trong Hoàn sản phẩm.');
+  }
   const productUploads = items.map(item => uploadProductFiles_(found.record.orderNo || params.orderNo || maDonForFolder, item));
   const now = new Date();
   const dateText = Utilities.formatDate(now, CONFIG.timezone, "dd/MM/yyyy");
@@ -313,6 +319,8 @@ function apiSave_(params) {
       setArrayByAliases_(values, productCol, ["so luong"], item.quantity);
       setArrayByAliases_(values, productCol, ["tinh trang ff", "tinh trang"], item.status);
       setArrayByAliases_(values, productCol, ["ghi chu"], item.note);
+      setArrayByAliases_(values, productCol, ["phan loai"], item.classification);
+      setArrayByAliases_(values, productCol, ["han su dung"], item.expiryDate);
       setArrayByAliases_(values, productCol, ["kich thuoc", "kich thuoc cm", "kich thuoc (cm)"], formatProductDimensions_(item));
       setArrayByAliases_(values, productCol, ["khoi luong", "khoi luong g", "khoi luong (g)", "trong luong"], formatProductWeight_(item.weightGram));
       setArrayByAliases_(values, productCol, ["loai sieu thi"], found.record.storeType || "");
@@ -366,6 +374,11 @@ function normalizeProductItems_(items) {
     barcode: clean_(item.barcode),
     name: clean_(item.name || item.tenSanPham),
     quantity: Number(item.quantity || item.soLuong || 0),
+    classification: clean_(item.classification),
+    expiryDate: clean_(item.expiryDate),
+    productSchema: Number(item.productSchema || 0),
+    notes: Array.isArray(item.notes) ? item.notes.map(clean_) : [],
+    otherNote: clean_(item.otherNote),
     status: clean_(item.status || item.tinhTrang),
     note: clean_(item.note || item.ghiChu),
     lengthCm: Number(item.lengthCm || item.dai || 0),
@@ -378,6 +391,15 @@ function normalizeProductItems_(items) {
 
 function validateProductItem_(item, number) {
   const label = "SKU " + number + ": ";
+  if ((item.productSchema >= 2 || item.classification) && !['Hoàn trả','Hàng thu hồi'].includes(item.classification)) return label + 'chọn Phân loại.';
+  if (item.productSchema >= 2) {
+    const allowed=['Bình thường','Hàng cận date','Xẹp hơi','Hết hạn sử dụng','Vỏ bị xé/hở','Khác'];
+    if (!item.notes.length || item.notes.some(n=>!allowed.includes(n)) || (item.notes.includes('Bình thường') && item.notes.length>1)) return label + 'Ghi chú không hợp lệ.';
+    if(item.notes.includes('Khác') && !item.otherNote) return label + 'nhập nội dung Khác.';
+    item.note=item.notes.map(n=>n==='Khác'?'Khác: '+item.otherNote:n).join('; ');
+    if(!item.notes.includes('Hàng cận date') && !item.notes.includes('Hết hạn sử dụng')) item.expiryDate='';
+  }
+  if (!pnValidExpiry_(item.expiryDate)) return label + 'Hạn sử dụng phải là ngày hợp lệ DD/MM/YYYY.';
   if (!item.name) return label + "thieu ten san pham.";
   if (!item.barcode) return label + "thieu Barcode.";
   if (!item.material) return label + "thieu ma vat tu.";
@@ -485,7 +507,7 @@ function cleanNumberText_(value) {
 
 function skuDataVersion_(sh) {
   const lastRow = sh.getLastRow();
-  const lastCol = Math.min(sh.getLastColumn(), 10);
+  const lastCol = sh.getLastColumn();
   const values = lastRow > 0 && lastCol > 0 ? sh.getRange(1, 1, lastRow, lastCol).getDisplayValues() : [];
   const text = JSON.stringify(values);
   const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, text, Utilities.Charset.UTF_8);
@@ -534,7 +556,7 @@ function headerMap_(headers) {
 function findRecord_(query) {
   const sh = sheet_();
   const lastRow = sh.getLastRow();
-  const lastCol = Math.min(sh.getLastColumn(), 23);
+  const lastCol = sh.getLastColumn();
   if (lastRow <= 1) return null;
   const col = headerMap_(headers_(sh));
   const values = sh.getRange(2, 1, lastRow - 1, lastCol).getDisplayValues();
@@ -552,7 +574,7 @@ function findRecord_(query) {
 }
 
 function getRecordByRow_(sh, col, rowNumber) {
-  const row = sh.getRange(rowNumber, 1, 1, Math.min(sh.getLastColumn(), 23)).getDisplayValues()[0];
+  const row = sh.getRange(rowNumber, 1, 1, sh.getLastColumn()).getDisplayValues()[0];
   return recordFromRow_(row, col, rowNumber);
 }
 
@@ -575,7 +597,7 @@ function recordFromRow_(row, col, rowNumber) {
   const po = clean_(pick_(row, col, ["ma po", "po"]));
   const orderNo = clean_(pick_(row, col, ["so don hang", "od"]));
   const thoiGian = clean_(pick_(row, col, ["thoi gian"]));
-  return {
+  const record = {
     rowNumber,
     ngayLenDon: clean_(pick_(row, col, ["ngay len don"])),
     maDon: maDon || po || orderNo,
@@ -593,6 +615,10 @@ function recordFromRow_(row, col, rowNumber) {
     time: thoiGian,
     user: clean_(pick_(row, col, ["user thao tac"]))
   };
+  const content = Object.assign({},record); delete content.rowNumber;
+  record.syncKey=record.orderNo ? "ORDER:"+ks_key(record.orderNo) : record.maDonGhtk ? "GHTK:"+ks_key(record.maDonGhtk) : "";
+  record.contentVersion=ks_hash(content);
+  return record;
 }
 
 function uploadFiles_(maDon, files) {
@@ -760,4 +786,58 @@ function fail_(message) {
 
 function json_(data) {
   return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+}
+// Shared, deterministic content fingerprint. Not used for security.
+function ks_hash(value) {
+  const text = JSON.stringify(value); let a = 2166136261, b = 5381;
+  for (let i = 0; i < text.length; i++) { a = Math.imul(a ^ text.charCodeAt(i), 16777619); b = Math.imul(b, 33) ^ text.charCodeAt(i); }
+  return (a >>> 0).toString(16) + '-' + (b >>> 0).toString(16);
+}
+function ks_key(value) { return String(value == null ? '' : value).trim().toLowerCase(); }
+function ks_pack(records, invalidRows, sourceId, lastRow) {
+  const seen = Object.create(null), duplicates = [];
+  records.forEach(record => {
+    if (seen[record.syncKey]) duplicates.push(record.rowNumber);
+    seen[record.syncKey] = true;
+  });
+  const entries = records.map(r => ({key:r.syncKey, rowNumber:r.rowNumber, version:r.contentVersion, orderNo:r.orderNo || '', maDonGhtk:r.maDonGhtk || ''}));
+  return {records, entries, invalidRows, duplicates, sourceId, lastRow,
+    version:ks_hash([sourceId, entries, invalidRows, duplicates])};
+}
+function ks_reply(snapshot, params) {
+  params = params || {};
+  if (params.version && params.version !== snapshot.version) return {ok:false, changed:true, message:'Nguồn đã thay đổi; cần đối soát lại.'};
+  const common = {ok:true, protocol:1, version:snapshot.version, sourceId:snapshot.sourceId,
+    total:snapshot.entries.length, invalidCount:snapshot.invalidRows.length, duplicateCount:snapshot.duplicates.length,
+    invalidRows:snapshot.invalidRows.slice(0, 30), duplicateRows:snapshot.duplicates.slice(0, 30), lastRow:snapshot.lastRow};
+  if (Array.isArray(params.keys)) {
+    if (params.keys.length > 100) return {ok:false, message:'Tối đa 100 mã mỗi lần tải.'};
+    const wanted = new Set(params.keys);
+    return Object.assign(common, {records:snapshot.records.filter(r => wanted.has(r.syncKey))});
+  }
+  const offset = Math.max(0, Number(params.offset) || 0), size = 1000;
+  const entries = snapshot.entries.slice(offset, offset + size);
+  return Object.assign(common, {entries, nextOffset:offset + entries.length, done:offset + entries.length >= snapshot.entries.length});
+}
+
+function apiKeySync_(params) {
+  const sh = sheet_(), headers = headers_(sh), col = headerMap_(headers);
+  const values = sh.getLastRow() > 1 ? sh.getRange(2,1,sh.getLastRow()-1,headers.length).getDisplayValues() : [];
+  const records = [], invalid = [];
+  values.forEach((row,index) => {
+    if (!row.some(v => clean_(v))) return;
+    const record = recordFromRow_(row,col,index+2);
+    const key = record.orderNo ? 'ORDER:'+ks_key(record.orderNo) : record.maDonGhtk ? 'GHTK:'+ks_key(record.maDonGhtk) : '';
+    if (!key) { invalid.push(index+2); return; }
+    const content = Object.assign({},record); delete content.rowNumber; delete content.syncKey; delete content.contentVersion;
+    record.syncKey = key; record.contentVersion = ks_hash(content); records.push(record);
+  });
+  return ks_reply(ks_pack(records,invalid,CONFIG.spreadsheetId+':'+CONFIG.sheetName,sh.getLastRow()),params);
+}
+function pnValidExpiry_(text) {
+  if (!text) return true;
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
+  if (!m) return false;
+  const d = new Date(Number(m[3]),Number(m[2])-1,Number(m[1]));
+  return d.getFullYear() === Number(m[3]) && d.getMonth() === Number(m[2])-1 && d.getDate() === Number(m[1]);
 }

@@ -5,6 +5,33 @@ Paste this file into the same Apps Script project that already contains
 the PJ1, PJ2, dispatcher, and full data layer code.
 ************************************************/
 
+function vtdApp_debugLog_(tag, token, note) {
+  try {
+    const ss = vtdApp_ss_();
+    let sh = ss.getSheetByName("DEBUG_LOG");
+    if (!sh) sh = ss.insertSheet("DEBUG_LOG");
+    sh.appendRow([new Date(), tag, token, note]);
+  } catch (e) {}
+}
+
+function vtdApp_sessionPut_(token, data, ttlSeconds) {
+  data.expiresAt = Date.now() + (ttlSeconds * 1000);
+  PropertiesService.getScriptProperties().setProperty("VTD_SESSION_" + token, JSON.stringify(data));
+}
+
+function vtdApp_sessionGet_(token) {
+  const raw = PropertiesService.getScriptProperties().getProperty("VTD_SESSION_" + token);
+  if (!raw) return null;
+  try {
+    const data = JSON.parse(raw);
+    if (data.expiresAt && Date.now() > data.expiresAt) {
+      PropertiesService.getScriptProperties().deleteProperty("VTD_SESSION_" + token);
+      return null;
+    }
+    return data;
+  } catch (e) { return null; }
+}
+
 const VTD_APP = {
   spreadsheetId: "",
   rawSheet: "RAW_IN_M3",
@@ -1387,7 +1414,7 @@ function vtdApp_timeDisplay24_(value, fallback) {
   }
   if (typeof value === "number" && isFinite(value)) {
     const totalSeconds = Math.round(((value % 1) + 1) % 1 * 24 * 60 * 60);
-    const hh = Math.floor(totalSeconds / 3600);
+    const hh = Math.floor(totalSeconds / 36000);
     const mm = Math.floor((totalSeconds % 3600) / 60);
     const ss = totalSeconds % 60;
     return [hh, mm, ss].map(n => String(n).padStart(2, "0")).join(":");
@@ -2455,11 +2482,13 @@ function vtdApp_login(params) {
   try { vtdApp_recordLogin_(email, String(params.deviceId || "")); } catch (err) { vtdApp_log_("WARN", "loginReport", email, "", "", "ERR", String(err), ""); }
 
   const token = Utilities.getUuid();
-  CacheService.getScriptCache().put("VTD_SESSION_" + token, JSON.stringify({
+  vtdApp_sessionPut_(token, {
     email: email,
     createdAt: Date.now(),
     dayKey: vtdApp_vnDayKey_(new Date())
-  }), vtdApp_secondsToMidnight_());
+  }, 3600);
+  vtdApp_debugLog_("LOGIN_WRITE", token, vtdApp_sessionGet_(token) ? "FOUND" : "MISSING");
+  Logger.log("LOGIN_WRITE token=" + token + " check=" + CacheService.getScriptCache().get("VTD_SESSION_" + token));
 
   return vtdApp_ok_({
     token: token,
@@ -2574,9 +2603,8 @@ function vtdApp_auth_(params) {
 
 function vtdApp_sessionEmail_(token) {
   try {
-    const raw = CacheService.getScriptCache().get("VTD_SESSION_" + token);
-    if (!raw) return "";
-    const data = JSON.parse(raw);
+    const data = vtdApp_sessionGet_(token);
+    if (!data) return "";
     if (data.dayKey && data.dayKey !== vtdApp_vnDayKey_(new Date())) return "";
     return String(data.email || "").toLowerCase().trim();
   } catch (err) {
@@ -3468,6 +3496,14 @@ function vtdApp_lookupCacheStatus(params) {
       nextRow: vtdApp_pickFromArray_(row, col, ["nextrow"]),
       lastError: vtdApp_pickFromArray_(row, col, ["lasterror"]),
       updatedAt: vtdApp_pickFromArray_(row, col, ["updatedat"]),
+      matched: vtdApp_pickFromArray_(row,col,["matched"]),
+      missing: vtdApp_pickFromArray_(row,col,["missing"]),
+      changed: vtdApp_pickFromArray_(row,col,["changed"]),
+      invalidCount: vtdApp_pickFromArray_(row,col,["invalidcount"]),
+      duplicateCount: vtdApp_pickFromArray_(row,col,["duplicatecount"]),
+      sourceVersion: vtdApp_pickFromArray_(row,col,["sourceversion"]),
+      verifiedAt: vtdApp_pickFromArray_(row,col,["verifiedat"]),
+      protocol: vtdApp_pickFromArray_(row,col,["protocol"]),
       appVersion: vtdApp_pickFromArray_(row, col, ["appversion"])
     });
   }
@@ -3772,6 +3808,14 @@ function vtdApp_reportLookupCacheStatus(params) {
   vtdApp_setByAliases_(row, col, ["Email"], email);
   vtdApp_setByAliases_(row, col, ["DeviceId"], deviceId);
   vtdApp_setByAliases_(row, col, ["CacheType"], cacheType);
+  vtdApp_setByAliases_(row,col,["matched"],params.matched == null ? '' : params.matched);
+  vtdApp_setByAliases_(row,col,["missing"],params.missing == null ? '' : params.missing);
+  vtdApp_setByAliases_(row,col,["changed"],params.changed == null ? '' : params.changed);
+  vtdApp_setByAliases_(row,col,["invalidCount"],params.invalidCount == null ? '' : params.invalidCount);
+  vtdApp_setByAliases_(row,col,["duplicateCount"],params.duplicateCount == null ? '' : params.duplicateCount);
+  vtdApp_setByAliases_(row,col,["sourceVersion"],params.sourceVersion == null ? '' : params.sourceVersion);
+  vtdApp_setByAliases_(row,col,["verifiedAt"],params.verifiedAt == null ? '' : params.verifiedAt);
+  vtdApp_setByAliases_(row,col,["protocol"],params.protocol == null ? '' : params.protocol);
   vtdApp_setByAliases_(row, col, ["Label"], label);
   vtdApp_setByAliases_(row, col, ["Status"], params.status || "");
   vtdApp_setByAliases_(row, col, ["Downloaded"], params.downloaded || 0);
@@ -3790,7 +3834,7 @@ function vtdApp_reportLookupCacheStatus(params) {
 function vtdApp_lookupCacheStatusSheet_() {
   const ss = vtdApp_ss_();
   let sh = ss.getSheetByName(VTD_APP.lookupCacheStatusSheet);
-  const headers = ["Email", "DeviceId", "CacheType", "Label", "Status", "Downloaded", "Total", "StartRow", "EndRow", "NextRow", "LastError", "UpdatedAt", "AppVersion"];
+  const headers = ["Email", "DeviceId", "CacheType", "Label", "Status", "Downloaded", "Total", "StartRow", "EndRow", "NextRow", "LastError", "UpdatedAt", "AppVersion", "matched", "missing", "changed", "invalidCount", "duplicateCount", "sourceVersion", "verifiedAt", "protocol"];
   if (!sh) {
     sh = ss.insertSheet(VTD_APP.lookupCacheStatusSheet);
     sh.appendRow(headers);
@@ -5150,6 +5194,7 @@ function vtdApp_apiDispatch_(action, params) {
       queueRecord: vtdApp_queueRecord,
       runCommand: vtdApp_runCommand,
       storeInfo: vtdApp_storeInfo,
+      masterSkuKeySync: vtdApp_masterSkuKeySync,
       listProducts: vtdApp_listProducts,
       listSku: vtdApp_listProducts,
       lookupOrder: vtdApp_lookupOrder,
@@ -5539,4 +5584,53 @@ function repairCacheFontNow() {
   });
   if (fixed) range.setValues(next);
   return vtdApp_ok_({message: "Đã sửa font SyncLabel trong cache.", fixed: fixed});
+}
+// Shared, deterministic content fingerprint. Not used for security.
+function ks_hash(value) {
+  const text = JSON.stringify(value); let a = 2166136261, b = 5381;
+  for (let i = 0; i < text.length; i++) { a = Math.imul(a ^ text.charCodeAt(i), 16777619); b = Math.imul(b, 33) ^ text.charCodeAt(i); }
+  return (a >>> 0).toString(16) + '-' + (b >>> 0).toString(16);
+}
+function ks_key(value) { return String(value == null ? '' : value).trim().toLowerCase(); }
+function ks_pack(records, invalidRows, sourceId, lastRow) {
+  const seen = Object.create(null), duplicates = [];
+  records.forEach(record => {
+    if (seen[record.syncKey]) duplicates.push(record.rowNumber);
+    seen[record.syncKey] = true;
+  });
+  const entries = records.map(r => ({key:r.syncKey, rowNumber:r.rowNumber, version:r.contentVersion, orderNo:r.orderNo || '', maDonGhtk:r.maDonGhtk || ''}));
+  return {records, entries, invalidRows, duplicates, sourceId, lastRow,
+    version:ks_hash([sourceId, entries, invalidRows, duplicates])};
+}
+function ks_reply(snapshot, params) {
+  params = params || {};
+  if (params.version && params.version !== snapshot.version) return {ok:false, changed:true, message:'Nguồn đã thay đổi; cần đối soát lại.'};
+  const common = {ok:true, protocol:1, version:snapshot.version, sourceId:snapshot.sourceId,
+    total:snapshot.entries.length, invalidCount:snapshot.invalidRows.length, duplicateCount:snapshot.duplicates.length,
+    invalidRows:snapshot.invalidRows.slice(0, 30), duplicateRows:snapshot.duplicates.slice(0, 30), lastRow:snapshot.lastRow};
+  if (Array.isArray(params.keys)) {
+    if (params.keys.length > 100) return {ok:false, message:'Tối đa 100 mã mỗi lần tải.'};
+    const wanted = new Set(params.keys);
+    return Object.assign(common, {records:snapshot.records.filter(r => wanted.has(r.syncKey))});
+  }
+  const offset = Math.max(0, Number(params.offset) || 0), size = 1000;
+  const entries = snapshot.entries.slice(offset, offset + size);
+  return Object.assign(common, {entries, nextOffset:offset + entries.length, done:offset + entries.length >= snapshot.entries.length});
+}
+
+function vtdApp_masterSkuKeySync(params) {
+  const denied = vtdApp_requireAction_('saveRaw', params); if (denied) return denied;
+  const ss = vtdApp_ss_(), sh = ss.getSheetByName('MASTER SKU');
+  if (!sh) return vtdApp_fail_('Không tìm thấy MASTER SKU.');
+  const values = sh.getDataRange().getDisplayValues(), col = vtdApp_headerMap_(values[0] || []);
+  const records = [], invalid = [];
+  values.slice(1).forEach((row,index) => {
+    if (!row.some(v => String(v).trim())) return;
+    const code = String(vtdApp_pickFromArray_(row,col,['ma vat tu','mã vật tư','ma sku','sku','id','material','ma sp','mã sp']) || '').trim();
+    const name = String(vtdApp_pickFromArray_(row,col,['ten san pham','tên sản phẩm','ten sku','san pham','tên sản phẩm hoàn về','ten san pham hoan ve','product name','name']) || '').trim();
+    const type = String(vtdApp_pickFromArray_(row,col,['loai','loại','type']) || '').trim();
+    if (!code) { invalid.push(index+2); return; }
+    records.push({syncKey:'MATERIAL:'+ks_key(code),code,ma:code,name:name || code,ten:name || code,type,loai:type,source:'MASTER SKU',rowNumber:index+2,contentVersion:ks_hash([code,name,type])});
+  });
+  return ks_reply(ks_pack(records,invalid,ss.getId()+':MASTER SKU',sh.getLastRow()),params);
 }

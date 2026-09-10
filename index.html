@@ -1489,7 +1489,7 @@
     const docOpsState = {
       maDon: "", loading: false, record: null, message: "", returnType: "",
       xacThuc: "Đã nhận chứng từ", status: "Bình thường", note: "", saving: false,
-      productSearch: "", selectedSku: null, productStatus: "", quantity: "", productNote: "", productOtherNote: "",
+      productSearch: "", selectedSku: null, productStatus: "", quantity: "", productNote: "", productOtherNote: "", productNotes: [], classification: "", expiryDate: "",
       lengthCm: "", widthCm: "", heightCm: "", weightGram: "",
       items: [], editingIndex: -1, docCollapsed: false, productCollapsed: false, skuLoaded: false, loadingSku: false
     };
@@ -2633,6 +2633,7 @@
       return false;
     };
     function input(){
+      if(live.keyedProductsPending){const pending=live.keyedProductsPending;live.keyedProductsPending=null;applyKeyedProducts(pending);}
       el("view").className = "content";
       const loaiOptions = loaiBySlog[inputState.slog] || [];
       if (!loaiOptions.includes(inputState.loai)) inputState.loai = loaiOptions[0];
@@ -3928,7 +3929,7 @@
         const downloaded = Number(r.downloaded || 0);
         const total = Number(r.total || 0);
         const percent = total ? Math.min(100, Math.round(downloaded / total * 100)) : 0;
-        return `<tr><td>${html(r.email || "-")}</td><td>${html(shortDevice(r.deviceId))}</td><td>${html(cacheLabel(r.cacheType, r.label))}</td><td><strong>${html(cacheStatusLabel(r.status))}</strong><div class="muted tiny">${percent}% · ${html(downloaded + "/" + total)}</div></td><td>${html(r.updatedAt || "-")}${r.lastError ? `<div class="muted tiny">${html(r.lastError)}</div>` : ""}</td><td><button class="mini-icon-btn danger" title="Xóa báo cáo" aria-label="Xóa báo cáo" onclick="deleteLookupCacheStatus(${i})"><svg viewBox="0 0 24 24"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg></button></td></tr>`;
+        return `<tr><td>${html(r.email || "-")}</td><td>${html(shortDevice(r.deviceId))}</td><td>${html(cacheLabel(r.cacheType, r.label))}</td><td><strong>${html(cacheStatusLabel(r.status))}</strong><div class="muted tiny">${percent}% · ${html(downloaded + "/" + total)}</div>${Number(r.protocol) === 1 ? `<div class="muted tiny">Khớp: ${Number(r.matched || 0)} · Thiếu: ${Number(r.missing || 0)} · Cần cập nhật: ${Number(r.changed || 0)}<br>Thiếu mã: ${Number(r.invalidCount || 0)} · Trùng mã: ${Number(r.duplicateCount || 0)}<br>Đối soát thành công: ${html(r.verifiedAt || "Chưa có")}</div>` : `<div class="muted tiny">Báo cáo cũ — chưa xác minh theo mã</div>`}</td><td>${html(r.updatedAt || "-")}${r.lastError ? `<div class="muted tiny">${html(r.lastError)}</div>` : ""}</td><td><button class="mini-icon-btn danger" title="Xóa báo cáo" aria-label="Xóa báo cáo" onclick="deleteLookupCacheStatus(${i})"><svg viewBox="0 0 24 24"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg></button></td></tr>`;
       }).join("") : `<tr><td colspan="6" class="muted">Chưa có báo cáo cache.</td></tr>`;
       const localRows = localCacheSummaryRows();
       return `<section class="section"><h2>Cache chứng từ trên máy user</h2>
@@ -3962,6 +3963,7 @@
       await reportDocOpsLookupCacheProgress();
       await reportDocOpsSkuCacheProgress();
       await reportDocOpsTodayCacheProgress();
+      keySyncSchedule(3000);
       await loadLookupCacheStatus(true);
     }
     function adminQueueErrorPanel(){
@@ -4562,7 +4564,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.8";
+    const APP_VERSION = "5.9";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -5307,7 +5309,7 @@
         };
       }
     }
-    function api(action, params) {
+    function apiTransport(action, params) {
       params = Object.assign({}, params || {}, {sessionToken: live.token, appVersion: APP_VERSION});
       const silent = !!params._silent;
       const apiUrl = activeApiUrl();
@@ -6043,9 +6045,11 @@
     }
     function cacheStatusLabel(status){
       const value = String(status || "").toLowerCase();
+      if (value === "checking") return "Đang đối soát";
       if (value === "done") return "Đã đủ";
       if (value === "downloading" || value === "loading") return "Đang tải";
-      if (value === "pending" || value === "pendingimage") return "Đang chờ";
+      if (value === "pending") return "Chờ đối soát";
+      if (value === "pendingimage") return "Đang chờ";
       if (value === "syncing") return "Đang sync";
       if (value === "error") return "Lỗi";
       return status || "Chưa chạy";
@@ -6054,22 +6058,7 @@
       const text = String(value || "-");
       return text.length > 16 ? text.slice(0, 8) + "..." + text.slice(-5) : text;
     }
-    function masterSkuCacheProgress(){
-      try {
-        const cache = JSON.parse(localStorage.getItem(PRODUCT_CACHE_KEY) || "{}") || {};
-        if (Number(cache.version || 0) !== PRODUCT_CACHE_VERSION) return {status:"pending", downloaded:0, total:0};
-        const downloaded = Array.isArray(cache.products) ? cache.products.filter(p => productNameFrom(normalizeProductOption(p))).length : 0;
-        const total = Number(cache.total || 0) || downloaded;
-        return {
-          status: total && downloaded >= total ? "done" : downloaded ? "downloading" : "pending",
-          downloaded,
-          total,
-          updatedAt: cache.updatedAt || cache.day || ""
-        };
-      } catch (err) {
-        return {status:"error", downloaded:0, total:0, lastError:String(err && err.message || err)};
-      }
-    }
+    function masterSkuCacheProgress(){ return keyedProgress('masterSku'); }
     function returnThCacheProgress(){
       try {
         const rows = loadReturnThRowsCache();
@@ -6088,21 +6077,7 @@
         return {status:"error", downloaded:0, total:0, lastError:String(err && err.message || err)};
       }
     }
-    function docOpsLookupCacheProgress(){
-      try {
-        const rows = docOpsLookupRowsCache();
-        const downloaded = rows.length;
-        return {
-          status: downloaded ? "done" : "pending",
-          downloaded,
-          total: Math.max(downloaded, Number(docOpsLookupMetaMemory.lastRow || 1) - 1),
-          updatedAt: docOpsLookupMetaMemory.updatedAt || "",
-          lastError: ""
-        };
-      } catch (err) {
-        return {status:"error", downloaded:0, total:0, lastError:String(err && err.message || err)};
-      }
-    }
+    function docOpsLookupCacheProgress(){ return keyedProgress('docOpsLookup'); }
     function docOpsTodayCacheProgress(){
       try {
         const rows = docOpsRowsCache();
@@ -6597,7 +6572,7 @@
         const docOpsCode = String((typeof el === "function" && el("docOpsMaDon") ? el("docOpsMaDon").value : "") || (docOpsState && docOpsState.maDon) || "").trim();
         const hasDocOpsDraft = !!(
           docOpsCode ||
-          (docOpsState && (docOpsState.returnType || docOpsState.note || docOpsState.productSearch || docOpsState.quantity || docOpsState.productNote || docOpsState.productOtherNote || docOpsState.lengthCm || docOpsState.widthCm || docOpsState.heightCm || docOpsState.weightGram || (docOpsState.items || []).length || docOpsState.saving)) ||
+          (docOpsState && (docOpsState.returnType || docOpsState.note || docOpsState.productSearch || docOpsState.quantity || docOpsState.productNote || docOpsState.productOtherNote || docOpsState.classification || (docOpsState.productNotes || []).length || docOpsState.expiryDate || docOpsState.lengthCm || docOpsState.widthCm || docOpsState.heightCm || docOpsState.weightGram || (docOpsState.items || []).length || docOpsState.saving)) ||
           (live && ((live.docOpsFiles || []).length || (live.docOpsProductFiles || []).length))
         );
         if (hasDocOpsDraft) return {route:"#docops", code:docOpsCode, label:docOpsState && docOpsState.saving ? "Don PN dang luu/dang dong bo" : "Don PN dang thao tac do"};
@@ -7814,7 +7789,7 @@
       queue.push(item);
       saveLocalQueue(queue);
       saveDocOpsRowsCache([row, ...docOpsRowsCache().filter(x => String(x.localId || "") !== itemLocalId && String(x.maDon || x.po || x.orderNo || "") !== maDon)]);
-      docOpsRememberRecords([row]);
+      // The pending action lives in the queue, not in the authoritative lookup cache.
       updateInputSyncBadge();
       scheduleQueueReport();
       scheduleSyncQueue(0);
@@ -9007,6 +8982,7 @@
       } catch (err) {}
     }
     async function warmLiveData(){
+      keySyncSchedule(30000);
       await Promise.resolve(loadDashboard({silent:true})).catch(() => {});
       setTimeout(() => Promise.resolve(loadProducts(true)).catch(() => {}), 500);
       setTimeout(() => Promise.resolve(loadReturnThSku(false)).catch(() => {}), 1200);
@@ -9100,38 +9076,16 @@
       }
     }
     async function loadProducts(silent){
-      let cache = {};
-      try { cache = JSON.parse(localStorage.getItem(PRODUCT_CACHE_KEY) || "{}") || {}; } catch (err) { cache = {}; }
-      const today = todayText();
-      if (Number(cache.version || 0) !== PRODUCT_CACHE_VERSION) cache = {};
-      const cachedRaw = Array.isArray(cache.products) ? cache.products : [];
-      const cachedProducts = cachedRaw.map(normalizeProductOption).filter(p => productNameFrom(p));
-      const cacheHasMissingName = cachedRaw.some(p => !productNameFrom(p));
-      if (cachedProducts.length) {
-        products.splice(0, products.length, ...cachedProducts);
+      let rows=await keySyncRead('masterSku');
+      if (!rows.length) {
+        let legacy={};try {legacy=JSON.parse(localStorage.getItem(PRODUCT_CACHE_KEY) || '{}');}catch(err){}
+        const seen=new Set();
+        rows=(legacy.products || []).map(normalizeProductOption).filter(p=>{const key=productCodeFrom(p).trim().toLowerCase();if(!key || seen.has(key))return false;seen.add(key);return true;}).map(p=>Object.assign({},p,{syncKey:'MATERIAL:'+productCodeFrom(p).trim().toLowerCase()}));
+        if(rows.length)await keySyncWrite('masterSku',rows);
       }
-      const knownCount = !cacheHasMissingName && cachedProducts.length ? cachedProducts.length : 0;
-      let res = null;
-      let lastError = "";
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (attempt > 0) await new Promise(r => setTimeout(r, 1500 * attempt));
-        res = await api("listProducts", {limit: 5000, knownCount, cacheDay: cache.day || "", _silent: !!silent});
-        if (res && res.ok) { lastError = ""; break; }
-        lastError = (res && res.message) || "Khong tai duoc DS SKU.";
-      }
-      if (res && res.ok && res.unchanged && cachedProducts.length) {
-        localStorage.setItem(PRODUCT_CACHE_KEY, JSON.stringify(Object.assign({}, cache, {version: PRODUCT_CACHE_VERSION, day: today, updatedAt: new Date().toISOString(), count: cachedProducts.length, total: Number(res.count || cachedProducts.length), products: cachedProducts})));
-        reportMasterSkuCacheProgress();
-        return;
-      }
-      if (res && res.ok && Array.isArray(res.products)) {
-        const mapped = res.products.map(normalizeProductOption).filter(p => productNameFrom(p));
-        products.splice(0, products.length, ...mapped);
-        localStorage.setItem(PRODUCT_CACHE_KEY, JSON.stringify({version: PRODUCT_CACHE_VERSION, day: today, updatedAt: new Date().toISOString(), count: mapped.length, total: Number(res.count || mapped.length), products: mapped}));
-        reportMasterSkuCacheProgress();
-        return;
-      }
-      reportMasterSkuCacheProgress(Object.assign({}, masterSkuCacheProgress(), {status:"error", lastError: lastError || "Khong tai duoc DS SKU."}));
+      keySyncState.progress.masterSku=await keySyncRead('meta','progress:masterSku') || {status:'pending',downloaded:rows.length,total:0};
+      await keySyncPublishProducts();
+      keySyncSchedule(30000);
     }
     async function loadStoreInfo(month){
       const requestedMonth = month || storeMonth;
@@ -9446,6 +9400,7 @@
       live.productFiles = [];
     }
     function input(){
+      if(live.keyedProductsPending){const pending=live.keyedProductsPending;live.keyedProductsPending=null;applyKeyedProducts(pending);}
       el("view").className = "content";
       const loaiOptions = loaiBySlog[inputState.slog] || [];
       if (inputState.loai && !loaiOptions.includes(inputState.loai)) inputState.loai = "";
@@ -9491,7 +9446,7 @@
       const url = String((appConfig.sync && appConfig.sync.docOpsApiUrl) || localStorage.getItem("vtd_doc_ops_api_url") || "").trim();
       return /^https:\/\/script\.google\.com\/macros\/s\/[-\w]+\/exec/i.test(url) ? url : "";
     }
-    function docOpsApi(action, params = {}){
+    function docOpsApiTransport(action, params = {}){
       const url = docOpsApiUrl();
       if (!url) return Promise.resolve({ok:false, message:"Chưa cấu hình API Thao tác CT."});
       const silent = !!params._silent;
@@ -9560,6 +9515,8 @@
           quantity:String(item.quantity || item.soLuong || "").trim(),
           status:String(item.status || item.tinhTrang || "").trim(),
           note:String(item.note || item.ghiChu || "").trim(),
+          classification:String(item.classification || ""),
+          expiryDate:String(item.expiryDate || ""),
           dimensions,
           weight,
           cbm:String(item.cbm || "").trim(),
@@ -9573,7 +9530,7 @@
       if (!products.length) return "";
       return `<h2 style="margin-top:18px">Sản phẩm hoàn</h2><div class="docops-detail-products">${products.map((item, index) => {
         const imageText = item.imageLink ? `<a href="${html(item.imageLink)}" target="_blank" rel="noopener">Mở ảnh sản phẩm${item.imageCount ? ` (${item.imageCount})` : ""}</a>` : (item.imageCount ? `<span>${item.imageCount} ảnh đang chờ đồng bộ</span>` : "");
-        return `<div class="docops-detail-product"><span class="docops-sku-index">SKU ${index + 1}:</span><strong>${html(item.name || "-")}</strong><div class="record-meta"><span>Mã vật tư: ${html(item.material || "-")}</span><span>Barcode: ${html(item.barcode || "-")}</span><span>Số lượng: ${html(item.quantity || "-")}</span><span>Tình trạng: ${html(item.status || "-")}</span><span>Ghi chú: ${html(item.note || "-")}</span><span>Kích thước: ${html(item.dimensions || "-")}</span><span>Khối lượng: ${html(item.weight || "-")}</span><span>CBM: ${html(item.cbm || "-")}</span><span>User: ${html(item.user || "-")}</span></div>${imageText}</div>`;
+        return `<div class="docops-detail-product"><span class="docops-sku-index">SKU ${index + 1}:</span><strong>${html(item.name || "-")}</strong><div class="record-meta"><span>Mã vật tư: ${html(item.material || "-")}</span><span>Barcode: ${html(item.barcode || "-")}</span><span>Số lượng: ${html(item.quantity || "-")}</span><span>Tình trạng: ${html(item.status || "-")}</span><span>Phân loại: ${html(item.classification || "-")}</span><span>Hạn sử dụng: ${html(item.expiryDate || "-")}</span><span>Ghi chú: ${html(item.note || "-")}</span><span>Kích thước: ${html(item.dimensions || "-")}</span><span>Khối lượng: ${html(item.weight || "-")}</span><span>CBM: ${html(item.cbm || "-")}</span><span>User: ${html(item.user || "-")}</span></div>${imageText}</div>`;
       }).join("")}</div>`;
     }
     function docOpsTodayTable(data){
@@ -9627,115 +9584,53 @@
       const link = String(row.linkAnh || "").toLowerCase();
       return user === "demo@ff.local" || link.includes("/example") || link.endsWith("id=example");
     }
-    function docOpsLookupDb(){
-      return new Promise(resolve => {
-        if (!window.indexedDB) return resolve(null);
-        const req = indexedDB.open(DOC_OPS_LOOKUP_DB, 1);
-        req.onupgradeneeded = () => {
-          const db = req.result;
-          if (!db.objectStoreNames.contains(DOC_OPS_LOOKUP_STORE)) {
-            const store = db.createObjectStore(DOC_OPS_LOOKUP_STORE, {keyPath:"rowNumber"});
-            store.createIndex("maDonKey", "maDonKey", {unique:false});
-            store.createIndex("poKey", "poKey", {unique:false});
-            store.createIndex("orderNoKey", "orderNoKey", {unique:false});
-          }
-          if (!db.objectStoreNames.contains(DOC_OPS_LOOKUP_META_STORE)) db.createObjectStore(DOC_OPS_LOOKUP_META_STORE, {keyPath:"key"});
-        };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => resolve(null);
-      });
-    }
+    function docOpsLookupDb(){ return keySyncDb(); }
     function docOpsCacheRecord(row){
       if (!row || isDocOpsTestRow(row)) return null;
-      const rowNumber = Number(row.rowNumber || 0);
-      if (rowNumber < 2) return null;
-      return Object.assign({}, row, {
-        rowNumber,
-        maDonKey:docOpsCacheKey(row.maDon || row.maDonGhtk),
-        poKey:docOpsCacheKey(row.po),
-        orderNoKey:docOpsCacheKey(row.orderNo || row.soDonHang),
-        cachedAt:Date.now()
-      });
+      const syncKey=pnSyncKey(row); if (!syncKey) return null;
+      return Object.assign({},row,{syncKey,maDonKey:docOpsCacheKey(row.maDonGhtk),poKey:docOpsCacheKey(row.po),orderNoKey:docOpsCacheKey(row.orderNo),cachedAt:Date.now()});
     }
-    async function docOpsLookupReadMeta(){
-      const db = await docOpsLookupDb();
-      if (!db) return docOpsLookupMetaMemory;
-      return new Promise(resolve => {
-        const req = db.transaction(DOC_OPS_LOOKUP_META_STORE, "readonly").objectStore(DOC_OPS_LOOKUP_META_STORE).get("sync");
-        req.onsuccess = () => resolve(req.result || docOpsLookupMetaMemory);
-        req.onerror = () => resolve(docOpsLookupMetaMemory);
-      });
-    }
+    async function docOpsLookupReadMeta(){return await keySyncRead('meta','sync') || {lastRow:1,count:0};}
     async function docOpsLookupWriteMeta(meta){
-      docOpsLookupMetaMemory = Object.assign({}, docOpsLookupMetaMemory, meta || {}, {key:"sync"});
-      const db = await docOpsLookupDb();
-      if (!db) return docOpsLookupMetaMemory;
-      return new Promise(resolve => {
-        const tx = db.transaction(DOC_OPS_LOOKUP_META_STORE, "readwrite");
-        tx.objectStore(DOC_OPS_LOOKUP_META_STORE).put(docOpsLookupMetaMemory);
-        tx.oncomplete = () => resolve(docOpsLookupMetaMemory);
-        tx.onerror = () => resolve(docOpsLookupMetaMemory);
-      });
+      const next=Object.assign({},docOpsLookupMetaMemory,meta,{key:'sync'});
+      await keySyncWrite('meta',[next]); docOpsLookupMetaMemory=next; return next;
     }
     async function docOpsLookupPutMany(rows){
-      const clean = (Array.isArray(rows) ? rows : []).map(docOpsCacheRecord).filter(Boolean);
+      const clean=(rows || []).map(docOpsCacheRecord).filter(Boolean);
       if (!clean.length) return 0;
-      const db = await docOpsLookupDb();
-      if (!db) return 0;
-      await new Promise(resolve => {
-        const tx = db.transaction(DOC_OPS_LOOKUP_STORE, "readwrite");
-        const store = tx.objectStore(DOC_OPS_LOOKUP_STORE);
-        clean.forEach(row => store.put(row));
-        tx.oncomplete = resolve;
-        tx.onerror = resolve;
-      });
-      const byRow = {};
-      [...clean, ...docOpsLookupMemory].forEach(row => { if (row && row.rowNumber && !byRow[row.rowNumber]) byRow[row.rowNumber] = row; });
-      docOpsLookupMemory = Object.values(byRow).sort((a,b) => Number(a.rowNumber) - Number(b.rowNumber));
+      const previous=new Map((await keySyncRead('records')).map(r=>[r.syncKey,r]));
+      const merged=clean.map(row=>Object.assign({},previous.get(row.syncKey) || {},row));
+      await keySyncWrite('records',merged);
+      const progress=keySyncState.progress.docOpsLookup;
+      if(progress && progress.status==='done') {
+        keySyncState.progress.docOpsLookup=Object.assign({},progress,{status:'pending'});
+        await keySyncWrite('meta',[Object.assign({},keySyncState.progress.docOpsLookup,{key:'progress:docOpsLookup'})]);
+      }
+      docOpsLookupMemory=await keySyncRead('records');
       return clean.length;
     }
     async function hydrateDocOpsLookupCache(){
       if (docOpsLookupHydrated) return docOpsLookupMemory;
       if (docOpsLookupHydratePromise) return docOpsLookupHydratePromise;
-      docOpsLookupHydratePromise = (async () => {
-        const db = await docOpsLookupDb();
-        if (!db) return docOpsLookupMemory;
-        const legacy = (() => { try { return JSON.parse(localStorage.getItem(DOC_OPS_LOOKUP_CACHE_KEY) || "{}"); } catch (err) { return {}; } })();
-        if (Array.isArray(legacy.records) && legacy.records.length) {
-          await docOpsLookupPutMany(legacy.records);
-          localStorage.removeItem(DOC_OPS_LOOKUP_CACHE_KEY);
+      docOpsLookupHydratePromise=(async()=>{
+        let meta=await keySyncRead('meta','sync');
+        if (!meta) {
+          const old=await keySyncLegacyPn();
+          if (old && old.rows.length) await docOpsLookupPutMany(old.rows);
+          docOpsLookupMetaMemory={lastRow:Number(old && old.meta.lastRow || 1),count:0};
+          await docOpsLookupWriteMeta({migrated:true});
         }
-        docOpsLookupMemory = await new Promise(resolve => {
-          const rows = [];
-          const req = db.transaction(DOC_OPS_LOOKUP_STORE, "readonly").objectStore(DOC_OPS_LOOKUP_STORE).openCursor();
-          req.onsuccess = event => {
-            const cursor = event.target.result;
-            if (!cursor) return resolve(rows);
-            if (!isDocOpsTestRow(cursor.value)) rows.push(cursor.value);
-            cursor.continue();
-          };
-          req.onerror = () => resolve(rows);
-        });
-        const storedMeta = await docOpsLookupReadMeta();
-        const maxRow = docOpsLookupMemory.reduce((max, row) => Math.max(max, Number(row.rowNumber || 0)), 1);
-        docOpsLookupMetaMemory = Object.assign({}, storedMeta || {}, {lastRow:Math.max(Number(storedMeta && storedMeta.lastRow || 1), maxRow), count:docOpsLookupMemory.length});
-        await docOpsLookupWriteMeta(docOpsLookupMetaMemory);
-        docOpsLookupHydrated = true;
+        docOpsLookupMemory=await keySyncRead('records');
+        docOpsLookupMetaMemory=await docOpsLookupReadMeta();
+        keySyncState.progress.docOpsLookup=await keySyncRead('meta','progress:docOpsLookup') || {status:'pending',downloaded:docOpsLookupMemory.length,total:0};
+        docOpsLookupHydrated=true;
         return docOpsLookupMemory;
-      })();
+      })().catch(err=>{docOpsLookupHydratePromise=null;throw err;});
       return docOpsLookupHydratePromise;
     }
     async function clearDocOpsLookupCache(){
-      const db = await docOpsLookupDb();
-      if (db) await new Promise(resolve => {
-        const tx = db.transaction([DOC_OPS_LOOKUP_STORE, DOC_OPS_LOOKUP_META_STORE], "readwrite");
-        tx.objectStore(DOC_OPS_LOOKUP_STORE).clear();
-        tx.objectStore(DOC_OPS_LOOKUP_META_STORE).clear();
-        tx.oncomplete = resolve;
-        tx.onerror = resolve;
-      });
-      docOpsLookupMemory = [];
-      docOpsLookupMetaMemory = {lastRow:1, count:0, updatedAt:""};
+      // Reset the append cursor without discarding usable records. Reconciliation repairs mappings.
+      await docOpsLookupWriteMeta({lastRow:1});
     }
     function docOpsCacheKey(value){
       return String(value || "").trim().toLowerCase();
@@ -9747,7 +9642,7 @@
       return docOpsLookupRowsCache().find(r => [r.maDon, r.maDonGhtk, r.po, r.orderNo, r.soDonHang].some(v => docOpsCacheKey(v) === q)) || null;
     }
     async function docOpsRememberRecords(records){ return docOpsLookupPutMany(records); }
-    async function loadDocOpsLookupCache(force = false){
+    async function loadDocOpsLookupCacheAppend(force = false){
       if (!docOpsApiUrl()) return Promise.resolve(false);
       await hydrateDocOpsLookupCache();
       let downloaded = 0;
@@ -9776,14 +9671,16 @@
           }
           const rows = Array.isArray(res.records) ? res.records : [];
           if (rows.length) downloaded += await docOpsRememberRecords(rows);
-          const nextRow = Number(res.nextRow || (startRow + rows.length));
+          const nextRow = Number(res.nextRow);
+          if (!Number.isFinite(nextRow) || nextRow<=startRow || (res.done && nextRow<=remoteLastRow)) throw new Error('Trang PN chưa xác nhận đủ phạm vi dòng.');
           const syncedThrough = Math.min(remoteLastRow, Math.max(startRow - 1, nextRow - 1));
           await docOpsLookupWriteMeta({lastRow:syncedThrough, count:docOpsLookupMemory.length, updatedAt:new Date().toISOString()});
-          if (res.done || !res.nextRow || Number(res.nextRow) <= startRow || rows.length === 0) break;
+          if (res.done) break;
+          if (!res.nextRow || Number(res.nextRow) <= startRow) throw new Error("Trang PN không tiến lên.");
           startRow = Number(res.nextRow);
         }
         await docOpsLookupWriteMeta({lastRow:remoteLastRow, count:docOpsLookupMemory.length, updatedAt:new Date().toISOString()});
-        await reportDocOpsLookupCacheProgress({status:"done", downloaded:docOpsLookupMemory.length, total:Math.max(0, remoteLastRow - 1), newRecords:downloaded});
+        await keySyncProgress("docOpsLookup",{status:"pending",downloaded:docOpsLookupMemory.length,total:Math.max(0,remoteLastRow-1),lastError:""});
         const checkedToday = String(docOpsLookupMetaMemory.todayCheckedDay || "") === todayApiDateText();
         if (downloaded > 0 || !checkedToday || (remoteVersion && remoteVersion !== previousVersion)) await loadDocOpsToday(true);
         return true;
@@ -9993,36 +9890,24 @@
       lookupDocOpsOrder(docOpsState.maDon);
     }
     async function lookupDocOpsOrder(query){
-      query = String(query || "").trim();
-      docOpsState.maDon = query;
-      if (!query || query.length < 5) {
-        docOpsState.record = null;
-        docOpsState.message = "";
-        renderDocOpsLookup();
-        return;
-      }
-      const cached = await docOpsFindCached(query);
-      if (cached) {
-        docOpsState.record = cached;
-        docOpsState.message = "";
-        renderDocOpsLookup();
-        return;
-      }
-      if (!docOpsApiUrl()) {
-        docOpsState.record = null;
-        docOpsState.message = "Chưa có dữ liệu cache khớp mã đơn này.";
-        renderDocOpsLookup();
-        return;
-      }
-      docOpsState.loading = true;
-      renderDocOpsLookup();
-      const res = await docOpsApi("lookup", {query, _silent:true});
-      if (query !== docOpsState.maDon) return;
-      docOpsState.loading = false;
-      docOpsState.record = res && res.ok && res.record ? res.record : null;
-      if (docOpsState.record) docOpsRememberRecords([docOpsState.record]);
-      docOpsState.message = docOpsState.record ? "" : ((res && res.message) || "Không tìm thấy mã đơn trong tab Chứng từ_FF.");
-      renderDocOpsLookup();
+      query=String(query || '').trim();
+      const token=(docOpsState.lookupToken || 0)+1; docOpsState.lookupToken=token;
+      docOpsState.maDon=query;docOpsState.record=null;docOpsState.message='';docOpsState.loading=!!query && query.length>=5;
+      renderDocOpsLookup(); if (!docOpsState.loading) return;
+      try {
+        const cached=await docOpsFindCached(query);
+        if(token!==docOpsState.lookupToken)return;
+        if(cached){docOpsState.record=cached;return;}
+        const res=await docOpsApi('lookup',{query,_silent:true});
+        if(token!==docOpsState.lookupToken)return;
+        docOpsState.record=res && res.ok && res.record || null;
+        docOpsState.message=docOpsState.record?'':res && res.message || 'Không tìm thấy mã đơn.';
+        if(docOpsState.record) {
+          try {await docOpsRememberRecords([docOpsState.record]);}
+          catch(err){keySyncProgress('docOpsLookup',{status:'error',lastError:'Tìm thấy đơn nhưng ghi cache thất bại: '+err.message}).catch(()=>{});}
+        } else keySyncSchedule(30000);
+      }catch(err){if(token===docOpsState.lookupToken)docOpsState.message=String(err.message || err);}
+      finally {if(token===docOpsState.lookupToken){docOpsState.loading=false;renderDocOpsLookup();}}
     }
     function renderDocOpsLookup(){
       const box = el("docOpsLookupBox");
@@ -10143,7 +10028,7 @@
       docops();
     }
     function docOpsProductNoteValue(){
-      return docOpsState.productNote === "Khác" ? String(docOpsState.productOtherNote || "").trim() : String(docOpsState.productNote || "").trim();
+      return (docOpsState.productNotes || []).map(n=>n==='Khác'?'Khác: '+String(docOpsState.productOtherNote || '').trim():n).join('; ');
     }
     function docOpsDraftCbm(){
       const length = Number(docOpsState.lengthCm || 0);
@@ -10193,6 +10078,9 @@
       docOpsState.productStatus = "";
       docOpsState.quantity = "";
       docOpsState.productNote = "";
+      docOpsState.productNotes = [];
+      docOpsState.classification = "";
+      docOpsState.expiryDate = "";
       docOpsState.productOtherNote = "";
       docOpsState.lengthCm = "";
       docOpsState.widthCm = "";
@@ -10203,6 +10091,9 @@
     }
     function validateDocOpsProduct(item, label){
       if (!item || !item.name) return `${label}: thiếu tên sản phẩm.`;
+      if (!['Hoàn trả','Hàng thu hồi'].includes(item.classification)) return `${label}: vui lòng chọn Phân loại.`;
+      if (!pnValidExpiry(item.expiryDate)) return `${label}: Hạn sử dụng phải là ngày hợp lệ DD/MM/YYYY.`;
+      if ((item.notes || []).includes('Khác') && !String(item.otherNote || '').trim()) return `${label}: nhập nội dung ghi chú Khác.`;
       if (!item.barcode) return `${label}: thiếu Barcode.`;
       if (!item.material) return `${label}: thiếu Mã vật tư.`;
       if (!item.status) return `${label}: thiếu tình trạng sản phẩm.`;
@@ -10224,6 +10115,11 @@
         quantity:String(docOpsState.quantity || "").trim(),
         status:String(docOpsState.productStatus || "").trim(),
         note:docOpsProductNoteValue(),
+        productSchema:2,
+        classification:docOpsState.classification || '',
+        notes:(docOpsState.productNotes || []).slice(),
+        otherNote:(docOpsState.productNotes || []).includes('Khác')?String(docOpsState.productOtherNote || '').trim():'',
+        expiryDate:pnExpiryVisible()?String(docOpsState.expiryDate || '').trim():'',
         lengthCm:String(docOpsState.lengthCm || "").trim(),
         widthCm:String(docOpsState.widthCm || "").trim(),
         heightCm:String(docOpsState.heightCm || "").trim(),
@@ -10234,7 +10130,7 @@
     function docOpsProductDraftHasValue(){
       return !!(
         docOpsState.selectedSku || docOpsState.productSearch || docOpsState.productStatus ||
-        docOpsState.quantity || docOpsState.productNote || docOpsState.productOtherNote ||
+        docOpsState.quantity || docOpsState.productNote || docOpsState.productOtherNote || docOpsState.classification || (docOpsState.productNotes || []).length || docOpsState.expiryDate ||
         docOpsState.lengthCm || docOpsState.widthCm || docOpsState.heightCm || docOpsState.weightGram ||
         (live.docOpsProductFiles || []).length
       );
@@ -10273,9 +10169,10 @@
       docOpsState.productSearch = String(item.name || "");
       docOpsState.productStatus = String(item.status || "");
       docOpsState.quantity = String(item.quantity || "");
-      const standardNotes = ["Bình thường", "Hàng cận date", "Xẹp hơi"];
-      docOpsState.productNote = standardNotes.includes(String(item.note || "")) ? String(item.note || "") : "Khác";
-      docOpsState.productOtherNote = docOpsState.productNote === "Khác" ? String(item.note || "") : "";
+      docOpsState.classification=item.classification || '';
+      docOpsState.expiryDate=item.expiryDate || '';
+      docOpsState.productNotes=Array.isArray(item.notes)?item.notes.slice():PN_PRODUCT_NOTES.includes(item.note)?[item.note]:item.note?['Khác']:[];
+      docOpsState.productOtherNote=item.otherNote || (!Array.isArray(item.notes) && docOpsState.productNotes.includes('Khác')?item.note:'') || '';
       docOpsState.lengthCm = String(item.lengthCm || "");
       docOpsState.widthCm = String(item.widthCm || "");
       docOpsState.heightCm = String(item.heightCm || "");
@@ -10301,10 +10198,12 @@
     }
     function docOpsAddedProductsHtml(){
       if (!docOpsState.items.length) return "";
-      return `<div class="sku-added-list">${docOpsState.items.map((item, index) => `<div class="sku-added-item docops-editable${Number(docOpsState.editingIndex) === index ? " editing" : ""}" role="button" tabindex="0" aria-label="Sửa SKU ${html(item.name)}" onclick="editDocOpsProduct(${index})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();editDocOpsProduct(${index})}"><div><span class="docops-sku-index">SKU ${index + 1}:</span><strong>${html(item.name)}</strong><span>${html(item.material)} · SL ${html(item.quantity)} · ${html(item.lengthCm)}×${html(item.widthCm)}×${html(item.heightCm)} cm · ${html(item.weightGram)} g · CBM ${html(docOpsCbmText(Number(item.lengthCm) * Number(item.widthCm) * Number(item.heightCm) * Number(item.quantity) / 1000000))} · ${html(item.status)} · ${html(item.note)} · ${(item.images || []).length} ảnh</span></div><button type="button" onclick="event.stopPropagation();removeDocOpsProduct(${index})">Xóa</button></div>`).join("")}</div>`;
+      return `<div class="sku-added-list">${docOpsState.items.map((item, index) => `<div class="sku-added-item docops-editable${Number(docOpsState.editingIndex) === index ? " editing" : ""}" role="button" tabindex="0" aria-label="Sửa SKU ${html(item.name)}" onclick="editDocOpsProduct(${index})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();editDocOpsProduct(${index})}"><div><span class="docops-sku-index">SKU ${index + 1}:</span><strong>${html(item.name)}</strong><span>${html(item.material)} · SL ${html(item.quantity)} · ${html(item.lengthCm)}×${html(item.widthCm)}×${html(item.heightCm)} cm · ${html(item.weightGram)} g · CBM ${html(docOpsCbmText(Number(item.lengthCm) * Number(item.widthCm) * Number(item.heightCm) * Number(item.quantity) / 1000000))} · ${html(item.status)} · ${html(item.classification || "")} · ${html(item.note)}${item.expiryDate ? " · HSD " + html(item.expiryDate) : ""} · ${(item.images || []).length} ảnh</span></div><button type="button" onclick="event.stopPropagation();removeDocOpsProduct(${index})">Xóa</button></div>`).join("")}</div>`;
     }
     function resetDocOpsForm(){
       docOpsState.maDon = "";
+      docOpsState.loading = false;
+      docOpsState.lookupToken = (docOpsState.lookupToken || 0) + 1;
       docOpsState.record = null;
       docOpsState.message = "";
       docOpsState.returnType = "";
@@ -10323,7 +10222,7 @@
       const maDon = String(el("docOpsMaDon")?.value || docOpsState.maDon || "").trim();
       if (!maDon) return toast("Vui lòng nhập mã đơn.", "err");
       const record = docOpsState.record;
-      if (!record) return toast("Chưa có thông tin đơn. Vui lòng nhập mã đơn để hệ thống tìm dữ liệu trước.", "err");
+      if (!record || ![record.orderNo,record.maDonGhtk,record.maDon,record.po].some(v=>docOpsCacheKey(v)===docOpsCacheKey(maDon))) return toast("Chưa có thông tin đơn. Vui lòng nhập mã đơn để hệ thống tìm dữ liệu trước.", "err");
       const files = live.docOpsFiles || [];
       if (!docOpsState.returnType) return toast("Vui lòng chọn Loại hoàn.", "err");
       const hasDocument = docOpsState.returnType === "Chứng từ" || docOpsState.returnType === "Sản phẩm + chứng từ";
@@ -10404,8 +10303,10 @@
           ${docOpsState.productCollapsed ? "" : `<div id="docOpsProductForm" class="docops-product-box"><div class="docops-product-heading"><h3>${Number(docOpsState.editingIndex) >= 0 ? "Sửa thông tin SKU" : "Thông tin SKU"}</h3><span class="muted">* Mỗi SKU cần ít nhất 1 ảnh</span></div>
             <div class="grid cols-2"><label>Tên sản phẩm${docOpsSkuPickerHtml()}</label><label>Barcode hoặc Mã vật tư<div class="scan-row"><input id="docOpsProductCode" value="${html(selectedSku.barcode || selectedSku.material || "")}" placeholder="Quét Barcode/Mã vật tư" oninput="setDocOpsProductCode(this.value)"><button class="scan-btn" type="button" title="Quét sản phẩm" aria-label="Quét sản phẩm" onclick="openCodeScanner('docOpsProductCode', 'setDocOpsProductCode')">${scanIcon("Quét sản phẩm")}</button></div></label></div>
             <div class="grid cols-2 docops-compact-pair"><label>Barcode<input readonly value="${html(selectedSku.barcode || "")}" placeholder="Tự điền từ DS SKU"></label><label>Mã vật tư<input readonly value="${html(selectedSku.material || "")}" placeholder="Tự điền từ DS SKU"></label></div>
-            <div class="grid cols-3"><label>Tình trạng sản phẩm<select onchange="docOpsState.productStatus=this.value"><option value="">Chọn tình trạng</option><option ${docOpsState.productStatus==="Bình thường"?"selected":""}>Bình thường</option><option ${docOpsState.productStatus==="Hỏng/lỗi sản phẩm"?"selected":""}>Hỏng/lỗi sản phẩm</option></select></label><label>Số lượng<input type="number" min="1" inputmode="numeric" value="${html(docOpsState.quantity)}" placeholder="Nhập số lượng" oninput="updateDocOpsMeasurement('quantity', this.value)"></label><label>Ghi chú<select onchange="docOpsState.productNote=this.value; docops()"><option value="">Chọn ghi chú</option><option ${docOpsState.productNote==="Bình thường"?"selected":""}>Bình thường</option><option ${docOpsState.productNote==="Hàng cận date"?"selected":""}>Hàng cận date</option><option ${docOpsState.productNote==="Xẹp hơi"?"selected":""}>Xẹp hơi</option><option ${docOpsState.productNote==="Khác"?"selected":""}>Khác</option></select></label></div>
-            ${docOpsState.productNote === "Khác" ? `<label>Nội dung khác<textarea placeholder="Nhập ghi chú thực tế" oninput="docOpsState.productOtherNote=this.value">${html(docOpsState.productOtherNote)}</textarea></label>` : ""}
+            <label style="margin-bottom:12px">Phân loại *<select required onchange="docOpsState.classification=this.value"><option value="">Chọn phân loại</option><option ${docOpsState.classification==='Hoàn trả'?'selected':''}>Hoàn trả</option><option ${docOpsState.classification==='Hàng thu hồi'?'selected':''}>Hàng thu hồi</option></select></label>
+            <div class="grid cols-3"><label>Tình trạng sản phẩm<select onchange="docOpsState.productStatus=this.value"><option value="">Chọn tình trạng</option><option ${docOpsState.productStatus==="Bình thường"?"selected":""}>Bình thường</option><option ${docOpsState.productStatus==="Hỏng/lỗi sản phẩm"?"selected":""}>Hỏng/lỗi sản phẩm</option></select></label><label>Số lượng<input type="number" min="1" inputmode="numeric" value="${html(docOpsState.quantity)}" placeholder="Nhập số lượng" oninput="updateDocOpsMeasurement('quantity', this.value)"></label>${pnNotesHtml()}</div>
+            ${(docOpsState.productNotes || []).includes("Khác") ? `<label>Nội dung khác<textarea placeholder="Nhập ghi chú thực tế" oninput="docOpsState.productOtherNote=this.value">${html(docOpsState.productOtherNote)}</textarea></label>` : ""}
+            ${pnExpiryVisible() ? `<label style="margin-top:12px">Hạn sử dụng<input type="text" inputmode="numeric" maxlength="10" placeholder="DD/MM/YYYY — không bắt buộc" value="${html(docOpsState.expiryDate || '')}" oninput="this.value=formatPnExpiry(this.value);docOpsState.expiryDate=this.value"></label>` : ''}
             <div class="docops-measurement-row"><div><label style="margin-bottom:7px">Kích thước (cm)</label><div class="docops-dimension-inputs"><label>Dài (D)<input type="number" min="0.01" step="0.01" inputmode="decimal" value="${html(docOpsState.lengthCm)}" placeholder="D" oninput="updateDocOpsMeasurement('lengthCm', this.value)"></label><label>Rộng (R)<input type="number" min="0.01" step="0.01" inputmode="decimal" value="${html(docOpsState.widthCm)}" placeholder="R" oninput="updateDocOpsMeasurement('widthCm', this.value)"></label><label>Cao (C)<input type="number" min="0.01" step="0.01" inputmode="decimal" value="${html(docOpsState.heightCm)}" placeholder="C" oninput="updateDocOpsMeasurement('heightCm', this.value)"></label></div></div><div><label style="margin-bottom:7px">Khối lượng (g)</label><label class="docops-measurement-detail">KLT trên sản phẩm<input type="number" min="0.01" step="0.01" inputmode="decimal" value="${html(docOpsState.weightGram)}" placeholder="VD: 400" oninput="updateDocOpsMeasurement('weightGram', this.value)"></label></div></div>
             <div class="docops-measurement-footer"><div><div class="docops-measurement-note">Cập nhật lại kích thước + khối lượng sản phẩm nếu không chính xác</div><div id="docOpsMeasurementWarning" class="docops-measurement-warning ${docOpsMeasurementWarningText() ? "" : "hidden"}">${html(docOpsMeasurementWarningText())}</div></div><div id="docOpsCbmPreview" class="docops-cbm-preview">CBM dự kiến: ${html(docOpsCbmText(docOpsDraftCbm()))} m³</div></div>
             <h2 style="margin-top:6px">Ảnh sản phẩm</h2><div class="file-actions"><button type="button" onclick="openFilePicker('docOpsProductCamera')">Chụp ảnh SP</button><button type="button" onclick="openFilePicker('docOpsProductLibrary')">Chọn ảnh SP</button></div>
@@ -10830,6 +10731,247 @@
       live.user = null;
       clearLoading();
       showLogin();
+    }
+    // Keyed caches are separate from the upload queue and legacy row cache.
+    const keySyncState = {db:null, opening:null, active:false, timer:null, pending:0, lastRequest:0, lastInput:0, failures:0, progress:{}, pnLoad:null};
+    function keySyncDb() {
+      if (keySyncState.db) return Promise.resolve(keySyncState.db);
+      if (keySyncState.opening) return keySyncState.opening;
+      keySyncState.opening = new Promise((resolve,reject) => {
+        if (!window.indexedDB) return reject(new Error('Máy không mở được IndexedDB.'));
+        const req = indexedDB.open('VTD_KEYED_CACHE_V1',1);
+        let expired = false;
+        const timer = setTimeout(() => { expired=true; reject(new Error('Mở cache DB quá lâu.')); },15000);
+        req.onupgradeneeded = () => {
+          for (const name of ['records','masterSku']) req.result.createObjectStore(name,{keyPath:'syncKey'});
+          req.result.createObjectStore('meta',{keyPath:'key'});
+        };
+        req.onblocked = () => { clearTimeout(timer); expired=true; reject(new Error('Cache DB bị khóa bởi phiên app khác.')); };
+        req.onerror = () => { clearTimeout(timer); reject(req.error || new Error('Không mở được cache DB.')); };
+        req.onsuccess = () => {
+          clearTimeout(timer); if (expired) { req.result.close(); return; }
+          const db=req.result; keySyncState.db=db;
+          db.onversionchange=()=>{ db.close(); keySyncState.db=null; keySyncState.opening=null; };
+          resolve(db);
+        };
+      }).catch(err=>{keySyncState.opening=null; throw err;});
+      return keySyncState.opening;
+    }
+    async function keySyncRead(store, key) {
+      const db=await keySyncDb();
+      return new Promise((resolve,reject)=>{
+        const tx=db.transaction(store,'readonly'), os=tx.objectStore(store);
+        const req=key === undefined ? os.getAll() : os.get(key);
+        let result;
+        req.onsuccess=()=>{result=req.result;};
+        tx.oncomplete=()=>resolve(result);
+        tx.onerror=tx.onabort=()=>reject(tx.error || new Error('Đọc cache DB thất bại.'));
+      });
+    }
+    async function keySyncWrite(store, records, deletes=[]) {
+      const db=await keySyncDb();
+      return new Promise((resolve,reject)=>{
+        const tx=db.transaction(store,'readwrite'), os=tx.objectStore(store);
+        try { deletes.forEach(key=>os.delete(key)); records.forEach(record=>os.put(record)); }
+        catch(err) { tx.abort(); reject(err); return; }
+        tx.oncomplete=()=>resolve();
+        tx.onerror=tx.onabort=()=>reject(tx.error || new Error('Ghi cache DB thất bại.'));
+      });
+    }
+    function pnSyncKey(row) {
+      const order=String(row.orderNo || row.soDonHang || '').trim();
+      const ghtk=String(row.maDonGhtk || '').trim();
+      return order ? 'ORDER:'+order.toLowerCase() : ghtk ? 'GHTK:'+ghtk.toLowerCase() : '';
+    }
+    async function keySyncLegacyPn() {
+      return new Promise(resolve=>{
+        const req=indexedDB.open(DOC_OPS_LOOKUP_DB);
+        const timer=setTimeout(()=>resolve(null),10000);
+        req.onupgradeneeded=()=>req.transaction.abort();
+        req.onerror=req.onblocked=()=>{clearTimeout(timer);resolve(null);};
+        req.onsuccess=()=>{
+          const db=req.result;
+          if (!db.objectStoreNames.contains('records')) {clearTimeout(timer);db.close();resolve(null);return;}
+          const tx=db.transaction(['records','meta'],'readonly');
+          const rows=tx.objectStore('records').getAll(), meta=tx.objectStore('meta').get('sync');
+          tx.oncomplete=()=>{clearTimeout(timer);db.close();resolve({rows:rows.result || [],meta:meta.result || {}});};
+          tx.onerror=tx.onabort=()=>{clearTimeout(timer);db.close();resolve(null);};
+        };
+      });
+    }
+    async function keySyncProgress(type, patch) {
+      const key='progress:'+type;
+      const previous=keySyncState.progress[type] || await keySyncRead('meta',key) || {};
+      const progress=Object.assign({},previous,patch,{key,protocol:1,updatedAt:new Date().toISOString()});
+      try { await keySyncWrite('meta',[progress]); }
+      catch(err) {progress.status='error';progress.lastError='Không lưu được trạng thái cache: '+String(err.message || err);}
+      keySyncState.progress[type]=progress;
+      refreshLocalCacheProgressUi();
+      const params=Object.assign({},progress,{cacheType:type,deviceId:deviceId(),appVersion:APP_VERSION,label:type==='masterSku'?'Master SKU':'Chứng từ PN lookup',_silent:true});
+      // Reporting failure must not turn a successfully committed cache into a download failure.
+      try { await api('reportLookupCacheStatus',params); } catch(err) {}
+      return progress;
+    }
+    function keyedProgress(type) {
+      return Object.assign({status:'pending',downloaded:0,total:0,protocol:1},keySyncState.progress[type] || {});
+    }
+    function keySyncSchedule(ms=30000) {
+      if (keySyncState.timer) clearTimeout(keySyncState.timer);
+      keySyncState.timer=setTimeout(keySyncBackground,ms);
+    }
+    async function keySyncIdle() {
+      while (keySyncState.pending || live.loadingCount || live.syncRunning || docOpsState.saving || live.inputSaving ||
+        Date.now()-keySyncState.lastRequest<1500 || Date.now()-keySyncState.lastInput<3000 || document.hidden) {
+        if (!live.token || !navigator.onLine) throw new Error('Chờ kết nối hoặc đăng nhập để đối soát.');
+        await new Promise(r=>setTimeout(r,1500));
+      }
+    }
+    async function keySyncCall(type,params) {
+      await keySyncIdle();
+      const res=type==='masterSku' ? await api('masterSkuKeySync',Object.assign({_silent:true},params)) : await docOpsApi('keySync',Object.assign({_silent:true},params));
+      if (!res || !res.ok || res.protocol!==1) throw new Error(res && res.message || 'API chưa hỗ trợ đối soát theo mã.');
+      return res;
+    }
+    async function keySyncManifest(type) {
+      let offset=0, version='', all=[], first;
+      while (true) {
+        const res=await keySyncCall(type,{offset,version});
+        if (!first) first=res;
+        if (!Array.isArray(res.entries) || (version && version!==res.version)) throw new Error('Danh sách đối soát không hợp lệ.');
+        version=res.version; all.push(...res.entries);
+        if (res.done) break;
+        if (!(res.nextOffset>offset)) throw new Error('Phân trang đối soát không tiến lên.');
+        offset=res.nextOffset;
+      }
+      if (all.length!==Number(first.total)) throw new Error('Chưa tải đủ danh sách đối soát.');
+      if (new Set(all.map(e=>e.key)).size!==all.length) throw new Error('Nguồn có mã trùng.');
+      return Object.assign({},first,{entries:all});
+    }
+    function keySyncDiff(entries,rows) {
+      const byKey=new Map(rows.map(r=>[r.syncKey,r]));
+      const missing=[],changed=[],mapped=[];
+      for (const entry of entries) {
+        const row=byKey.get(entry.key);
+        if (!row) missing.push(entry);
+        else if (row.contentVersion!==entry.version) changed.push(entry);
+        else if (Number(row.rowNumber)!==Number(entry.rowNumber)) mapped.push(Object.assign({},row,{rowNumber:entry.rowNumber}));
+      }
+      return {missing,changed,mapped,matched:entries.length-missing.length-changed.length};
+    }
+    async function keySyncReconcile(type) {
+      const store=type==='masterSku'?'masterSku':'records';
+      await keySyncProgress(type,{status:'checking',lastError:''});
+      const manifest=await keySyncManifest(type);
+      const rows=await keySyncRead(store), diff=keySyncDiff(manifest.entries,rows);
+      const base={total:manifest.total,sourceVersion:manifest.version,invalidCount:manifest.invalidCount,duplicateCount:manifest.duplicateCount};
+      await keySyncProgress(type,Object.assign({},base,{status:'downloading',downloaded:rows.length,matched:diff.matched,missing:diff.missing.length,changed:diff.changed.length}));
+      if (manifest.duplicateCount) throw new Error('Nguồn có mã trùng; không ghi đè cache.');
+      if (diff.mapped.length) await keySyncWrite(store,diff.mapped);
+      const needed=[...diff.missing,...diff.changed];
+      for (let offset=0;offset<needed.length;offset+=100) {
+        const batch=needed.slice(offset,offset+100), wanted=new Map(batch.map(e=>[e.key,e]));
+        const res=await keySyncCall(type,{version:manifest.version,keys:batch.map(e=>e.key)});
+        if (!Array.isArray(res.records) || res.records.length!==batch.length || new Set(res.records.map(r=>r.syncKey)).size!==batch.length) throw new Error('API trả thiếu hoặc trùng đơn/SKU.');
+        for (const row of res.records) {
+          if (!wanted.has(row.syncKey) || wanted.get(row.syncKey).version!==row.contentVersion) throw new Error('Dữ liệu tải không khớp danh sách đối soát.');
+          if (type!=='masterSku' && pnSyncKey(row)!==row.syncKey) throw new Error('Khóa đơn không khớp dữ liệu.');
+          if (type==='masterSku' && 'MATERIAL:'+String(row.code).trim().toLowerCase()!==row.syncKey) throw new Error('Khóa mã vật tư không khớp dữ liệu.');
+        }
+        await keySyncWrite(store,res.records);
+        if (type!=='masterSku') docOpsLookupMemory=await keySyncRead(store);
+      }
+      // This call verifies that the source did not change during downloads.
+      await keySyncCall(type,{version:manifest.version,offset:0});
+      const actual=await keySyncRead(store), finalDiff=keySyncDiff(manifest.entries,actual);
+      if (finalDiff.missing.length || finalDiff.changed.length || finalDiff.mapped.length) throw new Error('DB chưa khớp nguồn sau khi ghi.');
+      if (!manifest.invalidCount && !manifest.duplicateCount) {
+        const valid=new Set(manifest.entries.map(e=>e.key));
+        // Only prune after a complete, stable source inventory. Upload queues are never touched.
+        await keySyncWrite(store,[],actual.filter(r=>!valid.has(r.syncKey)).map(r=>r.syncKey));
+      }
+      if (type==='masterSku') await keySyncPublishProducts();
+      else {
+        docOpsLookupMemory=await keySyncRead(store);
+        await docOpsLookupWriteMeta({lastRow:manifest.lastRow,count:docOpsLookupMemory.length});
+      }
+      const complete=!manifest.invalidCount && !manifest.duplicateCount;
+      const reported=await keySyncProgress(type,Object.assign({},base,{status:complete?'done':'error',downloaded:(await keySyncRead(store)).length,matched:manifest.total,missing:0,changed:0,
+        verifiedAt:complete?new Date().toISOString():'',lastError:complete?'':'Nguồn có dòng chưa có mã; cần bổ sung mã rồi đối soát lại.'}));
+      return complete && reported.status==='done';
+    }
+    async function keySyncPublishProducts() {
+      const rows=await keySyncRead('masterSku');
+      if(view==='input' && keySyncState.active) {live.keyedProductsPending=rows;return;}
+      applyKeyedProducts(rows);
+    }
+    function applyKeyedProducts(rows) {
+      const selected=products[skuState.productIndex], selectedCode=selected && productCodeFrom(selected);
+      products.splice(0,products.length,...rows.map(normalizeProductOption));
+      if (selectedCode) {
+        const index=products.findIndex(p=>productCodeFrom(p)===selectedCode);
+        if (index>=0) skuState.productIndex=String(index);
+        else { skuState.productIndex=''; skuState.productSearch=''; skuState.materialSearch=''; }
+      }
+      // Keep the old format available to existing render/read paths. DB is authoritative.
+      try { localStorage.setItem(PRODUCT_CACHE_KEY,JSON.stringify({version:PRODUCT_CACHE_VERSION,products:rows,total:rows.length,updatedAt:new Date().toISOString()})); } catch(err) {}
+    }
+    async function keySyncBackground() {
+      keySyncState.timer=null;
+      if (keySyncState.active) return;
+      if (!live.token || !navigator.onLine || document.hidden) {keySyncSchedule(60000);return;}
+      keySyncState.active=true;
+      let failed=false;
+      try {
+        if (keySyncState.pnLoad) await keySyncState.pnLoad;
+        for (const type of ['docOpsLookup','masterSku']) {
+          if (type==='docOpsLookup' && !docOpsApiUrl()) continue;
+          try { await keySyncIdle(); if (!await keySyncReconcile(type)) failed=true; }
+          catch(err) {failed=true; await keySyncProgress(type,{status:'error',lastError:String(err.message || err)}).catch(()=>{});}
+        }
+      } finally {
+        keySyncState.active=false;
+        keySyncState.failures=failed?Math.min(5,keySyncState.failures+1):0;
+        keySyncSchedule(failed?Math.min(600000,30000*Math.pow(2,keySyncState.failures)):600000);
+      }
+    }
+    function keyTracked(call) {
+      keySyncState.pending++;
+      return Promise.resolve().then(call).finally(()=>{keySyncState.pending--;keySyncState.lastRequest=Date.now();});
+    }
+    function api(action,params) {return keyTracked(()=>apiTransport(action,params));}
+    function docOpsApi(action,params) {return keyTracked(()=>docOpsApiTransport(action,params));}
+    document.addEventListener('input',()=>{keySyncState.lastInput=Date.now();},true);
+    window.addEventListener('online',()=>keySyncSchedule(30000));
+
+    const PN_PRODUCT_NOTES=['Bình thường','Hàng cận date','Xẹp hơi','Hết hạn sử dụng','Vỏ bị xé/hở','Khác'];
+    function pnExpiryVisible(notes=docOpsState.productNotes || []) {return notes.includes('Hàng cận date') || notes.includes('Hết hạn sử dụng');}
+    function formatPnExpiry(text) {
+      const digits=String(text || '').replace(/\D/g,'').slice(0,8);
+      return digits.length>4?digits.slice(0,2)+'/'+digits.slice(2,4)+'/'+digits.slice(4):digits.length>2?digits.slice(0,2)+'/'+digits.slice(2):digits;
+    }
+    function pnValidExpiry(text) {
+      if (!text) return true;
+      const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text); if (!m) return false;
+      const d=new Date(+m[3],+m[2]-1,+m[1]);
+      return d.getFullYear()===+m[3] && d.getMonth()===+m[2]-1 && d.getDate()===+m[1];
+    }
+    function togglePnNote(note,checked) {
+      let notes=docOpsState.productNotes || [];
+      notes=checked ? note==='Bình thường'?['Bình thường']:[...notes.filter(n=>n!=='Bình thường' && n!==note),note] : notes.filter(n=>n!==note);
+      docOpsState.productNotes=notes;
+      if (!pnExpiryVisible(notes)) docOpsState.expiryDate='';
+      docops();
+    }
+    function pnNotesHtml() {
+      const notes=docOpsState.productNotes || [];
+      return `<fieldset style="border:0;padding:0;margin:0"><legend>Ghi chú</legend><div style="display:flex;flex-wrap:wrap;gap:12px">${PN_PRODUCT_NOTES.map((note,i)=>`<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" style="width:18px;min-height:18px;height:18px" ${notes.includes(note)?'checked':''} onchange="togglePnNote(PN_PRODUCT_NOTES[${i}],this.checked)">${html(note)}</label>`).join('')}</div></fieldset>`;
+    }
+
+    async function loadDocOpsLookupCache(force=false){
+      if(keySyncState.active)return false;
+      if(keySyncState.pnLoad)return keySyncState.pnLoad;
+      keySyncState.pnLoad=loadDocOpsLookupCacheAppend(force).finally(()=>{keySyncState.pnLoad=null;keySyncSchedule(30000);});
+      return keySyncState.pnLoad;
     }
     (function bootLive(){
       clearLoading();
