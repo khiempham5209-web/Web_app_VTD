@@ -3693,7 +3693,7 @@
             <label>Thư mục Drive<input id="updateFolderUrl" value="${html(updateCfg.folderUrl || "")}" placeholder="Link folder Drive chứa APK"></label>
             <label>Ghi chú cập nhật<textarea id="updateNote" rows="2">${html(updateCfg.note || "")}</textarea></label>
           </div>
-          <div class="config-actions" style="margin-top:12px"><button class="primary" onclick="saveUpdateConfig()">Lưu cấu hình cập nhật</button></div>` : ""}
+          <div class="config-actions" style="margin-top:12px"><button class="primary" id="saveUpdateConfigButton" onclick="saveUpdateConfig()">Lưu cấu hình cập nhật</button><span id="updateSaveStatus" role="status" style="display:block;margin-top:8px"></span></div>` : ""}
       </section>`;
       const personalPanel = `<section class="section"><h2>Cài đặt cá nhân</h2>
         <div class="grid cols-2">
@@ -4565,7 +4565,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.3";
+    const APP_VERSION = "5.9.4";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -6709,21 +6709,30 @@
     }
     async function saveUpdateConfig(){
       if (!canAdminConfig()) return toast("Bạn không có quyền lưu cấu hình cập nhật.", "err");
-      appConfig.update = Object.assign({}, appUpdateConfig(), {
-        latestVersion: (el("updateLatestVersion")?.value || "").trim(),
-        apkUrl: (el("updateApkUrl")?.value || "").trim(),
-        folderUrl: (el("updateFolderUrl")?.value || "").trim(),
-        note: (el("updateNote")?.value || "").trim()
+      if(live.updateConfigSaving)return;
+      const update=Object.assign({},appUpdateConfig(),{
+        latestVersion:(el('updateLatestVersion')?.value || '').trim(),
+        apkUrl:(el('updateApkUrl')?.value || '').trim(),
+        folderUrl:(el('updateFolderUrl')?.value || '').trim(),
+        note:(el('updateNote')?.value || '').trim()
       });
-      saveAppConfig(false);
-      const res = await api("saveSystemConfig", {config:{update: appConfig.update}, _silent:true});
-      if (res && res.ok) {
-        mergeSystemConfig(res.config || {});
-        toast("Đã lưu cấu hình cập nhật.", "ok");
-        settings();
-      } else {
-        toast((res && res.message) || "Chưa lưu được cấu hình cập nhật lên hệ thống.", "err");
-      }
+      const show=(message,error=false)=>{
+        const status=el('updateSaveStatus');if(status){status.textContent=message;status.style.color=error?'#b42318':'#067647';}
+        toast(message,error?'err':'ok');
+      };
+      const button=el('saveUpdateConfigButton');
+      live.updateConfigSaving=true;
+      if(button){button.disabled=true;button.textContent='Đang lưu…';}
+      const status=el('updateSaveStatus');if(status)status.textContent='Đang gửi cấu hình lên hệ thống…';
+      try {
+        const res=await api('saveSystemConfig',{config:{update},_silent:true});
+        if(!res || !res.ok)throw Error(res && res.message || 'API chưa xác nhận lưu cấu hình.');
+        appConfig.update=update;
+        try {mergeSystemConfig(res.config || {});saveAppConfig(false);}
+        catch(err){show('Đã lưu lên hệ thống, nhưng chưa lưu được cấu hình trên máy: '+String(err.message || err),true);return;}
+        show('Đã lưu cấu hình cập nhật lên hệ thống.');
+      } catch(err){show('Chưa xác nhận lưu cấu hình: '+String(err.message || err),true);}
+      finally{live.updateConfigSaving=false;if(button){button.disabled=false;button.textContent='Lưu cấu hình cập nhật';}}
     }
     function queueImageDb(){
       return new Promise((resolve, reject) => {

@@ -100,5 +100,13 @@ function sheet(data){return {getLastRow:()=>data.length,getLastColumn:()=>data[0
    vm.runInContext(extract('cacheDailyClaim'),ctx);assert.equal(await ctx.cacheDailyClaim('docOpsSku'),false);
    assert.equal(await ctx.cacheDailyClaim('docOpsSku',true),true);day='12/09/2026';assert.equal(await ctx.cacheDailyClaim('docOpsSku'),true);
  });
+ await test('Update config saves server first and always reports errors without clearing input',async()=>{
+   const nodes={updateLatestVersion:{value:'5.9.3'},updateApkUrl:{value:'https://example.test/app.apk'},updateFolderUrl:{value:''},updateNote:{value:'New'},saveUpdateConfigButton:{},updateSaveStatus:{style:{}}};let calls=0,mode='success';const messages=[];
+   const ctx={live:{},appConfig:{update:{latestVersion:'5.8'}},appUpdateConfig:()=>ctx.appConfig.update,canAdminConfig:()=>true,el:id=>nodes[id],toast:m=>messages.push(m),api:async()=>{calls++;if(mode==='throw')throw Error('network');if(mode==='denied')return {ok:false,message:'Denied'};return {ok:true};},mergeSystemConfig:()=>{},saveAppConfig:()=>{if(mode==='quota')throw Error('QuotaExceeded');}};vm.createContext(ctx);vm.runInContext(extract('saveUpdateConfig'),ctx);
+   mode='quota';await ctx.saveUpdateConfig();assert.equal(calls,1);assert.match(messages.at(-1),/Đã lưu lên hệ thống/);assert.equal(nodes.saveUpdateConfigButton.disabled,false);
+   ctx.appConfig.update={latestVersion:'5.8'};mode='denied';await ctx.saveUpdateConfig();assert.equal(ctx.appConfig.update.latestVersion,'5.8');assert.match(messages.at(-1),/Denied/);
+   mode='throw';await ctx.saveUpdateConfig();assert.match(messages.at(-1),/network/);assert.equal(ctx.live.updateConfigSaving,false);
+   mode='success';await ctx.saveUpdateConfig();assert.match(messages.at(-1),/Đã lưu cấu hình cập nhật lên hệ thống/);
+ });
  console.log('TOTAL '+passed+' tests passed');
 })().catch(err=>{console.error(err);process.exitCode=1;});
