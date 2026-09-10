@@ -70,5 +70,12 @@ function sheet(data){return {getLastRow:()=>data.length,getLastColumn:()=>data[0
    const ctx={docOpsState:{productNotes:['Xẹp hơi','Hết hạn sử dụng'],notesOpen:true},PN_PRODUCT_NOTES:c.PN_PRODUCT_NOTES,html:x=>String(x)};vm.createContext(ctx);vm.runInContext(extract('pnNotesHtml'),ctx);
    const markup=ctx.pnNotesHtml();assert.equal(markup.includes('type="checkbox"'),false);assert.ok(markup.includes('aria-multiselectable="true"'));assert.equal((markup.match(/aria-selected="true"/g)||[]).length,2);
  });
+ await test('Cache email suppresses repeated errors across devices and retries failed sends',()=>{
+   let count=0, fail=false;const props=new Map();const ctx={console,Date,Session:{getEffectiveUser:()=>({getEmail:()=> 'fulfillment.wms.3pl@gmail.com'})},LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock:()=>{}})},PropertiesService:{getScriptProperties:()=>({getProperty:k=>props.get(k),setProperty:(k,v)=>props.set(k,v)})},Utilities:{formatDate:()=> 'today'},MailApp:{sendEmail:m=>{assert.equal(m.to,'khiempham5209@gmail.com');if(fail)throw Error('mail unavailable');count++;}}};vm.createContext(ctx);vm.runInContext(vtd,ctx);
+   const p={status:'error',cacheType:'masterSku',lastError:'duplicate',email:'worker',deviceId:'one'};
+   ctx.vtdApp_cacheErrorEmail_({...p,status:'done'});assert.equal(count,0);
+   ctx.vtdApp_cacheErrorEmail_(p);ctx.vtdApp_cacheErrorEmail_({...p,deviceId:'two'});assert.equal(count,1);
+   fail=true;assert.throws(()=>ctx.vtdApp_cacheErrorEmail_({...p,lastError:'network'}));fail=false;ctx.vtdApp_cacheErrorEmail_({...p,lastError:'network'});assert.equal(count,2);
+ });
  console.log('TOTAL '+passed+' tests passed');
 })().catch(err=>{console.error(err);process.exitCode=1;});

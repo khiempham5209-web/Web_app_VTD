@@ -3828,7 +3828,10 @@ function vtdApp_reportLookupCacheStatus(params) {
   vtdApp_setByAliases_(row, col, ["AppVersion"], params.appVersion || "");
   if (targetRow) sh.getRange(targetRow, 1, 1, row.length).setValues([row]);
   else sh.appendRow(row);
-  return vtdApp_ok_({message: "Đã cập nhật trạng thái cache.", email: email, deviceId: deviceId});
+  let alertError='';
+  try { vtdApp_cacheErrorEmail_(Object.assign({},params,{email,deviceId,cacheType,label})); }
+  catch(err) { alertError=String(err.message || err); console.error('Cache alert email: '+alertError); }
+  return vtdApp_ok_({message: "Đã cập nhật trạng thái cache.", email: email, deviceId: deviceId, alertError});
 }
 
 function vtdApp_lookupCacheStatusSheet_() {
@@ -5637,4 +5640,29 @@ function vtdApp_masterSkuKeySync(params) {
     records.push({syncKey:'MATERIAL:'+ks_key(code),code,ma:code,name:name || code,ten:name || code,type,loai:type,source:'MASTER SKU',rowNumber:index+2,contentVersion:ks_hash([code,name,type])});
   });
   return ks_reply(ks_pack(records,invalid,ss.getId()+':MASTER SKU',sh.getLastRow()),params);
+}
+
+// One alert per cache/error signature across devices in six hours. No credentials in email.
+function vtdApp_cacheErrorEmail_(p) {
+  if (p.status !== 'error') return;
+  const sender='fulfillment.wms.3pl@gmail.com', recipient='khiempham5209@gmail.com';
+  if (String(Session.getEffectiveUser().getEmail()).toLowerCase() !== sender) throw new Error('API phải chạy bằng '+sender+' để gửi cảnh báo cache.');
+  const lock=LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Chưa lấy được khóa gửi cảnh báo.');
+  try {
+    const props=PropertiesService.getScriptProperties(), key='CACHE_ALERT_'+ks_hash([p.cacheType,p.lastError || 'Unknown']);
+    const now=Date.now(), sent=Number(props.getProperty(key) || 0);
+    if (sent && now-sent < 6*60*60*1000) return;
+    MailApp.sendEmail({to:recipient,subject:'[VTD] Lỗi cache: '+String(p.label || p.cacheType),body:[
+      'Máy nhân viên báo lỗi đồng bộ dữ liệu.',
+      'User: '+p.email,'Máy: '+p.deviceId,'Dữ liệu: '+(p.label || p.cacheType),
+      'Đã lưu / tổng: '+Number(p.downloaded || 0)+'/'+Number(p.total || 0),
+      'Lỗi: '+String(p.lastError || 'Chưa có chi tiết'),
+      'Đối soát thành công gần nhất: '+String(p.verifiedAt || 'Chưa có'),
+      'Phiên bản: '+String(p.appVersion || ''),
+      'Thời gian: '+Utilities.formatDate(new Date(),'Asia/Ho_Chi_Minh','yyyy-MM-dd HH:mm:ss'),
+      'Mở Quản lý thiết bị để xem báo cáo. Cùng lỗi được giới hạn một email mỗi 6 giờ cho toàn bộ máy.'
+    ].join('\n')});
+    props.setProperty(key,String(now));
+  } finally { lock.releaseLock(); }
 }

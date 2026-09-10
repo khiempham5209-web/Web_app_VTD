@@ -4564,7 +4564,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.1";
+    const APP_VERSION = "5.9.2";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -10953,7 +10953,8 @@
       } finally {
         keySyncState.active=false;
         keySyncState.failures=failed?Math.min(5,keySyncState.failures+1):0;
-        keySyncSchedule(failed?Math.min(600000,30000*Math.pow(2,keySyncState.failures)):600000);
+        const nextDay=new Date();nextDay.setHours(24,0,30,0);
+        keySyncSchedule(failed?Math.min(600000,30000*Math.pow(2,keySyncState.failures)):Math.max(30000,nextDay.getTime()-Date.now())+Math.floor(Math.random()*60000));
       }
     }
     function keyTracked(call) {
@@ -10984,11 +10985,22 @@
       if (!pnExpiryVisible(notes)) docOpsState.expiryDate='';
       docops();
     }
+    function closePnNotesOutside(event) {
+      if (!docOpsState.notesOpen || event.target.closest('.pn-notes-picker')) return;
+      docOpsState.notesOpen=false;
+      const picker=document.querySelector('.pn-notes-picker');
+      if (!picker) return;
+      const trigger=picker.querySelector('[aria-expanded]');
+      if (trigger) trigger.setAttribute('aria-expanded','false');
+      const menu=picker.querySelector('[role="listbox"]');
+      if (menu) menu.parentElement.remove();
+    }
+    document.addEventListener('click',closePnNotesOutside);
     function pnNotesHtml() {
       const notes=docOpsState.productNotes || [], open=!!docOpsState.notesOpen;
       return `<div class="pn-notes-picker" style="position:relative"><span style="display:block;margin-bottom:6px">Ghi chú</span>
         <button type="button" aria-label="Chọn ghi chú" aria-haspopup="listbox" aria-expanded="${open}" style="width:100%;display:flex;justify-content:space-between;gap:10px;text-align:left;font-weight:normal" onclick="docOpsState.notesOpen=!docOpsState.notesOpen;docops()"><span>${html(notes.length?notes.join('; '):'Chọn ghi chú')}</span><span aria-hidden="true">▾</span></button>
-        ${open?`<div style="position:absolute;left:0;right:0;top:100%;z-index:80;background:var(--panel,#fff);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 20px #0002;padding:6px"><div role="listbox" aria-label="Ghi chú sản phẩm" aria-multiselectable="true" style="max-height:270px;overflow:auto">${PN_PRODUCT_NOTES.map((note,i)=>`<button type="button" role="option" aria-selected="${notes.includes(note)}" style="display:flex;gap:10px;width:100%;text-align:left;border:0;font-weight:normal;background:${notes.includes(note)?'var(--soft,#eef7ff)':'transparent'}" onclick="togglePnNote(PN_PRODUCT_NOTES[${i}],!(docOpsState.productNotes || []).includes(PN_PRODUCT_NOTES[${i}]))"><span aria-hidden="true" style="width:18px">${notes.includes(note)?'✓':''}</span>${html(note)}</button>`).join('')}</div><button type="button" style="width:100%;margin-top:5px" onclick="docOpsState.notesOpen=false;docops()">Xong</button></div>`:''}</div>`;
+        ${open?`<div style="position:absolute;left:0;right:0;top:100%;z-index:80;background:var(--panel,#fff);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 20px #0002;padding:6px"><div role="listbox" aria-label="Ghi chú sản phẩm" aria-multiselectable="true" style="display:grid;gap:0">${PN_PRODUCT_NOTES.map((note,i)=>`<button type="button" role="option" aria-selected="${notes.includes(note)}" style="display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;min-height:36px;height:auto;margin:0;padding:7px 10px;line-height:22px;text-align:left;border:0;font-weight:normal;background:${notes.includes(note)?'var(--soft,#eef7ff)':'transparent'}" onclick="togglePnNote(PN_PRODUCT_NOTES[${i}],!(docOpsState.productNotes || []).includes(PN_PRODUCT_NOTES[${i}]))"><span aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;flex:0 0 18px;line-height:22px">${notes.includes(note)?'✓':''}</span>${html(note)}</button>`).join('')}</div><button type="button" style="width:100%;min-height:36px;margin:4px 0 0;padding:6px 10px;line-height:22px" onclick="docOpsState.notesOpen=false;docops()">Xong</button></div>`:''}</div>`;
     }
 
     async function loadDocOpsLookupCache(force=false){
