@@ -2486,7 +2486,7 @@ function vtdApp_login(params) {
     email: email,
     createdAt: Date.now(),
     dayKey: vtdApp_vnDayKey_(new Date())
-  }, 3600);
+  }, 10800);
   vtdApp_debugLog_("LOGIN_WRITE", token, vtdApp_sessionGet_(token) ? "FOUND" : "MISSING");
   Logger.log("LOGIN_WRITE token=" + token + " check=" + CacheService.getScriptCache().get("VTD_SESSION_" + token));
 
