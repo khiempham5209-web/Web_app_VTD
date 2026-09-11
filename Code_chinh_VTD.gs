@@ -2494,7 +2494,8 @@ function vtdApp_login(params) {
     token: token,
     user: email,
     auth: Object.assign(vtdApp_authShape_(email, auth), {passwordPolicy: passwordPolicy}),
-    passwordPolicy: passwordPolicy
+    passwordPolicy: passwordPolicy,
+    config: {system:vtdApp_publicSystemConfig_()}
   });
 }
 

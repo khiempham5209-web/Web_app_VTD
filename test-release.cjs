@@ -108,5 +108,12 @@ function sheet(data){return {getLastRow:()=>data.length,getLastColumn:()=>data[0
    mode='throw';await ctx.saveUpdateConfig();assert.match(messages.at(-1),/network/);assert.equal(ctx.live.updateConfigSaving,false);
    mode='success';await ctx.saveUpdateConfig();assert.match(messages.at(-1),/Đã lưu cấu hình cập nhật lên hệ thống/);
  });
+ await test('Staff login returns update, theme and PN endpoint without admin permission',()=>{
+   const ctx={console,Logger:{log:()=>{}},Utilities:{getUuid:()=> 'test-token'},CacheService:{getScriptCache:()=>({get:()=>null})}};vm.createContext(ctx);vm.runInContext(vtd,ctx);
+   ctx.vtdApp_permissionConfig_=()=>({pins:{'staff@test':'testpass'},adminEmails:[],users:{'staff@test':{allowed:true,role:'staff'}}});
+   ctx.vtdApp_markPasswordFirstLogin_=()=>({});ctx.vtdApp_recordLogin_=()=>{};ctx.vtdApp_sessionPut_=()=>{};ctx.vtdApp_sessionGet_=()=>({});ctx.vtdApp_vnDayKey_=()=> 'day';ctx.vtdApp_debugLog_=()=>{};ctx.vtdApp_authShape_=()=>({email:'staff@test',role:'staff'});
+   ctx.vtdApp_publicSystemConfig_=()=>({update:{latestVersion:'5.9.3'},themeConfig:{version:'new'},docOpsApiUrl:'pn-endpoint'});
+   const res=ctx.vtdApp_login({email:'staff@test',pin:'testpass'});assert.equal(res.ok,true);assert.equal(res.config.system.update.latestVersion,'5.9.3');assert.equal(res.config.system.themeConfig.version,'new');assert.equal(res.config.system.docOpsApiUrl,'pn-endpoint');
+ });
  console.log('TOTAL '+passed+' tests passed');
 })().catch(err=>{console.error(err);process.exitCode=1;});

@@ -3685,7 +3685,7 @@
           <div class="line"><span class="label">Trạng thái</span><span class="value">${updateAvailable ? "Có bản mới" : "Đã mới nhất"}</span></div>
         </div>
         ${updateAvailable ? `<div class="lookup" style="border-color:#bfdbfe;background:#eff6ff"><strong>Có bản ${html(updateCfg.latestVersion)} sẵn sàng.</strong><span>${html(updateCfg.note || "Bạn có thể tải và cài bản mới.")}</span><button class="primary" onclick="installLatestAppUpdate()">Tải và cài bản mới</button></div>` : `<div class="lookup">Máy này đang dùng bản mới nhất theo cấu hình hiện tại.</div>`}
-        <div class="config-actions" style="margin-top:10px"><button onclick="checkAppUpdate(true)">Kiểm tra cập nhật</button></div>
+        <div class="config-actions" style="margin-top:10px"><button onclick="refreshSessionAuth().then(()=>checkAppUpdate(true)).catch(err=>toast(String(err.message || err),'err'))">Kiểm tra cập nhật</button></div>
         ${canAdminConfig() ? `<h2 style="margin-top:14px">Cấu hình cập nhật</h2>
           <div class="grid">
             <label>Bản mới nhất<input id="updateLatestVersion" value="${html(updateCfg.latestVersion || "")}" placeholder="3.7"></label>
@@ -3929,7 +3929,7 @@
         const downloaded = Number(r.downloaded || 0);
         const total = Number(r.total || 0);
         const percent = total ? Math.min(100, Math.round(downloaded / total * 100)) : 0;
-        return `<tr><td>${html(r.email || "-")}</td><td>${html(shortDevice(r.deviceId))}</td><td>${html(cacheLabel(r.cacheType, r.label))}</td><td><strong>${html(cacheStatusLabel(r.status))}</strong><div class="muted tiny">${percent}% · ${html(downloaded + "/" + total)}</div>${Number(r.protocol) === 1 ? `<div class="muted tiny">Khớp: ${Number(r.matched || 0)} · Thiếu: ${Number(r.missing || 0)} · Cần cập nhật: ${Number(r.changed || 0)}<br>Thiếu mã: ${Number(r.invalidCount || 0)} · Trùng mã: ${Number(r.duplicateCount || 0)}<br>Đối soát thành công: ${html(r.verifiedAt || "Chưa có")}</div>` : `<div class="muted tiny">Báo cáo cũ — chưa xác minh theo mã</div>`}</td><td>${html(r.updatedAt || "-")}${r.lastError ? `<div class="muted tiny">${html(r.lastError)}</div>` : ""}</td><td><button class="mini-icon-btn danger" title="Xóa báo cáo" aria-label="Xóa báo cáo" onclick="deleteLookupCacheStatus(${i})"><svg viewBox="0 0 24 24"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg></button></td></tr>`;
+        return `<tr><td>${html(r.email || "-")}</td><td>${html(shortDevice(r.deviceId))}</td><td>${html(cacheLabel(r.cacheType, r.label))}</td><td><strong>${html(Number(r.protocol)!==1 && r.status==="done" && r.cacheType!=="queueSync" ? "Đã tải — chưa xác minh theo mã" : cacheStatusLabel(r.status))}</strong><div class="muted tiny">${percent}% · ${html(downloaded + "/" + total)}</div>${Number(r.protocol) === 1 ? `<div class="muted tiny">Khớp: ${Number(r.matched || 0)} · Thiếu: ${Number(r.missing || 0)} · Cần cập nhật: ${Number(r.changed || 0)}<br>Thiếu mã: ${Number(r.invalidCount || 0)} · Trùng mã: ${Number(r.duplicateCount || 0)}<br>Đối soát thành công: ${html(r.verifiedAt || "Chưa có")}</div>` : `<div class="muted tiny">Báo cáo cũ — chưa xác minh theo mã</div>`}</td><td>${html(r.updatedAt || "-")}${r.lastError ? `<div class="muted tiny">${html(r.lastError)}</div>` : ""}</td><td><button class="mini-icon-btn danger" title="Xóa báo cáo" aria-label="Xóa báo cáo" onclick="deleteLookupCacheStatus(${i})"><svg viewBox="0 0 24 24"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg></button></td></tr>`;
       }).join("") : `<tr><td colspan="6" class="muted">Chưa có báo cáo cache.</td></tr>`;
       const localRows = localCacheSummaryRows();
       return `<section class="section"><h2>Cache chứng từ trên máy user</h2>
@@ -4565,7 +4565,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.4";
+    const APP_VERSION = "5.9.5";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -8128,12 +8128,12 @@
       hydrateStoreInfoCache();
       refreshLocalRows();
       render();
-      if (!skipSessionRefresh) refreshSessionAuth();
+      const configReady=skipSessionRefresh?Promise.resolve():refreshSessionAuth();
       dynamicLoadConfig(false);
       startQueueWatchdog();
       startActivityReporter();
       scheduleQueueReport(1500);
-      warmLiveData();
+      Promise.resolve(configReady).then(()=>warmLiveData()).catch(err=>toast("Chưa tải được cấu hình hệ thống: "+String(err.message || err),"err"));
       startBackgroundTasks();
       setTimeout(() => checkAppUpdate(false), 2500);
     }
@@ -8187,7 +8187,7 @@
       localStorage.setItem("vtd_user", JSON.stringify(live.user));
       localStorage.setItem("vtd_session_day", sessionDay());
       await new Promise(r => setTimeout(r, 600));
-      showApp(true);
+      showApp(!!(res.config && res.config.system));
       const loginTheme = res.config && res.config.system && res.config.system.themeConfig;
       if (loginTheme) setTimeout(() => Promise.resolve(applyRemoteThemeConfig(loginTheme)).catch(() => {}), 250);
       evaluateFirstPassPolicy();
