@@ -84,7 +84,7 @@ const VTD_PERMISSIONS = {
     }
   },
   allScreens: ["home", "search", "input", "returnth", "store", "settings", "ops", "admin"],
-  allActions: ["dashboard", "search", "getRecord", "saveRaw", "saveReturnTh", "updateRecord", "uploadImage", "queueRecord", "storeInfo", "changePass", "changePin", "runCommand", "adminConfig", "manageConfig", "retrySync", "activityPing", "loginReport"]
+  allActions: ["dashboard", "search", "getRecord", "saveRaw", "saveReturnTh", "updateRecord", "uploadImage", "queueRecord", "storeInfo", "changePass", "changePin", "runCommand", "adminConfig", "manageConfig", "retrySync", "downloadCache", "activityPing", "loginReport"]
 };
 
 const VTD_STATUS_LABELS = {

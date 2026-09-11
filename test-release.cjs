@@ -115,5 +115,20 @@ function sheet(data){return {getLastRow:()=>data.length,getLastColumn:()=>data[0
    ctx.vtdApp_publicSystemConfig_=()=>({update:{latestVersion:'5.9.3'},themeConfig:{version:'new'},docOpsApiUrl:'pn-endpoint'});
    const res=ctx.vtdApp_login({email:'staff@test',pin:'testpass'});assert.equal(res.ok,true);assert.equal(res.config.system.update.latestVersion,'5.9.3');assert.equal(res.config.system.themeConfig.version,'new');assert.equal(res.config.system.docOpsApiUrl,'pn-endpoint');
  });
+ await test('Background starts Master SKU before PN and claims daily slot after idle',async()=>{
+   const events=[];const ctx={Date,Math,keySyncState:{},live:{token:'t'},navigator:{onLine:true},document:{hidden:false},docOpsApiUrl:()=> 'pn',keySyncRead:async()=>null,todayApiDateText:()=> 'day',keySyncProgress:async(t)=>events.push('report:'+t),keySyncIdle:async()=>events.push('idle'),cacheDailyClaim:async t=>{events.push('claim:'+t);return true;},keySyncReconcile:async t=>events.push('sync:'+t),loadDocOpsSkuCache:async()=>events.push('pnSku'),keySyncSchedule:()=>{}};vm.createContext(ctx);vm.runInContext(extract('keySyncBackground'),ctx);await ctx.keySyncBackground();assert.equal(events[0],'report:masterSku');assert.ok(events.indexOf('idle')<events.indexOf('claim:masterSku'));assert.ok(events.indexOf('sync:masterSku')<events.indexOf('pnSku'));
+ });
+ await test('Idle ignores unrelated background requests and times out on blocked UI',async()=>{
+   let now=0;const ctx={Date:{now:()=>now},keySyncState:{pending:9,lastRequest:0,lastInput:-10000},live:{token:'t',loadingCount:0,syncRunning:false},docOpsState:{},navigator:{onLine:true},document:{hidden:false},setTimeout:fn=>{now+=91000;fn();}};vm.createContext(ctx);vm.runInContext(extract('keySyncIdle'),ctx);await ctx.keySyncIdle();assert.equal(now,0);ctx.live.loadingCount=1;await assert.rejects(()=>ctx.keySyncIdle(),/90/);
+ });
+ await test('Staff cache status is visible; manual download requires explicit permission',()=>{
+   let allowed=false;const ctx={canAdminConfig:()=>false,canAction:a=>allowed && a==='downloadCache',keyedProgress:()=>({status:'error',lastError:'Test failure'}),cacheStatusLabel:x=>x,html:x=>String(x)};vm.createContext(ctx);vm.runInContext(extract('ownCachePanelHtml'),ctx);assert.ok(ctx.ownCachePanelHtml().includes('Test failure'));assert.equal(ctx.ownCachePanelHtml().includes('onclick="downloadOwnCache()"'),false);allowed=true;assert.ok(ctx.ownCachePanelHtml().includes('onclick="downloadOwnCache()"'));
+ });
+ await test('Repeated scheduling cannot postpone an already earlier cache start',()=>{
+   const timers=[];const ctx={Date:{now:()=>1000},keySyncState:{},setTimeout:(fn,ms)=>{timers.push(ms);return timers.length;},clearTimeout:()=>{},keySyncBackground:()=>{}};vm.createContext(ctx);vm.runInContext(extract('keySyncSchedule'),ctx);ctx.keySyncSchedule(1000);ctx.keySyncSchedule(30000);assert.equal(timers.length,1);ctx.keySyncSchedule(100);assert.equal(timers.length,2);
+ });
+ await test('First real master download replaces sample products even while input is open',async()=>{
+   let applied=false;const rows=[{code:'real'}];const ctx={keySyncRead:async()=>rows,view:'input',keySyncState:{active:true},live:{},products:[{code:'sample'}],applyKeyedProducts:()=>{applied=true;}};vm.createContext(ctx);vm.runInContext(extract('keySyncPublishProducts'),ctx);await ctx.keySyncPublishProducts();assert.equal(applied,true);ctx.live.masterSkuPublished=true;applied=false;await ctx.keySyncPublishProducts();assert.equal(applied,false);assert.equal(ctx.live.keyedProductsPending,rows);
+ });
  console.log('TOTAL '+passed+' tests passed');
 })().catch(err=>{console.error(err);process.exitCode=1;});

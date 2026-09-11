@@ -3226,6 +3226,7 @@
         ["viewApi","API hệ thống"],
         ["runCommand","Chạy lệnh sync"],
         ["retrySync","Chạy lại sync"],
+        ["downloadCache","Tải lại cache máy này"],
         ["adminConfig","Cấu hình admin"]
       ];
       const allActions = Array.from(new Map([...coreActions, ...appConfig.actions.map(a => [a.id, a.name])]).entries());
@@ -3686,6 +3687,7 @@
         </div>
         ${updateAvailable ? `<div class="lookup" style="border-color:#bfdbfe;background:#eff6ff"><strong>Có bản ${html(updateCfg.latestVersion)} sẵn sàng.</strong><span>${html(updateCfg.note || "Bạn có thể tải và cài bản mới.")}</span><button class="primary" onclick="installLatestAppUpdate()">Tải và cài bản mới</button></div>` : `<div class="lookup">Máy này đang dùng bản mới nhất theo cấu hình hiện tại.</div>`}
         <div class="config-actions" style="margin-top:10px"><button onclick="refreshSessionAuth().then(()=>checkAppUpdate(true)).catch(err=>toast(String(err.message || err),'err'))">Kiểm tra cập nhật</button></div>
+        ${ownCachePanelHtml()}
         ${canAdminConfig() ? `<h2 style="margin-top:14px">Cấu hình cập nhật</h2>
           <div class="grid">
             <label>Bản mới nhất<input id="updateLatestVersion" value="${html(updateCfg.latestVersion || "")}" placeholder="3.7"></label>
@@ -4565,7 +4567,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.5";
+    const APP_VERSION = "5.9.6";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -9786,7 +9788,7 @@
     async function cacheDailyClaim(type,force=false) {
       const db=await keySyncDb(), day=todayApiDateText();
       return new Promise((resolve,reject)=>{
-        const tx=db.transaction('meta','readwrite'), os=tx.objectStore('meta'), key='attempt:'+type;
+        const tx=db.transaction('meta','readwrite'), os=tx.objectStore('meta'), key='attempt:v2:'+type;
         let claimed=false;const req=os.get(key);
         req.onsuccess=()=>{if(force || !req.result || req.result.day!==day){os.put({key,day});claimed=true;}};
         tx.oncomplete=()=>resolve(claimed);tx.onerror=tx.onabort=()=>reject(tx.error || Error('Không ghi được mốc kiểm tra ngày.'));
@@ -10815,20 +10817,31 @@
       refreshLocalCacheProgressUi();
       const params=Object.assign({},progress,{cacheType:type,deviceId:deviceId(),appVersion:APP_VERSION,label:type==='masterSku'?'Master SKU':type==='docOpsSku'?'DS SKU Phạm Nguyên':'Chứng từ PN lookup',_silent:true});
       // Reporting failure must not turn a successfully committed cache into a download failure.
-      try { await api('reportLookupCacheStatus',params); } catch(err) {}
+      try {
+        const report=await api('reportLookupCacheStatus',params);
+        progress.reportError=!report || !report.ok ? String(report && report.message || 'Không gửi được báo cáo về admin.') : report.alertError ? 'Không gửi được email: '+report.alertError : '';
+      } catch(err) {progress.reportError='Không gửi được báo cáo: '+String(err.message || err);}
+      try{await keySyncWrite('meta',[progress]);}catch(err){}
+      refreshLocalCacheProgressUi();
+      const ownPanel=el('ownCacheStatus');if(ownPanel)ownPanel.outerHTML=ownCachePanelHtml();
       return progress;
     }
     function keyedProgress(type) {
       return Object.assign({status:'pending',downloaded:0,total:0,protocol:1},keySyncState.progress[type] || {});
     }
     function keySyncSchedule(ms=30000) {
+      const due=Date.now()+ms;
+      if(keySyncState.timer && keySyncState.due<=due)return;
       if (keySyncState.timer) clearTimeout(keySyncState.timer);
+      keySyncState.due=due;
       keySyncState.timer=setTimeout(keySyncBackground,ms);
     }
     async function keySyncIdle() {
-      while (keySyncState.pending || live.loadingCount || live.syncRunning || docOpsState.saving || live.inputSaving ||
-        Date.now()-keySyncState.lastRequest<1500 || Date.now()-keySyncState.lastInput<3000 || document.hidden) {
+      const started=Date.now();
+      while (live.loadingCount || live.syncRunning || docOpsState.saving || live.inputSaving ||
+        Date.now()-keySyncState.lastInput<3000 || document.hidden) {
         if (!live.token || !navigator.onLine) throw new Error('Chờ kết nối hoặc đăng nhập để đối soát.');
+        if(Date.now()-started>=90000)throw new Error('Không khởi chạy được đối soát sau 90 giây vì máy đang bận. Cache cũ vẫn được giữ; có thể tải lại cache máy này.');
         await new Promise(r=>setTimeout(r,1500));
       }
     }
@@ -10912,10 +10925,11 @@
     }
     async function keySyncPublishProducts() {
       const rows=await keySyncRead('masterSku');
-      if(view==='input' && keySyncState.active) {live.keyedProductsPending=rows;return;}
+      if(view==='input' && keySyncState.active && live.masterSkuPublished && products.length) {live.keyedProductsPending=rows;return;}
       applyKeyedProducts(rows);
     }
     function applyKeyedProducts(rows) {
+      live.masterSkuPublished=rows.length>0;
       const selected=products[skuState.productIndex], selectedCode=selected && productCodeFrom(selected);
       products.splice(0,products.length,...rows.map(normalizeProductOption));
       if (selectedCode) {
@@ -10926,24 +10940,45 @@
       // Keep the old format available to existing render/read paths. DB is authoritative.
       try { localStorage.setItem(PRODUCT_CACHE_KEY,JSON.stringify({version:PRODUCT_CACHE_VERSION,products:rows,total:rows.length,updatedAt:new Date().toISOString()})); } catch(err) {}
     }
+    function ownCachePanelHtml(){
+      return '<div id="ownCacheStatus" class="lookup"><strong>Dữ liệu trên máy này</strong>'+['masterSku','docOpsSku','docOpsLookup'].map(type=>{
+        const p=keyedProgress(type), label=type==='masterSku'?'Master SKU VTD':type==='docOpsSku'?'SKU Phạm Nguyên':'Đơn PN';
+        return '<div>'+html(label)+': '+html(cacheStatusLabel(p.status))+' · '+Number(p.downloaded || 0)+'/'+Number(p.total || 0)+(p.lastError?'<div>'+html(p.lastError)+'</div>':'')+(p.reportError?'<div>'+html(p.reportError)+'</div>':'')+'</div>';
+      }).join('')+((canAdminConfig() || canAction('downloadCache'))?'<button onclick="downloadOwnCache()">Tải lại cache máy này</button>':'<small>Liên hệ admin để cấp quyền tải lại cache máy này.</small>')+'</div>';
+    }
+    async function downloadOwnCache(){
+      if(!canAdminConfig() && !canAction('downloadCache'))return toast('Chưa có quyền tải lại cache máy này.','err');
+      if(keySyncState.active)return toast('Đang kiểm tra cache. Vui lòng đợi lượt hiện tại kết thúc.','ok');
+      if(!navigator.onLine)return toast('Cần có mạng để tải lại cache. Dữ liệu cũ vẫn được giữ.','err');
+      if(keySyncState.timer)clearTimeout(keySyncState.timer);
+      keySyncState.timer=null;keySyncState.forceDaily=true;
+      toast('Đang tải lại dữ liệu máy này…','ok');
+      await keySyncBackground();
+      if(view==='settings')settings();
+      const errors=['masterSku','docOpsSku','docOpsLookup'].filter(t=>keyedProgress(t).status==='error');
+      toast(errors.length?'Có dữ liệu tải lỗi. Xem trạng thái trên máy.':'Đã kết thúc lượt kiểm tra cache.',errors.length?'err':'ok');
+    }
     async function keySyncBackground() {
       keySyncState.timer=null;
       if (keySyncState.active) return;
       if (!live.token || !navigator.onLine || document.hidden) {keySyncSchedule(60000);return;}
       keySyncState.active=true;
-      let failed=false;
+      const force=!!keySyncState.forceDaily;
       try {
-        if (keySyncState.pnLoad) await keySyncState.pnLoad;
-        await loadDocOpsSkuCache(false);
-        for (const type of (Number(keyedProgress('masterSku').downloaded || 0)===0 ? ['masterSku','docOpsLookup'] : ['docOpsLookup','masterSku'])) {
+        for (const type of ['masterSku','docOpsLookup']) {
           if (type==='docOpsLookup' && !docOpsApiUrl()) continue;
-          try { if(!await cacheDailyClaim(type,!!keySyncState.forceDaily))continue; await keySyncIdle(); if (!await keySyncReconcile(type)) failed=true; }
-          catch(err) {failed=true; await keySyncProgress(type,{status:err.sourceChanged?'pending':'error',lastError:String(err.message || err)}).catch(()=>{});}
+          try {
+            const attempt=await keySyncRead('meta','attempt:v2:'+type);
+            if(!force && attempt && attempt.day===todayApiDateText())continue;
+            await keySyncProgress(type,{status:'checking',lastError:''});
+            await keySyncIdle();
+            if(!await cacheDailyClaim(type,force))continue;
+            await keySyncReconcile(type);
+          } catch(err) {await cacheDailyClaim(type).catch(()=>{});await keySyncProgress(type,{status:'error',lastError:String(err.message || err)}).catch(()=>{});}
         }
+        await loadDocOpsSkuCache(force);
       } finally {
-        keySyncState.active=false;
-        keySyncState.forceDaily=false;
-        keySyncState.failures=failed?Math.min(5,keySyncState.failures+1):0;
+        keySyncState.active=false;keySyncState.forceDaily=false;
         const nextDay=new Date();nextDay.setHours(24,0,30,0);
         keySyncSchedule(Math.max(30000,nextDay.getTime()-Date.now())+Math.floor(Math.random()*60000));
       }
