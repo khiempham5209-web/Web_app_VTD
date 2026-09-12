@@ -8167,7 +8167,23 @@
         showLogin();
       }
     }
+    function loginBusyPopup(show){
+      let box=document.getElementById('loginBusyPopup');
+      if(show && !box){
+        box=document.createElement('div');box.id='loginBusyPopup';
+        box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.setAttribute('aria-label','Đang đăng nhập');
+        box.style.cssText='position:fixed;inset:0;z-index:99999;background:#0006;display:flex;align-items:center;justify-content:center;padding:24px';
+        box.innerHTML='<div role="status" aria-live="polite" style="background:white;color:#172b4d;padding:28px;border-radius:16px;text-align:center;box-shadow:0 8px 32px #0003"><strong>Đang đăng nhập…</strong><p style="margin:10px 0 0">Vui lòng chờ trong giây lát.</p></div>';
+        document.body.appendChild(box);
+      }
+      if(!show && box)box.remove();
+      document.querySelectorAll('#login button').forEach(button=>{if(show){button.dataset.loginWasDisabled=button.disabled?'1':'0';button.disabled=true;}else{button.disabled=button.dataset.loginWasDisabled==='1';delete button.dataset.loginWasDisabled;}});
+    }
     async function loginDemo(){
+      if(live.loginInFlight)return;
+      live.loginInFlight=true;
+      try{
+        loginBusyPopup(true);
       const inputs = document.querySelectorAll("#login input");
       const email = inputs[0] ? inputs[0].value.trim() : "";
       const pin = inputs[1] ? inputs[1].value.trim() : "";
@@ -8193,6 +8209,15 @@
       const loginTheme = res.config && res.config.system && res.config.system.themeConfig;
       if (loginTheme) setTimeout(() => Promise.resolve(applyRemoteThemeConfig(loginTheme)).catch(() => {}), 250);
       evaluateFirstPassPolicy();
+
+      }catch(err){
+        el('loginError').textContent=/quota/i.test(String(err && (err.name+' '+err.message)))?'Không lưu được phiên đăng nhập vì bộ nhớ website đã đầy. Vui lòng báo quản lý.':normalizeLoginMessage(String(err && err.message || err));
+        el('loginError').classList.remove('hidden');
+        throw err;
+      }finally{
+        live.loginInFlight=false;
+        loginBusyPopup(false);
+      }
     }
     async function forgotPass(){
       const inputs = document.querySelectorAll("#login input");
