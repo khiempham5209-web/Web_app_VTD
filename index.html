@@ -9143,7 +9143,9 @@
       const refreshNote = live.dashboardRefreshActive ? `<div class="home-refresh-note">Đang tải lại dữ liệu, vui lòng chờ...</div>` : "";
       const errorNote = live.dashboardError ? `<section class="section"><div class="lookup" style="border-color:#fca5a5;background:#fff1f2"><strong>Không tải được dữ liệu trang chủ.</strong><span>${html(live.dashboardError)}</span><button class="error-retry" type="button" onclick="retryDashboard()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 4v6h-6"></path></svg>Tải lại</button></div></section>` : "";
       const todayRows = d && Array.isArray(d.recent) ? d.recent.map(fromApiRecord) : rows.slice(0, 20);
-      const localRows = pendingLocalRecords();
+      const todayQueue=localQueue().filter(item=>item && dateTextDdMmYyyy(item.dateText)===todayApiDateText());
+      const vtdQueue=todayQueue.filter(item=>item.kind!=="returnTh" && item.kind!=="docOps" && item.status!=="done");
+      const localRows = vtdQueue.map(localRecordFromQueue);
       const previewRows = [...localRows, ...todayRows];
       const slogMap = {};
       if (d && Array.isArray(d.bySlog)) d.bySlog.forEach(x => slogMap[String(x.key || "").trim()] = Number(x.value || 0));
@@ -9151,32 +9153,38 @@
         if (!r.slog) return;
         slogMap[r.slog] = (slogMap[r.slog] || 0) + 1;
       });
-      const qStats = queueStats({includeReturnTh:false});
+      const qStats = vtdQueue.reduce((acc,item)=>(acc[item.status]=(acc[item.status]||0)+1,acc),{});
       const returnThRows = returnThTodayRecords();
       const docOpsRows = docOpsTodayRecords();
       const bySlog = ["O1B1","O1B3","O1BH","Ecom"].map(s => [s, String(d && d.bySlog ? (slogMap[s] || 0) : previewRows.filter(r => r.slog === s).length)]);
       bySlog.push(["TH truemmilk", returnThRows.length]);
       bySlog.push(["Chứng từ PN", docOpsRows.length]);
       const byStatus = d && d.byStatus ? d.byStatus.map(x => [x.key, String(x.value)]) : [["Đã đồng bộ", "0"], ["Đang đồng bộ", "0"], ["Lỗi", "0"]];
-      const localSyncing = Number(qStats.pending || 0) + Number(qStats.syncing || 0);
+      const localSyncing = Number(qStats.pending || 0) + Number(qStats.pendingImage || 0) + Number(qStats.syncing || 0);
       const localErrors = Number(qStats.error || 0);
       const statusMap = byStatus.reduce((acc, row) => (acc[row[0]] = Number(row[1] || 0), acc), {});
       statusMap["Đang đồng bộ"] = Number(statusMap["Đang đồng bộ"] || 0) + localSyncing;
       statusMap["Lỗi"] = Number(statusMap["Lỗi"] || 0) + localErrors;
-      const mergedStatus = Object.entries(statusMap).map(([key, value]) => [key, String(value)]);
-      const byUser = d && Array.isArray(d.byUser) && d.byUser.length
-        ? d.byUser.map(x => [String(x.key || "-"), String(Number(x.value || 0).toLocaleString("vi-VN"))])
-        : Object.entries(previewRows.reduce((acc, r) => {
-            const key = r.user || "Chưa có user";
-            acc[key] = (acc[key] || 0) + 1;
-            return acc;
-          }, {})).map(([key, value]) => [key, String(value)]);
+      const userMap={};
+      const addUser=(user,count=1)=>{const key=String(user || 'Chưa có user').trim().toLowerCase();userMap[key]=(userMap[key]||0)+Number(count||0);};
+      if(d && Array.isArray(d.byUser) && d.byUser.length){d.byUser.forEach(x=>addUser(x.key,x.value));localRows.forEach(r=>addUser(r.user));}
+      else previewRows.forEach(r=>addUser(r.user));
+      const addOtherRows=(records,kind)=>records.forEach(row=>{
+        const queued=todayQueue.find(item=>item.kind===kind && ((row.localId && row.localId===item.localId) || String(item.payload && item.payload.maDon || '')===String(row.maDon || row.orderNo || '') && !!(row.maDon || row.orderNo)));
+        const state=String(queued?queued.status:(row.syncStatus || row.status || 'done')).toLowerCase();
+        const label=['error','fail','failed','lỗi'].includes(state)?'Lỗi':['pending','pendingimage','syncing','queued','đang đồng bộ'].includes(state)?'Đang đồng bộ':'Đã đồng bộ';
+        statusMap[label]=(statusMap[label]||0)+1;
+        addUser(row.user || row.userEmail || row.email);
+      });
+      addOtherRows(returnThRows,'returnTh');addOtherRows(docOpsRows,'docOps');
+      const mergedStatus=Object.entries(statusMap).map(([key,value])=>[key,String(value)]);
+      const byUser=Object.entries(userMap).map(([key,value])=>[key,value.toLocaleString('vi-VN')]);
       el("view").className = "content home";
       el("view").innerHTML = `
         ${loadingNote}${refreshNote}${errorNote}
         <div class="stats">
           ${stat("Đơn nhập trong ngày", live.dashboardLoaded ? bySlog.reduce((sum, row) => sum + Number(row[1] || 0), 0).toLocaleString("vi-VN") : "...")}
-          ${stat("Đang đồng bộ", (Number(d && d.queued || 0) + localSyncing).toLocaleString("vi-VN"))}
+          ${stat("Đang đồng bộ", Number(statusMap["Đang đồng bộ"] || 0).toLocaleString("vi-VN"))}
           ${syncErrorStat(d && d.syncErrorsByTarget, mergedStatus)}
         </div>
         <div class="grid cols-2">
