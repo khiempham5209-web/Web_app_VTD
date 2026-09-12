@@ -8173,7 +8173,7 @@
         box=document.createElement('div');box.id='loginBusyPopup';
         box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.setAttribute('aria-label','Đang đăng nhập');
         box.style.cssText='position:fixed;inset:0;z-index:99999;background:#0006;display:flex;align-items:center;justify-content:center;padding:24px';
-        box.innerHTML='<div role="status" aria-live="polite" style="background:white;color:#172b4d;padding:28px;border-radius:16px;text-align:center;box-shadow:0 8px 32px #0003"><strong>Đang đăng nhập…</strong><p style="margin:10px 0 0">Vui lòng chờ trong giây lát.</p></div>';
+        box.innerHTML='<style>@keyframes vtdLoginSpin{to{transform:rotate(360deg)}}.vtd-login-spinner{width:32px;height:32px;margin:0 auto 16px;border:4px solid #dceaf2;border-top-color:#176fa3;border-radius:50%;animation:vtdLoginSpin .8s linear infinite}@media(prefers-reduced-motion:reduce){.vtd-login-spinner{animation:none}}</style><div role="status" aria-live="polite" style="background:white;color:#172b4d;padding:28px;border-radius:16px;text-align:center;box-shadow:0 8px 32px #0003"><div class="vtd-login-spinner" aria-hidden="true"></div><strong>Đang đăng nhập…</strong><p style="margin:10px 0 0">Vui lòng chờ trong giây lát.</p></div>';
         document.body.appendChild(box);
       }
       if(!show && box)box.remove();
