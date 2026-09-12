@@ -5174,6 +5174,7 @@ function vtdApp_json_(obj) {
 
 function vtdApp_apiDispatch_(action, params) {
   try {
+    if (action === "clientDiagnostics" && typeof vtdDiagnosticsReceive === "function") return vtdDiagnosticsReceive(params || {});
     params = params || {};
     const map = {
       publicConfig: vtdApp_publicConfig,
