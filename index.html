@@ -5165,7 +5165,7 @@
       el("loginError").classList.remove("hidden");
     }
     function logout(){ localStorage.removeItem("vtd_session_day"); showLogin(); }
-    function enforceSession(){ if (!sessionValid()) showLogin(); }
+    function enforceSession(){ if (!live.loginInFlight && !sessionValid()) showLogin(); }
     function showLogin(){
       el("app").classList.add("hidden");
       el("login").classList.remove("hidden");
@@ -5306,6 +5306,7 @@
       }
     }
     function apiTransport(action, params) {
+      const requestSession = {token:live.token, generation:live.authGeneration || 0};
       params = Object.assign({}, params || {}, {sessionToken: live.token, appVersion: APP_VERSION});
       const silent = !!params._silent;
       const apiUrl = activeApiUrl();
@@ -5314,7 +5315,7 @@
       if (window.VTDNative && window.VTDNative.api && action !== "uploadImages" && action !== "uploadImage") {
         return new Promise(resolve => {
           const finish = res => {
-            try { resolve(handleApiResponse(action, res)); }
+            try { resolve(handleApiResponse(action, res, requestSession)); }
             finally { if (action !== "login" && !silent) setLoading(false); }
           };
           const timeoutMs = action === "dashboard" ? 150000 : action === "search" ? 150000 : action === "storeInfo" ? 120000 : 90000;
@@ -5335,7 +5336,7 @@
       const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, timeoutMs);
       return scriptApiFetch(apiUrl, {action, params}, {
         signal: controller ? controller.signal : undefined
-      }).then(r => readApiJson(r, "API hệ thống")).then(res => handleApiResponse(action, res)).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API phản hồi quá lâu, bấm chạy lại sync để thử lại." : String(err)})).finally(() => {
+      }).then(r => readApiJson(r, "API hệ thống")).then(res => handleApiResponse(action, res, requestSession)).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API phản hồi quá lâu, bấm chạy lại sync để thử lại." : String(err)})).finally(() => {
         clearTimeout(timer);
         if (action !== "login" && !silent) setLoading(false);
       });
@@ -5349,17 +5350,20 @@
         timeoutResult(ms, message || "API quá lâu, đã chuyển đơn sang lỗi để không kẹt queue.")
       ]);
     }
-    function handleApiResponse(action, res) {
-      const msg = String((res && res.message) || "");
-      if (action !== "login" && res && res.ok === false && /dang nhap|đăng nhập/i.test(msg)) {
-        stopActivityReporter(true);
+    function sessionRequestCurrent(request){
+      return !!request && !!request.token && request.token===live.token && request.generation===(live.authGeneration || 0) && !live.loginInFlight;
+    }
+    function handleApiResponse(action, res, requestSession) {
+      const msg=String(res && res.message || '').trim();
+      const authFailure=res && (res.code==='AUTH_REQUIRED' || /^(Vui lòng đăng nhập để truy cập\.|Vui lòng đăng nhập Google để truy cập\.)$/i.test(msg));
+      if(action!=='login' && res && res.ok===false && authFailure && sessionRequestCurrent(requestSession)){
+        live.authGeneration=(live.authGeneration || 0)+1;
+        stopActivityReporter(false);
         resetActivityReporterState();
-        localStorage.removeItem("vtd_session_day");
-        localStorage.removeItem("vtd_token");
-        localStorage.removeItem("vtd_user");
-        live.token = "";
-        live.user = null;
-        showLogin();
+        localStorage.removeItem('vtd_session_day');
+        localStorage.removeItem('vtd_token');
+        localStorage.removeItem('vtd_user');
+        live.token='';live.user=null;showLogin();
       }
       return res;
     }
@@ -8141,7 +8145,9 @@
     }
     async function refreshSessionAuth(){
       if (!live.token) return;
+      const requestSession={token:live.token,generation:live.authGeneration || 0};
       const res = await api("init", {_silent:true});
+      if(!sessionRequestCurrent(requestSession))return;
       if (res.ok && res.auth) {
         live.user = res.auth;
         live.passwordPolicy = res.passwordPolicy || res.auth.passwordPolicy || live.passwordPolicy || null;
@@ -8154,18 +8160,7 @@
         render();
         return;
       }
-      const msg = normalizeLoginMessage(res.message || "");
-      if (/quyền|đăng nhập|không đúng/i.test(msg)) {
-        stopActivityReporter(true);
-        resetActivityReporterState();
-        localStorage.removeItem("vtd_session_day");
-        localStorage.removeItem("vtd_token");
-        localStorage.removeItem("vtd_user");
-        live.token = "";
-        live.user = null;
-        toast(msg || "Phiên đăng nhập không còn hợp lệ.", "err");
-        showLogin();
-      }
+      if(!res.ok)toast(normalizeLoginMessage(res.message || 'Không tải được thông tin phiên.'),'err');
     }
     function loginBusyPopup(show){
       let box=document.getElementById('loginBusyPopup');
@@ -8182,6 +8177,7 @@
     async function loginDemo(){
       if(live.loginInFlight)return;
       live.loginInFlight=true;
+      live.authGeneration=(live.authGeneration || 0)+1;
       try{
         loginBusyPopup(true);
       const inputs = document.querySelectorAll("#login input");
