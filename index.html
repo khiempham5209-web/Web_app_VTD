@@ -2039,7 +2039,7 @@
       const todayRows = rows.filter(r => r.ngay === todayLabel);
       const syncing = rows.filter(r => r.st === "Đang đồng bộ").length;
       const errors = rows.filter(r => r.st === "Lỗi").length;
-      const bySlog = ["O1B1","O1B3","O1BH","Ecom"].map(s => [s, String(todayRows.filter(r => r.slog === s).length)]);
+      const bySlog = [...new Set(["O1B1","O1B3","O1BH","Ecom", ...Object.keys(slogMap)])].map(s => [s, String(todayRows.filter(r => r.slog === s).length)]);
       el("view").className = "content home";
       el("view").innerHTML = `
         <div class="stats">
@@ -2052,7 +2052,7 @@
           <section class="section"><h2>Tổng nhập trong ngày</h2>${smallTable(bySlog)}</section>
           <section class="section"><h2>Trạng thái</h2>${smallTable([["Đã đồng bộ", String(rows.filter(r => r.st === "Đã đồng bộ").length)],["Đang đồng bộ", String(syncing)],["Lỗi", String(errors)]])}</section>
         </div>
-        <section class="section"><h2>Chi tiết trong ngày</h2>${searchResultView(todayRows.slice(0,8), {hideLimit:true})}</section>`;
+        <section class="section"><h2>Chi tiết VTD trong ngày</h2>${searchResultView(todayRows.slice(0,8), {hideLimit:true})}</section>`;
     }
     function stat(a,b){ return `<div class="stat"><span>${a}</span><strong>${b}</strong></div>`; }
     function syncErrorStat(data, statusRows){
@@ -9155,8 +9155,8 @@
       const returnThRows = returnThTodayRecords();
       const docOpsRows = docOpsTodayRecords();
       const bySlog = ["O1B1","O1B3","O1BH","Ecom"].map(s => [s, String(d && d.bySlog ? (slogMap[s] || 0) : previewRows.filter(r => r.slog === s).length)]);
-      bySlog.push(["TH truemmilk", returnThRows.length.toLocaleString("vi-VN")]);
-      bySlog.push(["Chứng từ PN", docOpsRows.length.toLocaleString("vi-VN")]);
+      bySlog.push(["TH truemmilk", returnThRows.length]);
+      bySlog.push(["Chứng từ PN", docOpsRows.length]);
       const byStatus = d && d.byStatus ? d.byStatus.map(x => [x.key, String(x.value)]) : [["Đã đồng bộ", "0"], ["Đang đồng bộ", "0"], ["Lỗi", "0"]];
       const localSyncing = Number(qStats.pending || 0) + Number(qStats.syncing || 0);
       const localErrors = Number(qStats.error || 0);
@@ -9175,7 +9175,7 @@
       el("view").innerHTML = `
         ${loadingNote}${refreshNote}${errorNote}
         <div class="stats">
-          ${stat("Đơn nhập trong ngày", live.dashboardLoaded ? ((d && Number.isFinite(Number(d.todayTotal)) ? Number(d.todayTotal) : todayRows.length) + localRows.length).toLocaleString("vi-VN") : "...")}
+          ${stat("Đơn nhập trong ngày", live.dashboardLoaded ? bySlog.reduce((sum, row) => sum + Number(row[1] || 0), 0).toLocaleString("vi-VN") : "...")}
           ${stat("Đang đồng bộ", (Number(d && d.queued || 0) + localSyncing).toLocaleString("vi-VN"))}
           ${syncErrorStat(d && d.syncErrorsByTarget, mergedStatus)}
         </div>
@@ -9184,9 +9184,9 @@
           <section class="section"><h2>Trạng thái</h2>${smallTable(mergedStatus)}</section>
         </div>
         <section class="section"><h2>User thao tác trong ngày</h2>${smallTable(byUser)}</section>
-        <section class="section"><h2>Chi tiết trong ngày</h2>${searchResultView(previewRows, {hideLimit:true, summaryRows:previewRows, summaryCounts:slogMap})}</section>
+        <section class="section"><h2>Chi tiết VTD trong ngày</h2>${searchResultView(previewRows, {hideLimit:true, summaryRows:previewRows, summaryCounts:slogMap})}</section>
         <section class="section"><h2>Chi tiết TH Truemilk trong ngày</h2>${returnThTodayTable(returnThRows)}</section>
-          <section class="section"><h2>Chứng từ Phạm Nguyên trong ngày</h2>${docOpsTodayTable(docOpsRows)}</section>`;
+          <section class="section"><h2>Chi tiết Phạm Nguyên trong ngày</h2>${docOpsTodayTable(docOpsRows)}</section>`;
     }
     function search(){
       el("view").className = "content";
@@ -9851,7 +9851,7 @@
     function loadDocOpsToday(force = false){
       const day = todayApiDateText();
       const cached = docOpsRowsCache().filter(row => dateTextDdMmYyyy(row.date || row.thoiGian || row.time) === day);
-      if (cached.length && live.docOpsTodayDay !== day) {
+      if (cached.length && (!live.docOpsTodayRows || !live.docOpsTodayRows.length || live.docOpsTodayDay !== day)) {
         live.docOpsTodayRows = cached;
         live.docOpsTodayDay = day;
         if (view === "home") setTimeout(home, 0);
@@ -9865,13 +9865,17 @@
           const rows = Array.isArray(res.records) ? res.records : (Array.isArray(res.rows) ? res.rows : []);
           rows.forEach(r => r.syncStatus = r.syncStatus || "Done");
           saveDocOpsRowsCache(rows);
-          await docOpsRememberRecords(rows);
           live.docOpsTodayRows = rows;
           live.docOpsTodayLoaded = true;
           live.docOpsTodayDay = day;
-          await docOpsLookupWriteMeta({todayCheckedDay:day, dataVersion:String(res.dataVersion || docOpsLookupMetaMemory.dataVersion || ""), updatedAt:new Date().toISOString()});
-          reportDocOpsTodayCacheProgress();
           if (view === "home") home();
+          try {
+            await docOpsRememberRecords(rows);
+            await docOpsLookupWriteMeta({todayCheckedDay:day, dataVersion:String(res.dataVersion || docOpsLookupMetaMemory.dataVersion || ""), updatedAt:new Date().toISOString()});
+            reportDocOpsTodayCacheProgress();
+          } catch(err) {
+            reportDocOpsTodayCacheProgress({status:"error",downloaded:rows.length,total:rows.length,lastError:"Đã tải dữ liệu PN; chưa ghi được cache: "+String(err && err.message || err)});
+          }
           return true;
         }
         else {
