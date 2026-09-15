@@ -8997,6 +8997,8 @@
       } catch (err) {}
     }
     async function warmLiveData(){
+      // Today's actions must refresh even when the daily lookup sync is skipped.
+      Promise.resolve(loadDocOpsToday(false)).catch(() => {});
       keySyncSchedule(30000);
       await Promise.resolve(loadDashboard({silent:true})).catch(() => {});
       setTimeout(() => Promise.resolve(loadProducts(true)).catch(() => {}), 500);
@@ -11086,6 +11088,5 @@
   <script src="diagnostics.js?v=1"></script>
 </body>
 </html>
-
 
 
