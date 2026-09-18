@@ -4567,7 +4567,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.7";
+    const APP_VERSION = "5.9.8";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -5280,8 +5280,8 @@
       if (!pair) return;
       delete nativeCallbacks[callbackId];
       if (pair.timer) clearTimeout(pair.timer);
-      try { pair.resolve(JSON.parse(text || "{}")); }
-      catch (err) { pair.resolve({ok:false, message:String(err)}); }
+      try { const envelope=JSON.parse(text || "{}"); pair.resolve(envelope.nativeHttp ? parseApiResponse(envelope.body || "",{status:envelope.status,contentType:envelope.contentType,responseHost:envelope.responseHost,label:"API VTD Android",action:pair.action}) : envelope); }
+      catch (err) { pair.resolve(parseApiResponse(String(text || ""),{label:"API VTD Android",action:pair.action})); }
     };
     function activeApiUrl(){
       return DEFAULT_API_URL;
@@ -5293,17 +5293,19 @@
         body: JSON.stringify(payload)
       }));
     }
-    async function readApiJson(response, label){
-      const text = await response.text();
-      try {
-        return JSON.parse(text);
-      } catch (err) {
-        const preview = String(text || "").replace(/\s+/g, " ").slice(0, 160);
-        return {
-          ok: false,
-          message: `${label || "API"} trả về HTML/không phải JSON (${response.status}). Kiểm tra link /exec và quyền deploy Web app. ${preview}`
-        };
-      }
+    function parseApiResponse(text, metadata={}){
+      let value;
+      try{value=JSON.parse(text);}catch(_){}
+      if(value && typeof value==='object' && !Array.isArray(value))return value;
+      const htmlResponse=/^\s*</.test(text);
+      const category=metadata.status===429?'rate_limit':metadata.status>=500?'server_error':metadata.status===401||metadata.status===403?'access_denied':metadata.status===404?'not_found':htmlResponse?'html_response':'invalid_json';
+      const detail=Object.assign({},metadata,{reason:category});
+      if(window.vtdDiagnostics && window.vtdDiagnostics.record)window.vtdDiagnostics.record('api_invalid_response',detail);
+      return {ok:false,code:'INVALID_API_RESPONSE',httpStatus:metadata.status||0,responseCategory:category,message:(metadata.label||'API')+' trả về '+(htmlResponse?'HTML':'dữ liệu không phải JSON')+' (HTTP '+(metadata.status||'không rõ')+', '+category+'). Dữ liệu đã lưu trên máy vẫn được giữ.'};
+    }
+    async function readApiJson(response,label,action){
+      let responseHost='';try{responseHost=new URL(response.url).hostname;}catch(_){}
+      return parseApiResponse(await response.text(),{label,action,status:response.status,contentType:response.headers && response.headers.get('content-type')||'',responseHost});
     }
     function apiTransport(action, params) {
       const requestSession = {token:live.token, generation:live.authGeneration || 0};
@@ -5324,7 +5326,7 @@
             delete nativeCallbacks[request.callbackId];
             finish({ok:false, message:"API phản hồi quá lâu, bấm tải lại để thử lại."});
           }, timeoutMs);
-          nativeCallbacks[request.callbackId] = {resolve: res => {
+          nativeCallbacks[request.callbackId] = {action, resolve: res => {
             if (timer) clearTimeout(timer);
             finish(res);
           }, timer};
@@ -5336,7 +5338,7 @@
       const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, timeoutMs);
       return scriptApiFetch(apiUrl, {action, params}, {
         signal: controller ? controller.signal : undefined
-      }).then(r => readApiJson(r, "API hệ thống")).then(res => handleApiResponse(action, res, requestSession)).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API phản hồi quá lâu, bấm chạy lại sync để thử lại." : String(err)})).finally(() => {
+      }).then(r => readApiJson(r, "API hệ thống", action)).then(res => handleApiResponse(action, res, requestSession)).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API phản hồi quá lâu, bấm chạy lại sync để thử lại." : String(err)})).finally(() => {
         clearTimeout(timer);
         if (action !== "login" && !silent) setLoading(false);
       });
@@ -8129,6 +8131,12 @@
       if (brand) brand.textContent = currentEmail();
       const user = document.querySelector(".user");
       if (user) user.innerHTML = "";
+      if(!live.localCacheStarted){
+        live.localCacheStarted=true;
+        products.splice(0,products.length);
+        Promise.resolve(loadProducts(true)).catch(err=>toast('Không đọc được Master SKU trên máy: '+String(err.message || err),'err'));
+        
+      }
       recoverLocalQueue();
       hydrateDashboardCache();
       hydrateStoreInfoCache();
@@ -9000,8 +9008,8 @@
       // Today's actions must refresh even when the daily lookup sync is skipped.
       Promise.resolve(loadDocOpsToday(false)).catch(() => {});
       keySyncSchedule(30000);
-      await Promise.resolve(loadDashboard({silent:true})).catch(() => {});
-      setTimeout(() => Promise.resolve(loadProducts(true)).catch(() => {}), 500);
+      Promise.resolve(loadDashboard({silent:true})).catch(() => {});
+
       setTimeout(() => Promise.resolve(loadReturnThSku(false)).catch(() => {}), 1200);
       setTimeout(() => Promise.resolve(loadDocOpsSkuCache(false)).catch(() => {}), 1900);
       setTimeout(() => {
@@ -9093,16 +9101,25 @@
       }
     }
     async function loadProducts(silent){
-      let rows=await keySyncRead('masterSku');
-      if (!rows.length) {
-        let legacy={};try {legacy=JSON.parse(localStorage.getItem(PRODUCT_CACHE_KEY) || '{}');}catch(err){}
-        const seen=new Set();
-        rows=(legacy.products || []).map(normalizeProductOption).filter(p=>{const key=productCodeFrom(p).trim().toLowerCase();if(!key || seen.has(key))return false;seen.add(key);return true;}).map(p=>Object.assign({},p,{syncKey:'MATERIAL:'+productCodeFrom(p).trim().toLowerCase()}));
-        if(rows.length)await keySyncWrite('masterSku',rows);
-      }
-      keySyncState.progress.masterSku=await keySyncRead('meta','progress:masterSku') || {status:'pending',downloaded:rows.length,total:0};
-      await keySyncPublishProducts();
-      keySyncSchedule(30000);
+      if(live.masterCacheLoading)return live.masterCacheLoading;
+      live.masterCacheLoading=(async()=>{
+        let rows=[];
+        let dbError=null;
+        try{rows=await keySyncRead('masterSku');}catch(err){dbError=err;}
+        if(!rows.length){
+          let legacy={};try{legacy=JSON.parse(localStorage.getItem(PRODUCT_CACHE_KEY)||'{}');}catch(_){}
+          const seen=new Set();
+          rows=(legacy.products||[]).map(normalizeProductOption).filter(p=>{const key=productCodeFrom(p).trim().toLowerCase();if(!key||seen.has(key))return false;seen.add(key);return true;}).map(p=>Object.assign({},p,{syncKey:'MATERIAL:'+productCodeFrom(p).trim().toLowerCase()}));
+          if(rows.length && !dbError)try{await keySyncWrite('masterSku',rows);}catch(err){dbError=err;}
+        }
+        if(rows.length)applyKeyedProducts(rows);
+        if(view==='input' && typeof input==='function')input();
+        try{keySyncState.progress.masterSku=await keySyncRead('meta','progress:masterSku')||{status:'pending',downloaded:rows.length,total:0};}catch(err){dbError=dbError||err;}
+        if(view==='input' && typeof input==='function')input();
+        if(dbError)throw dbError;
+        keySyncSchedule(30000);
+      })().finally(()=>{live.masterCacheLoading=null;});
+      return live.masterCacheLoading;
     }
     async function loadStoreInfo(month){
       const requestedMonth = month || storeMonth;
@@ -9484,7 +9501,7 @@
         headers: {"Content-Type":"text/plain;charset=utf-8"},
         body: JSON.stringify({action, params: Object.assign({}, params, {userEmail: currentEmail(), sessionToken: live.token})}),
         signal: controller ? controller.signal : undefined
-      }).then(r => readApiJson(r, "API Thao tác CT")).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API Thao tác CT phản hồi quá lâu." : String(err)})).finally(() => {
+      }).then(r => readApiJson(r, "API Thao tác CT", action)).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API Thao tác CT phản hồi quá lâu." : String(err)})).finally(() => {
         clearTimeout(timer);
         if (!silent) setLoading(false);
       });
@@ -10366,7 +10383,7 @@
         headers: {"Content-Type": "text/plain;charset=utf-8"},
         body: JSON.stringify({action, params: Object.assign({}, params, {userEmail: currentEmail(), sessionToken: live.token})}),
         signal: controller ? controller.signal : undefined
-      }).then(r => r.json()).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API Nhập TH phản hồi quá lâu." : String(err)})).finally(() => {
+      }).then(r => readApiJson(r,"API Nhập TH",action)).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API Nhập TH phản hồi quá lâu." : String(err)})).finally(() => {
         clearTimeout(timer);
         if (!silent) setLoading(false);
       });

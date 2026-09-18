@@ -1,7 +1,7 @@
 /* Read-only diagnostics. No business payloads, images, passwords or tokens in events. */
 (function () {
   'use strict';
-  if (window.VTDNative || window.vtdDiagnostics) return;
+  if (window.vtdDiagnostics) return;
   const key='vtd_diagnostics_v1', originalFetch=window.fetch.bind(window);
   let events=[], busy=false, nextSend=0, loginAt=0, context=null;
   try { events=JSON.parse(sessionStorage.getItem(key)||'[]'); if(!Array.isArray(events))events=[]; } catch (_) {}
@@ -27,6 +27,6 @@
   window.addEventListener('pageshow',e=>record('page_show',{restored:!!e.persisted}));
   window.addEventListener('pagehide',()=>{record('page_hide');persist();});
   setInterval(flush,60000);
-  window.vtdDiagnostics={flush,pending:()=>events.length};
+  window.vtdDiagnostics={record,flush,pending:()=>events.length};
   record('diagnostics_loaded',{diagnosticsVersion:'1'});
 })();
