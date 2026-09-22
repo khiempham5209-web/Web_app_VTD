@@ -5062,6 +5062,7 @@ latest doGet/doPost/storeInfo definitions.
 ************************************************/
 
 function doGet(e) {
+  const execute = () => {
   try {
     e = e || {};
     if (e.parameter && e.parameter.action) {
@@ -5075,9 +5076,13 @@ function doGet(e) {
   } catch (err) {
     return vtdApp_json_(vtdApp_fail_(String(err && err.stack || err)));
   }
+
+  };
+  return typeof apiDiagRun_ === 'function' ? apiDiagRun_('VTD', 'GET', e, execute) : execute();
 }
 
 function doPost(e) {
+  const execute = () => {
   try {
     let body = {};
     try {
@@ -5091,6 +5096,9 @@ function doPost(e) {
   } catch (err) {
     return vtdApp_json_(vtdApp_fail_(String(err && err.stack || err)));
   }
+
+  };
+  return typeof apiDiagRun_ === 'function' ? apiDiagRun_('VTD', 'POST', e, execute) : execute();
 }
 
 function vtdApp_json_(obj) {

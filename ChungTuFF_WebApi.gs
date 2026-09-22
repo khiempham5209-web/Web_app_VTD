@@ -17,11 +17,16 @@ const CONFIG = {
   timezone: "Asia/Saigon"
 };
 
-function doGet() {
+function doGet(e) {
+  const execute = () => {
   return json_({ok: true, service: "ChungTuFF_WebApi", sheetName: CONFIG.sheetName});
+
+  };
+  return typeof apiDiagRun_ === 'function' ? apiDiagRun_('PN', 'GET', e, execute) : execute();
 }
 
 function doPost(e) {
+  const execute = () => {
   try {
     const body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
     const action = String(body.action || "").trim();
@@ -32,6 +37,9 @@ function doPost(e) {
   } catch (err) {
     return json_({ok: false, message: String(err && err.stack || err)});
   }
+
+  };
+  return typeof apiDiagRun_ === 'function' ? apiDiagRun_('PN', 'POST', e, execute) : execute();
 }
 
 function apiInit_() {
