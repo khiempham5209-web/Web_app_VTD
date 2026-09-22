@@ -1,3 +1,34 @@
+# Bổ sung bằng chứng lỗi — web 5.9.12, diagnostics v3
+
+Bản này không build APK. Bổ sung vào các file chẩn đoán hiện có; giữ nguyên các điểm gọi trong code chính đã cung cấp ở bản 5.9.11.
+
+## Cần cập nhật
+
+- VTD: thay nội dung VTD_Web_Diagnostics.gs và API_Request_Diagnostics.gs, rồi cập nhật deployment đang dùng.
+- PN: thay nội dung API_Request_Diagnostics.gs, rồi cập nhật deployment đang dùng.
+- Nếu chưa áp dụng điểm gọi apiDiagRun_ ở doGet/doPost, vẫn cần code chính VTD/PN của bản 5.9.11 như hướng dẫn phía dưới.
+- Web: tải lại để nhận json_diagnostics_loaded với jsonDiagnosticsVersion=3. Chỉ thay receiver không thể bổ sung nội dung phản hồi mà máy cũ chưa gửi. APK hiện có chưa chứa thay đổi v3 này.
+
+## Trường bằng chứng mới trong Detail
+
+htmlTitle: tiêu đề HTML đã lọc URL, email, chuỗi token và số dài.
+errorExcerpt: cụm thông báo lỗi thực sự khớp trong phần chữ HTML, bỏ script/style; không lấy cả trang hoặc dữ liệu JSON nghiệp vụ.
+evidenceCategory: nhóm thông báo nhận diện được.
+conclusionBasis: response_text / json_shape / insufficient_evidence.
+diagnosticConclusion: giải thích căn cứ, không coi HTTP status là nguyên nhân gốc.
+evidenceTruncated: nội dung đã vượt giới hạn kiểm tra 100.000 ký tự.
+retryAfter, responseRequestId: header nếu trình duyệt được phép đọc. Trống không có nghĩa server không gửi.
+
+Phía server có errorEvidence và stackFrames cho lỗi trả về hoặc exception bị ném. Unknown không tự suy ra quá tải. Mã requestId vẫn dùng ghép log server với máy. Trình duyệt không cung cấp toàn bộ các bước redirect; chỉ ghi redirected và responseHost cuối, không tự tái gửi POST lưu đơn để đo đường đi.
+
+Receiver lọc trùng EventId + authenticated user + device trong 5.000 dòng gần nhất, dưới cùng khóa ghi. Các log trùng cũ được giữ nguyên. Retry quá xa ngoài cửa sổ này vẫn có thể trùng, cần đối chiếu EventId khi phân tích.
+
+Bộ log không thể khôi phục nội dung HTML của các lỗi quá khứ chỉ có status. Cần request mới từ bộ ghi log v3 để có bằng chứng mới. Các thông báo chưa nhận diện sẽ giữ unknown; không đảm bảo mọi lỗi Google đều giải thích được chỉ từ phản hồi.
+
+Kiểm thử bổ sung: node test-evidence.cjs .
+
+---
+
 # Bộ đối chiếu lỗi API — 5.9.11
 
 Mục đích: thu bằng chứng cho lỗi HTML/JSON, lỗi mạng, phản hồi sai cấu trúc và lỗi hàm xử lý. Đây là bản bổ sung chẩn đoán, chưa phải kết luận hoặc sửa nguyên nhân HTML/JSON.

@@ -19,7 +19,7 @@
     emit('request_started',d);
     u.searchParams.set('_diagRequestId',requestId);u.searchParams.set('_diagAction',safe(payload.action));
     let pending;try{pending=fetchOld.call(this,u.href,opts);}catch(e){count--;emit('request_network_error',Object.assign({},d,{errorName:safe(e.name),durationMs:Date.now()-start}));throw e;}
-    return Promise.resolve(pending).then(r=>{meta.set(r,d);emit('request_headers',Object.assign({},d,{status:r.status,durationMs:Date.now()-start,redirected:r.redirected}));return r;},e=>{emit('request_network_error',Object.assign({},d,{errorName:safe(e.name),reason:e.name==='AbortError'?'aborted_or_timeout':'network',durationMs:Date.now()-start}));throw e;}).finally(()=>count--);
+    return Promise.resolve(pending).then(r=>{Object.assign(d,{durationMs:Date.now()-start,redirected:!!r.redirected,responseType:r.type||'',retryAfter:r.headers?.get('retry-after')||'',responseRequestId:r.headers?.get('x-request-id')||''});meta.set(r,d);emit('request_headers',Object.assign({},d,{status:r.status,durationMs:Date.now()-start,redirected:r.redirected}));return r;},e=>{emit('request_network_error',Object.assign({},d,{errorName:safe(e.name),reason:e.name==='AbortError'?'aborted_or_timeout':'network',durationMs:Date.now()-start}));throw e;}).finally(()=>count--);
   };
   const readOld=window.readApiJson;
   if(readOld)window.readApiJson=async function(r,label,action){
