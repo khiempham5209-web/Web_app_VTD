@@ -1802,88 +1802,15 @@ function vtdApp_getUser_() {
 }
 
 
-function vtdApp_loginReportSheet_() {
-  const ss = vtdApp_ss_();
-  let sh = ss.getSheetByName(VTD_APP.loginReportSheet || "_VTD_LOGIN_REPORT");
-  if (!sh) {
-    sh = ss.insertSheet(VTD_APP.loginReportSheet || "_VTD_LOGIN_REPORT");
-    sh.appendRow(["Ngày", "User", "Số lần đăng nhập", "Mốc thời gian đăng nhập", "Thời gian hoạt động app (giây)", "Device", "UpdatedAt"]);
-  } else if (sh.getLastRow() < 1) {
-    sh.appendRow(["Ngày", "User", "Số lần đăng nhập", "Mốc thời gian đăng nhập", "Thời gian hoạt động app (giây)", "Device", "UpdatedAt"]);
-  }
-  return sh;
-}
 
-function vtdApp_findLoginReportRow_(sh, dayKey, email) {
-  const lastRow = sh.getLastRow();
-  if (lastRow <= 1) return 0;
-  const values = sh.getRange(2, 1, lastRow - 1, Math.max(2, sh.getLastColumn())).getDisplayValues();
-  for (let i = 0; i < values.length; i++) {
-    if (String(values[i][0] || "").trim() === dayKey && String(values[i][1] || "").toLowerCase().trim() === email) return i + 2;
-  }
-  return 0;
-}
 
-function vtdApp_recordLogin_(email, deviceId) {
-  email = String(email || "").toLowerCase().trim();
-  if (!email) return;
-  const now = new Date();
-  const dayKey = vtdApp_vnDayKey_(now);
-  const timeText = Utilities.formatDate(now, "Asia/Saigon", "HH:mm:ss");
-  const updatedAt = Utilities.formatDate(now, "Asia/Saigon", "yyyy-MM-dd HH:mm:ss");
-  const sh = vtdApp_loginReportSheet_();
-  const rowNo = vtdApp_findLoginReportRow_(sh, dayKey, email);
-  if (!rowNo) {
-    sh.appendRow([dayKey, email, 1, timeText, 0, deviceId || "", updatedAt]);
-    return;
-  }
-  const row = sh.getRange(rowNo, 1, 1, 7).getValues()[0];
-  const count = Number(row[2] || 0) + 1;
-  const times = String(row[3] || "").trim();
-  sh.getRange(rowNo, 3, 1, 5).setValues([[count, times ? times + ", " + timeText : timeText, Number(row[4] || 0), deviceId || row[5] || "", updatedAt]]);
-}
 
-function vtdApp_activityPing(params) {
-  const auth = vtdApp_auth_(params);
-  if (!auth.allowed) return vtdApp_fail_(auth.message);
-  const now = new Date();
-  const dayKey = vtdApp_vnDayKey_(now);
-  const updatedAt = Utilities.formatDate(now, "Asia/Saigon", "yyyy-MM-dd HH:mm:ss");
-  const email = String(auth.email || "").toLowerCase().trim();
-  const sh = vtdApp_loginReportSheet_();
-  let rowNo = vtdApp_findLoginReportRow_(sh, dayKey, email);
-  const incomingSeconds = Math.max(0, Number(params.activeSeconds || 0));
-  if (!rowNo) {
-    sh.appendRow([dayKey, email, 0, "", incomingSeconds, String(params.deviceId || ""), updatedAt]);
-    rowNo = sh.getLastRow();
-  } else {
-    const row = sh.getRange(rowNo, 1, 1, 7).getValues()[0];
-    const seconds = Math.max(0, Number(row[4] || 0)) + incomingSeconds;
-    sh.getRange(rowNo, 5, 1, 3).setValues([[seconds, String(params.deviceId || row[5] || ""), updatedAt]]);
-  }
-  return vtdApp_ok_({activeSeconds: incomingSeconds});
-}
 
-function vtdApp_loginReport(params) {
-  const auth = vtdApp_auth_(params);
-  if (!auth.allowed) return vtdApp_fail_(auth.message);
-  if (String(auth.email || "").toLowerCase().trim() !== "khiempham5209@gmail.com") return vtdApp_fail_("Bạn không có quyền xem báo cáo đăng nhập.");
-  const dayKey = String(params.date || vtdApp_vnDayKey_(new Date())).trim();
-  const sh = vtdApp_loginReportSheet_();
-  const lastRow = sh.getLastRow();
-  if (lastRow <= 1) return vtdApp_ok_({rows: []});
-  const values = sh.getRange(2, 1, lastRow - 1, 7).getDisplayValues();
-  const rows = values.filter(r => String(r[0] || "").trim() === dayKey).map(r => ({
-    date: r[0],
-    user: r[1],
-    loginCount: Number(r[2] || 0),
-    loginTimes: r[3],
-    activeSeconds: Number(r[4] || 0),
-    device: r[5],
-    updatedAt: r[6]
-  }));
-  return vtdApp_ok_({rows: rows});
-}
+
+
+
+
+
 
 function vtdApp_auth_(params) {
   params = params || {};
