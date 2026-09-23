@@ -1,3 +1,20 @@
+# Bổ sung log trước đăng nhập — 5.9.13
+
+VTD: chỉ thay VTD_Web_Diagnostics.gs rồi cập nhật deployment hiện tại. Không cần đổi code chính, API_Request_Diagnostics.gs hoặc PN trong lượt này.
+Web: tải lại để nhận diagnostics_loaded với diagnosticsVersion=4. Android: cài đè APK 5.9.13 để có bộ gửi không phụ thuộc token.
+
+Log không có phiên hợp lệ vẫn vào _VTD_WEB_DIAGNOSTICS: AuthenticatedUser=UNVERIFIED, ReportedUser để trống, Detail.identityVerified=false và ingestMode=pre_auth. Đây là telemetry chưa xác thực, không dùng để chứng minh danh tính hay cấp quyền. RequestId/device dùng đối chiếu kỹ thuật, đều là dữ liệu phía máy khai báo.
+
+Chỉ action clientDiagnostics có cơ chế này. Giới hạn 20 sự kiện/lô, 100.000 ký tự đầu vào; allowlist sự kiện/trường, tối đa 3 lô/phút/mã máy và 30 lô/phút toàn project cho log chưa xác thực. Giới hạn toàn project không bị vượt chỉ bằng đổi mã máy. Có thể mất log khi hàng đợi 80 sự kiện bị tràn; đây không phải lưu trữ bảo đảm.
+
+Gửi log vẫn dùng API VTD hiện tại. Nếu mạng hoặc endpoint log cũng lỗi, máy giữ lô để thử lại sau ít nhất 60 giây. Không thể bảo đảm log xuất hiện ngay khi Google mất kết nối. Nếu server đã ghi nhưng phản hồi bị lỗi, lần gửi lại được lọc trùng trong cửa sổ 5.000 dòng hiện có. Không thêm thông báo kỹ thuật cho nhân viên.
+
+Kiểm thử: node test-preauth.cjs .
+
+Các hướng dẫn phiên bản cũ phía dưới là lịch sử; phần trên thay thế yêu cầu token của bộ gửi trước đây.
+
+---
+
 # Bổ sung bằng chứng lỗi — web 5.9.12, diagnostics v3
 
 Bản này không build APK. Bổ sung vào các file chẩn đoán hiện có; giữ nguyên các điểm gọi trong code chính đã cung cấp ở bản 5.9.11.

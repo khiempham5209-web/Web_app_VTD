@@ -15,8 +15,8 @@ const sh={getLastRow:()=>data.length,getRange:(r,col,n,width)=>({getValues:()=>d
 const receiver=vm.createContext({vtdApp_auth_:()=>({allowed:true,email:'admin'}),LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock(){}})},vtdApp_ss_:()=>({getSheetByName:()=>sh})});
 vm.runInContext(load('VTD_Web_Diagnostics.gs'),receiver);
 const e={id:'event1',device:'device1',detail:{htmlTitle:'A'.repeat(150),errorExcerpt:'B'.repeat(500),diagnosticConclusion:'C'.repeat(300),password:'HIDDEN'}};
-let r=receiver.vtdDiagnosticsReceive({events:[e,e]});assert.equal(r.accepted,1);assert.equal(r.duplicates,1);
-r=receiver.vtdDiagnosticsReceive({events:[e]});assert.equal(r.accepted,0);assert.equal(data.length,2);
+let r=receiver.vtdDiagnosticsReceive({sessionToken:'valid',events:[e,e]});assert.equal(r.accepted,1);assert.equal(r.duplicates,1);
+r=receiver.vtdDiagnosticsReceive({sessionToken:'valid',events:[e]});assert.equal(r.accepted,0);assert.equal(data.length,2);
 const detail=JSON.parse(data[1][8]);assert.equal(detail.errorExcerpt.length,500);assert.equal(detail.htmlTitle.length,150);assert(!detail.password);
-r=receiver.vtdDiagnosticsReceive({events:[{...e,device:'device2'}]});assert.equal(r.accepted,1);
+r=receiver.vtdDiagnosticsReceive({sessionToken:'valid',events:[{...e,device:'device2'}]});assert.equal(r.accepted,1);
 console.log('PASS evidence: 400/200/404/quota/JS, unknown cause not inferred, redaction, long fields retained, batch/retry dedup, separate devices');

@@ -1,0 +1,22 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');const root=process.argv[2]||'.';
+const load=n=>fs.readFileSync(root+'/'+n,'utf8');
+let rows=[],state={},reads=0;
+const sh={getLastRow:()=>rows.length+1,getRange:(r,col,n,width)=>({getValues:()=>rows.slice(r-2,r-2+n).map(x=>x.slice(col-1,col-1+width)),setValues:r=>rows.push(...r)})};
+const c=vm.createContext({vtdApp_auth_:p=>({allowed:p.sessionToken==='valid',email:'real@example.com'}),LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock(){}})},PropertiesService:{getScriptProperties:()=>({getProperty:k=>state[k],setProperty:(k,v)=>{state[k]=v;}})},vtdApp_ss_:()=>{reads++;return {getSheetByName:()=>sh};}});
+vm.runInContext(load('VTD_Web_Diagnostics.gs'),c);
+const ev={id:'e1',kind:'json_diagnostic',device:'d1',user:'fake-admin',detail:{requestId:'diag_1',status:404,htmlTitle:'Not found',password:'secret'}};
+assert.equal(c.vtdDiagnosticsReceive({events:[ev]}).ok,false);
+let r=c.vtdDiagnosticsReceive({preAuthDiagnostics:true,events:[ev]});assert.equal(r.accepted,1);assert.equal(rows[0][3],'UNVERIFIED');assert.equal(rows[0][4],'');assert.equal(JSON.parse(rows[0][8]).identityVerified,false);assert(!rows[0][8].includes('secret'));
+r=c.vtdDiagnosticsReceive({sessionToken:'expired',preAuthDiagnostics:true,events:[ev]});assert.equal(r.duplicates,1);
+r=c.vtdDiagnosticsReceive({preAuthDiagnostics:true,events:[{...ev,id:'e2'}]});assert.equal(r.accepted,1);
+r=c.vtdDiagnosticsReceive({preAuthDiagnostics:true,events:[{...ev,id:'e3'}]});assert.equal(r.retryAfterSeconds,60);
+r=c.vtdDiagnosticsReceive({sessionToken:'valid',events:[{...ev,id:'auth'}]});assert.equal(r.accepted,1);assert.equal(rows.at(-1)[3],'real@example.com');
+assert.equal(c.vtdDiagnosticsReceive({preAuthDiagnostics:true,events:[{...ev,id:'bad',kind:'saveReturn'}]}).ok,true);assert(!rows.some(r=>r[1]==='bad'));
+state={};for(let i=0;i<30;i++)assert.equal(c.vtdDiagnosticsReceive({preAuthDiagnostics:true,events:[{...ev,id:'g'+i,device:'g'+i}]}).ok,true);
+assert.equal(c.vtdDiagnosticsReceive({preAuthDiagnostics:true,events:[{...ev,id:'over',device:'other'}]}).retryAfterSeconds,60);
+let sent=[],storage={},fail=true;
+const w={addEventListener(){},fetch:async(u,o)=>{sent.push(JSON.parse(o.body));if(fail)throw Error('offline');return {json:async()=>({ok:true})};}};
+let now=100000;class TestDate extends Date{constructor(...x){super(...(x.length?x:[now]));}static now(){return now;}}
+const client=vm.createContext({window:w,live:{token:''},sessionStorage:{getItem:k=>storage[k],setItem:(k,v)=>storage[k]=v},localStorage:{length:0},navigator:{onLine:true},document:{hidden:false},setTimeout:()=>1,clearTimeout(){},setInterval(){},AbortController,Date:TestDate,currentEmail:()=>'',deviceId:()=> 'd1',APP_VERSION:'5.9.13',activeApiUrl:()=> 'https://example.invalid'});
+vm.runInContext(load('diagnostics.js'),client);
+(async()=>{await w.vtdDiagnostics.flush();assert.equal(sent.length,1);assert.equal(sent[0].params.sessionToken,'');assert.equal(sent[0].params.preAuthDiagnostics,true);assert(w.vtdDiagnostics.pending()>0);fail=false;await w.vtdDiagnostics.flush();assert.equal(sent.length,1);now+=61000;await w.vtdDiagnostics.flush();assert.equal(w.vtdDiagnostics.pending(),0);console.log('PASS pre-auth: missing/expired token, no trusted identity, whitelist, dedup, per-device/global limits, authenticated flow, failed send retained, retry/backoff/ack');})().catch(e=>{console.error(e);process.exitCode=1;});
