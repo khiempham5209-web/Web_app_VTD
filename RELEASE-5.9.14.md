@@ -19,3 +19,10 @@ Server Code_chinh_VTD.gs:
 Triển khai: paste Code_chinh_VTD.gs vào project VTD, Deploy → Manage deployments → Edit → New version (giữ URL). PN/TH API không đổi. Cài đè VTD-ChungTu-v5.9.14.apk, không gỡ app. Web tải lại trang.
 
 Kiểm thử: test-release 30/30, test-network-queue 5/5 (giới hạn song song, ưu tiên lưu đơn, dùng chung request, thử lại chỉ lệnh đọc, gộp báo cáo cache), test-request-diagnostics, test-json-diagnostics, test-evidence, test-preauth, test-cache-fix. Chữ ký APK trùng chứng chỉ cũ (SHA-256 77b8abed…0ae4). Chưa kiểm thử trên máy thật; cần xem log sau khi triển khai: concurrentRequests ≤ 4, không còn GET trùng mã với POST.
+
+## 5.9.15
+
+- Lưu cấu hình (link cập nhật APK, API, giao diện): request "init" đã gửi từ trước lúc bấm lưu không còn ghi đè cấu hình vừa lưu bằng bản cũ trên máy.
+- saveSystemConfig, savePermission, saveDynamicConfig tự gửi lại 1 lần khi Google làm mất phản hồi (gửi lại vẫn ra cùng kết quả). Lưu đơn, upload ảnh vẫn không tự gửi lại.
+- Sau mọi lệnh ghi, lệnh đọc mới luôn là request mới, không dùng chung request đọc cũ.
+- Server không đổi so với 5.9.14. Kiểm thử: test-network-queue 6/6, test-release 30/30, test-request-diagnostics.

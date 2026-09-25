@@ -110,5 +110,21 @@ async function test(name, fn) { await fn(); console.log('PASS', name); }
     await t.ctx.apiTransport('reportLookupCacheStatus', {_silent: true, cacheType: 'localQueue', status: 'error', lastError: 'x'});
     assert.equal(t.calls.length, 3, 'errors always sent immediately');
   });
+  await test('Config save retried after lost response; reads after a save never reuse an older in-flight read', async () => {
+    const lost = {ok: false, code: 'INVALID_API_RESPONSE', httpStatus: 404};
+    let saves = 0;
+    const t = makeContext(c => { if (c.action === 'saveSystemConfig') setTimeout(() => c.done(saves++ === 0 ? lost : {ok: true}), 1); });
+    const oldRead = t.ctx.apiTransport('init', {_silent: true});
+    await tick();
+    const save = await t.ctx.apiTransport('saveSystemConfig', {_silent: true, config: {update: {latestVersion: '5.9.14'}}});
+    assert.equal(save.ok, true);
+    assert.equal(t.calls.filter(c => c.action === 'saveSystemConfig').length, 2, 'config save retried once');
+    assert.ok(t.ctx.live.configSavedAt > 0);
+    t.ctx.apiTransport('init', {_silent: true});
+    await tick();
+    assert.equal(t.calls.filter(c => c.action === 'init').length, 2, 'new read after save is a fresh request');
+    t.calls.filter(c => c.action === 'init').forEach(c => c.done({ok: true}));
+    await oldRead;
+  });
   console.log('TOTAL network queue tests passed');
 })().catch(err => { console.error(err); process.exit(1); });
