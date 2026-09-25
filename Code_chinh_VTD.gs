@@ -3463,8 +3463,15 @@ function vtdApp_deleteLookupCacheStatus(params) {
 }
 
 function vtdApp_queueErrors(params) {
-  const denied = vtdApp_requireAction_("adminConfig", params);
-  if (denied) return denied;
+  // Admin xem loi sync cua moi may; staff co quyen sync chi xem don loi cua chinh minh.
+  const auth = vtdApp_auth_(params);
+  if (!auth.allowed) return vtdApp_fail_(auth.message);
+  const authEmail = String(auth.email || "").toLowerCase().trim();
+  const actions = auth.actions || [];
+  const ownerEmails = (VTD_PERMISSIONS.adminEmails || []).map(e => String(e || "").toLowerCase().trim());
+  const isAdmin = ownerEmails.indexOf(authEmail) >= 0 || actions.indexOf("adminConfig") >= 0 || actions.indexOf("manageConfig") >= 0;
+  const canSeeOwn = ["retrySync", "runCommand", "viewSync", "viewOps", "viewDevice", "viewCache"].some(a => actions.indexOf(a) >= 0);
+  if (!isAdmin && !canSeeOwn) return vtdApp_fail_("Bạn không có quyền xem lỗi sync.");
   const sh = vtdApp_queueErrorSheet_();
   const values = sh.getDataRange().getDisplayValues();
   if (values.length <= 1) return vtdApp_ok_({rows: []});
@@ -3472,6 +3479,8 @@ function vtdApp_queueErrors(params) {
   const rows = [];
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
+    const rowEmail = String(vtdApp_pickFromArray_(row, col, ["email"]) || "").toLowerCase().trim();
+    if (!isAdmin && rowEmail !== authEmail) continue;
     rows.push({
       updatedAt: vtdApp_pickFromArray_(row, col, ["updatedat"]),
       email: vtdApp_pickFromArray_(row, col, ["email"]),
@@ -5065,6 +5074,11 @@ function doGet(e) {
   const execute = () => {
   try {
     e = e || {};
+    // App chi goi API bang POST. GET mang _diagRequestId ma khong co action nghia la Google da
+    // chuyen huong nham sau khi doPost xu ly xong; tra JSON de app biet mat phan hoi va tu thu lai.
+    if (e.parameter && e.parameter._diagRequestId && !e.parameter.action) {
+      return vtdApp_json_({ok: false, code: "RESPONSE_LOST", retryable: true, message: "Mất phản hồi từ Google, app sẽ tự thử lại."});
+    }
     if (e.parameter && e.parameter.action) {
       return vtdApp_json_(vtdApp_apiDispatch_(String(e.parameter.action), e.parameter || {}));
     }
@@ -5582,6 +5596,11 @@ function vtdApp_masterSkuKeySync(params) {
 // Send each received error report immediately. No credentials in email.
 function vtdApp_cacheErrorEmail_(p) {
   if (p.status !== 'error') return;
+  // Bo cac so dem thay doi lien tuc (pending=, syncing=, 100/103...) de cung mot loi khong gui lai moi vai giay.
+  const alertKey = 'VTD_CACHE_ALERT_' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5,
+    [p.email, p.deviceId, p.cacheType, String(p.lastError || '').replace(/\d+/g, '')].join('|'), Utilities.Charset.UTF_8));
+  const alertCache = CacheService.getScriptCache();
+  if (alertCache.get(alertKey)) return;
   const sender='fulfillment.wms.3pl@gmail.com', recipient='khiempham5209@gmail.com';
   if (String(Session.getEffectiveUser().getEmail()).toLowerCase() !== sender) throw new Error('API phải chạy bằng '+sender+' để gửi cảnh báo cache.');
   const lock=LockService.getScriptLock();
@@ -5597,5 +5616,6 @@ function vtdApp_cacheErrorEmail_(p) {
       'Thời gian: '+Utilities.formatDate(new Date(),'Asia/Ho_Chi_Minh','yyyy-MM-dd HH:mm:ss'),
       'Mở Quản lý thiết bị để xem báo cáo.'
     ].join('\n')});
+    alertCache.put(alertKey, '1', 1800);
   } finally { lock.releaseLock(); }
 }

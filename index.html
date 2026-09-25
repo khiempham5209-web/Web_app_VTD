@@ -3939,10 +3939,27 @@
         <div class="lookup" style="margin-bottom:8px">${localRows.map(r => `<div data-local-cache-row="${html(r.key)}" style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:4px 0"><span>${html(r.label)}</span><strong>${html(r.status)} · ${html(r.progress)}</strong><small data-cache-error style="flex-basis:100%;color:#b42318;text-align:left">${html(r.error || "")}</small></div>`).join("")}</div>
         <div class="table-wrap"><table><thead><tr><th>User</th><th>Máy</th><th>Cache</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead><tbody>${body}</tbody></table></div></section>`;
     }
+    // Chặn vòng lặp tải ở màn Cài đặt: mỗi lần vẽ lại từng gọi thêm request dù lần trước chưa xong
+    // (log 25/09: forgotPassRequests 6 lần, queueErrors 3 lần trong 20 giây). Lỗi thì chờ 60 giây mới tự tải lại.
+    const settingsLoads = {};
+    function settingsLoadStart(key, force){
+      const st = settingsLoads[key] || (settingsLoads[key] = {loading:false, failedAt:0});
+      if (st.loading) return false;
+      if (!force && st.failedAt && Date.now() - st.failedAt < 60000) return false;
+      st.loading = true;
+      return true;
+    }
+    function settingsLoadEnd(key, res){
+      const st = settingsLoads[key];
+      st.loading = false;
+      st.failedAt = res && res.ok ? 0 : Date.now();
+    }
     async function loadLookupCacheStatus(force){
       if (!canViewSyncOps()) return;
       if (live.lookupCacheStatusLoaded && !force) return;
-      const res = await api("lookupCacheStatus", {_silent:!force});
+      if (!settingsLoadStart("lookupCacheStatus", force)) return;
+      let res;
+      try { res = await api("lookupCacheStatus", {_silent:!force}); } finally { settingsLoadEnd("lookupCacheStatus", res); }
       if (res.ok) {
         live.lookupCacheStatus = Array.isArray(res.rows) ? res.rows : [];
         live.lookupCacheStatusLoaded = true;
@@ -3980,7 +3997,9 @@
     async function loadQueueErrors(force){
       if (!canViewSyncOps()) return;
       if (live.queueErrorsLoaded && !force) return;
-      const res = await api("queueErrors", {_silent:!force});
+      if (!settingsLoadStart("queueErrors", force)) return;
+      let res;
+      try { res = await api("queueErrors", {_silent:!force}); } finally { settingsLoadEnd("queueErrors", res); }
       if (res.ok) {
         live.queueErrors = Array.isArray(res.rows) ? res.rows : [];
         live.queueErrorsLoaded = true;
@@ -4045,7 +4064,9 @@
     async function loadForgotPassRequests(force){
       if (!canAdminUsers()) return;
       if (live.forgotPassRequestsLoaded && !force) return;
-      const res = await api("forgotPassRequests", {_silent:!force});
+      if (!settingsLoadStart("forgotPassRequests", force)) return;
+      let res;
+      try { res = await api("forgotPassRequests", {_silent:!force}); } finally { settingsLoadEnd("forgotPassRequests", res); }
       if (res.ok) {
         live.forgotPassRequests = Array.isArray(res.rows) ? res.rows : [];
         live.forgotPassRequestsLoaded = true;
@@ -4567,7 +4588,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.13";
+    const APP_VERSION = "5.9.14";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -5313,28 +5334,116 @@
       let responseHost='';try{responseHost=new URL(response.url).hostname;}catch(_){}
       return parseApiResponse(await response.text(),{label,action,status:response.status,contentType:response.headers && response.headers.get('content-type')||'',responseHost});
     }
-    function apiTransport(action, params) {
-      const requestSession = {token:live.token, generation:live.authGeneration || 0};
-      params = Object.assign({}, params || {}, {sessionToken: live.token, appVersion: APP_VERSION});
-      const silent = !!params._silent;
-      const apiUrl = activeApiUrl();
-      const request = {url: apiUrl, action, params, callbackId: "cb_" + Date.now() + "_" + Math.random().toString(16).slice(2)};
-      if (action !== "login" && !silent) setLoading(true, action === "search" ? "Đang tìm kiếm..." : "Đang xử lý dữ liệu...");
+    // Hàng đợi mạng dùng chung cho cả 3 API Apps Script (VTD, Thao tác CT, Nhập TH).
+    // Log 25/09: khi một máy giữ 14-18 request song song, Google làm mất phản hồi (404 / Load failed)
+    // dù server đã xử lý xong trong 1 giây. Giới hạn song song + ưu tiên thao tác người dùng.
+    const NET_MAX_TOTAL = 4;       // tổng request cùng lúc
+    const NET_MAX_BACKGROUND = 3;  // request nền tối đa, luôn chừa ít nhất 1 chỗ cho thao tác người dùng
+    const NET_MAX_LOW = 2;         // request báo cáo/admin tối đa
+    const NET_LOW_ACTIONS = new Set(["reportLookupCacheStatus","reportQueueErrors","queueErrors","queueRetryRequests","ackQueueRetryRequests","lookupCacheStatus","forgotPassRequests","loginReport","activityPing","storeInfo","adminConfig","clientDiagnostics"]);
+    const NET_WRITE_PATTERN = /^(login|logout|save|update|upload|delete|queueRecord|create|add|confirm|reset|change|requestQueueRetry|runCommand|forgotPass$)/i;
+    // Lệnh chỉ đọc: được phép tự thử lại khi Google làm mất phản hồi. Lệnh ghi KHÔNG tự thử lại.
+    const NET_READ_ACTIONS = new Set(["init","dynamicConfig","systemConfig","publicConfig","publicTheme","dashboard","search","getRecord","lookupOrder","lookupOrderManifest","lookupOrderPage","cacheDataManifest","cacheDataPage","listProducts","listSku","listToday","storeInfo","queueErrors","queueRetryRequests","lookupCacheStatus","forgotPassRequests","loginReport","adminConfig","dynamicListSheets","dynamicReadColumns","dynamicReadRows","masterSkuKeySync","reportLookupCacheStatus","today","lookup","page","keySync","skuInit","skuPage"]);
+    const netState = {active:[0,0,0], queue:[], seq:0, inflight:new Map()};
+    function netPriority(action, silent){
+      if (!silent) return 0;
+      if (NET_LOW_ACTIONS.has(action)) return 2;
+      if (NET_WRITE_PATTERN.test(action)) return 0;
+      return 1;
+    }
+    function netCanStart(p){
+      const a = netState.active;
+      if (a[0] + a[1] + a[2] >= NET_MAX_TOTAL) return false;
+      if (p === 0) return true;
+      if (a[1] + a[2] >= NET_MAX_BACKGROUND) return false;
+      return p !== 2 || a[2] < NET_MAX_LOW;
+    }
+    function netPump(){
+      netState.queue.sort((a, b) => a.p - b.p || a.seq - b.seq);
+      for (let i = 0; i < netState.queue.length;) {
+        const job = netState.queue[i];
+        if (!netCanStart(job.p)) { i++; continue; }
+        netState.queue.splice(i, 1);
+        netState.active[job.p]++;
+        let released = false;
+        const release = () => { if (released) return; released = true; netState.active[job.p]--; setTimeout(netPump, 0); };
+        Promise.resolve().then(job.run).then(v => { release(); job.resolve(v); }, e => { release(); job.reject(e); });
+      }
+    }
+    // Đồng hồ timeout chỉ bắt đầu khi request thật sự được gửi, không tính thời gian chờ trong hàng.
+    function netRun(priority, run){
+      return new Promise((resolve, reject) => {
+        netState.queue.push({p:priority, seq:++netState.seq, run, resolve, reject});
+        netPump();
+      });
+    }
+    function netResponseLost(res){
+      if (!res || res.ok !== false || res.timeout) return false;
+      if (res.code === "RESPONSE_LOST" || res.code === "INVALID_API_RESPONSE") return true;
+      return /Load failed|Failed to fetch|NetworkError|TypeError|timeout|Unable to resolve|Connection reset|unexpected end of stream/i.test(String(res.message || ""));
+    }
+    // Lệnh đọc bị Google làm mất phản hồi thì tự gửi lại 1 lần sau 1,5 giây.
+    function netRunWithRetry(priority, action, once){
+      return netRun(priority, once).then(res => {
+        if (!NET_READ_ACTIONS.has(action) || !netResponseLost(res)) return res;
+        return new Promise(r => setTimeout(r, 1500)).then(() => netRun(priority, once)).then(retryRes => {
+          if (retryRes && typeof retryRes === "object") retryRes.retriedAfterLostResponse = true;
+          return retryRes;
+        });
+      });
+    }
+    // Cùng một lệnh đọc nền đang chạy thì các lần gọi sau dùng chung kết quả, không gửi thêm.
+    function netShared(url, action, params, start){
+      if (!params._silent || !NET_READ_ACTIONS.has(action) || action === "reportLookupCacheStatus") return start();
+      const clean = Object.assign({}, params);
+      delete clean._diagRequestId; delete clean.sessionToken; delete clean.appVersion;
+      const key = url + "|" + action + "|" + JSON.stringify(clean);
+      if (netState.inflight.has(key)) return netState.inflight.get(key);
+      const promise = start();
+      netState.inflight.set(key, promise);
+      promise.then(() => netState.inflight.delete(key), () => netState.inflight.delete(key));
+      return promise;
+    }
+    // Báo tiến độ cache: bước trung gian gộp lại, tối đa 1 lần/phút mỗi loại dữ liệu; kết quả cuối (done/error) gửi ngay.
+    const CACHE_REPORT_INTERVAL_MS = 60000;
+    const cacheReportState = {};
+    function deferCacheStatusReport(params){
+      if (params._coalesced) return null;
+      const type = String(params.cacheType || "");
+      const st = cacheReportState[type] || (cacheReportState[type] = {last:0, timer:null, params:null});
+      const status = String(params.status || "").toLowerCase();
+      if (!status || status === "done" || status === "error") {
+        if (st.timer) clearTimeout(st.timer);
+        st.timer = null; st.params = null; st.last = Date.now();
+        return null;
+      }
+      st.params = params;
+      if (!st.timer) {
+        const wait = Math.max(3000, st.last + CACHE_REPORT_INTERVAL_MS - Date.now());
+        st.timer = setTimeout(() => {
+          st.timer = null;
+          const pending = st.params;
+          st.params = null;
+          if (!pending || !live.token) return;
+          st.last = Date.now();
+          apiTransport("reportLookupCacheStatus", Object.assign({}, pending, {_coalesced:true})).catch(() => {});
+        }, wait);
+      }
+      return Promise.resolve({ok:true, deferred:true});
+    }
+    function apiTransportOnce(action, params, apiUrl){
       if (window.VTDNative && window.VTDNative.api && action !== "uploadImages" && action !== "uploadImage") {
+        const request = {url: apiUrl, action, params, callbackId: "cb_" + Date.now() + "_" + Math.random().toString(16).slice(2)};
         return new Promise(resolve => {
-          const finish = res => {
-            try { resolve(handleApiResponse(action, res, requestSession)); }
-            finally { if (action !== "login" && !silent) setLoading(false); }
-          };
           const timeoutMs = action === "dashboard" ? 150000 : action === "search" ? 150000 : action === "storeInfo" ? 120000 : 90000;
           const timer = setTimeout(() => {
             if (!nativeCallbacks[request.callbackId]) return;
             delete nativeCallbacks[request.callbackId];
-            finish({ok:false, message:"API phản hồi quá lâu, bấm tải lại để thử lại."});
+            resolve({ok:false, timeout:true, message:"API phản hồi quá lâu, bấm tải lại để thử lại."});
           }, timeoutMs);
           nativeCallbacks[request.callbackId] = {action, resolve: res => {
             if (timer) clearTimeout(timer);
-            finish(res);
+            resolve(res);
           }, timer};
           window.VTDNative.api(JSON.stringify(request));
         });
@@ -5344,9 +5453,24 @@
       const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, timeoutMs);
       return scriptApiFetch(apiUrl, {action, params}, {
         signal: controller ? controller.signal : undefined
-      }).then(r => readApiJson(r, "API hệ thống", action)).then(res => handleApiResponse(action, res, requestSession)).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API phản hồi quá lâu, bấm chạy lại sync để thử lại." : String(err)})).finally(() => {
-        clearTimeout(timer);
-        if (action !== "login" && !silent) setLoading(false);
+      }).then(r => readApiJson(r, "API hệ thống", action)).catch(err => (err && err.name === "AbortError"
+        ? {ok:false, timeout:true, message:"API phản hồi quá lâu, bấm chạy lại sync để thử lại."}
+        : {ok:false, message:String(err)})).finally(() => clearTimeout(timer));
+    }
+    function apiTransport(action, params) {
+      const requestSession = {token:live.token, generation:live.authGeneration || 0};
+      params = Object.assign({}, params || {}, {sessionToken: live.token, appVersion: APP_VERSION});
+      const silent = !!params._silent;
+      const apiUrl = activeApiUrl();
+      if (action === "reportLookupCacheStatus" && silent) {
+        const deferred = deferCacheStatusReport(params);
+        if (deferred) return deferred;
+      }
+      return netShared(apiUrl, action, params, () => {
+        if (action !== "login" && !silent) setLoading(true, action === "search" ? "Đang tìm kiếm..." : "Đang xử lý dữ liệu...");
+        return netRunWithRetry(netPriority(action, silent), action, () => apiTransportOnce(action, params, apiUrl))
+          .then(res => handleApiResponse(action, res, requestSession))
+          .finally(() => { if (action !== "login" && !silent) setLoading(false); });
       });
     }
     function timeoutResult(ms, message){
@@ -6788,7 +6912,12 @@
         };
       });
     }
+    // Ảnh vừa ghi nhưng đơn chưa kịp vào hàng đợi: không được coi là ảnh mồ côi.
+    // Trước đây lưu đơn PN trong lúc đơn VTD đang ghi ảnh sẽ xóa nhầm ảnh của đơn VTD
+    // (lỗi readImage "parameter 1 is not of type Blob").
+    const recentQueueImageIds = new Map();
     function queueImagePut(record){
+      if (record && record.id) recentQueueImageIds.set(String(record.id), Date.now());
       return queueImageStore("readwrite", store => store.put(record));
     }
     function queueImageGet(id){
@@ -6847,7 +6976,9 @@
           if (image && image.id) referenced.add(String(image.id));
         }));
         const keys = await queueImageKeys();
-        await queueImagesDelete(keys.filter(key => !referenced.has(String(key))));
+        const now = Date.now();
+        recentQueueImageIds.forEach((at, id) => { if (now - at > 600000) recentQueueImageIds.delete(id); });
+        await queueImagesDelete(keys.filter(key => !referenced.has(String(key)) && !recentQueueImageIds.has(String(key))));
       } catch (err) {}
     }
     function recoverLocalQueue(){
@@ -7609,7 +7740,7 @@
       if (!ref) return null;
       const saved = ref.id ? await queueImageGet(ref.id) : null;
       const image = saved || ref;
-      if (!image) throw new Error("Không tìm thấy ảnh trong bộ nhớ máy. Vui lòng nhập lại ảnh cho đơn này.");
+      if (!image || (!saved && !(ref.base64 || ref.data || ref.sourceFile || ref.file || ref.blob))) throw new Error("Không tìm thấy ảnh trong bộ nhớ máy. Vui lòng nhập lại ảnh cho đơn này.");
       const source = image.sourceFile || image.file || image.blob || image;
       const converted = await filePayload(source, image);
       const clean = Object.assign({}, image, ref, converted);
@@ -8050,10 +8181,15 @@
           } catch (err) {
             queue = localQueue();
             const updated = queue.find(x => x.localId === item.localId);
+            // Lượt sync khác đã upload xong ảnh này và xóa khỏi máy: không phải lỗi, bỏ qua.
+            if (updated && (updated.status === "done" || updated.imagesUploaded || Number(updated.imageIndex || 0) > imageIndex)) continue;
             if (updated) {
+              const missing = /not of type 'Blob'|Không tìm thấy ảnh/i.test(String(err && err.message || err));
               updated.status = "error";
               updated.imageIndex = imageIndex;
-              updated.lastError = String(err && err.message || err);
+              updated.lastError = missing
+                ? `Ảnh ${imageIndex + 1}/${(updated.images || []).length} không còn trong bộ nhớ máy. Đơn đã lưu lên hệ thống, cần bổ sung lại ảnh này.`
+                : String(err && err.message || err);
               updated.lastStep = "readImage";
               notifyQueueItemError(updated);
               saveLocalQueue(queue);
@@ -9499,17 +9635,22 @@
       const url = docOpsApiUrl();
       if (!url) return Promise.resolve({ok:false, message:"Chưa cấu hình API Thao tác CT."});
       const silent = !!params._silent;
-      if (!silent) setLoading(true, "Đang xử lý chứng từ...");
-      const controller = window.AbortController ? new AbortController() : null;
-      const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, 120000);
-      return fetch(url, {
-        method: "POST",
-        headers: {"Content-Type":"text/plain;charset=utf-8"},
-        body: JSON.stringify({action, params: Object.assign({}, params, {userEmail: currentEmail(), sessionToken: live.token})}),
-        signal: controller ? controller.signal : undefined
-      }).then(r => readApiJson(r, "API Thao tác CT", action)).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API Thao tác CT phản hồi quá lâu." : String(err)})).finally(() => {
-        clearTimeout(timer);
-        if (!silent) setLoading(false);
+      const body = JSON.stringify({action, params: Object.assign({}, params, {userEmail: currentEmail(), sessionToken: live.token})});
+      const once = () => {
+        const controller = window.AbortController ? new AbortController() : null;
+        const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, 120000);
+        return fetch(url, {
+          method: "POST",
+          headers: {"Content-Type":"text/plain;charset=utf-8"},
+          body,
+          signal: controller ? controller.signal : undefined
+        }).then(r => readApiJson(r, "API Thao tác CT", action)).catch(err => (err && err.name === "AbortError"
+          ? {ok:false, timeout:true, message:"API Thao tác CT phản hồi quá lâu."}
+          : {ok:false, message:String(err)})).finally(() => clearTimeout(timer));
+      };
+      return netShared(url, action, params, () => {
+        if (!silent) setLoading(true, "Đang xử lý chứng từ...");
+        return netRunWithRetry(netPriority(action, silent), action, once).finally(() => { if (!silent) setLoading(false); });
       });
     }
     function docOpsRowsCache(){
@@ -10382,17 +10523,22 @@
       const url = returnThApiUrl();
       if (!url) return Promise.resolve({ok:false, message:"Chưa cấu hình API Nhập TH."});
       const silent = !!params._silent;
-      if (!silent) setLoading(true, "Đang xử lý Nhập TH...");
-      const controller = window.AbortController ? new AbortController() : null;
-      const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, 120000);
-      return fetch(url, {
-        method: "POST",
-        headers: {"Content-Type": "text/plain;charset=utf-8"},
-        body: JSON.stringify({action, params: Object.assign({}, params, {userEmail: currentEmail(), sessionToken: live.token})}),
-        signal: controller ? controller.signal : undefined
-      }).then(r => readApiJson(r,"API Nhập TH",action)).catch(err => ({ok:false, message: err && err.name === "AbortError" ? "API Nhập TH phản hồi quá lâu." : String(err)})).finally(() => {
-        clearTimeout(timer);
-        if (!silent) setLoading(false);
+      const body = JSON.stringify({action, params: Object.assign({}, params, {userEmail: currentEmail(), sessionToken: live.token})});
+      const once = () => {
+        const controller = window.AbortController ? new AbortController() : null;
+        const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, 120000);
+        return fetch(url, {
+          method: "POST",
+          headers: {"Content-Type": "text/plain;charset=utf-8"},
+          body,
+          signal: controller ? controller.signal : undefined
+        }).then(r => readApiJson(r,"API Nhập TH",action)).catch(err => (err && err.name === "AbortError"
+          ? {ok:false, timeout:true, message:"API Nhập TH phản hồi quá lâu."}
+          : {ok:false, message:String(err)})).finally(() => clearTimeout(timer));
+      };
+      return netShared(url, action, params, () => {
+        if (!silent) setLoading(true, "Đang xử lý Nhập TH...");
+        return netRunWithRetry(netPriority(action, silent), action, once).finally(() => { if (!silent) setLoading(false); });
       });
     }
     function normalizeReturnThSkuItem(x){
