@@ -26,3 +26,9 @@ Kiểm thử: test-release 30/30, test-network-queue 5/5 (giới hạn song song
 - saveSystemConfig, savePermission, saveDynamicConfig tự gửi lại 1 lần khi Google làm mất phản hồi (gửi lại vẫn ra cùng kết quả). Lưu đơn, upload ảnh vẫn không tự gửi lại.
 - Sau mọi lệnh ghi, lệnh đọc mới luôn là request mới, không dùng chung request đọc cũ.
 - Server không đổi so với 5.9.14. Kiểm thử: test-network-queue 6/6, test-release 30/30, test-request-diagnostics.
+
+## 5.9.16
+
+- Cài đặt → Cập nhật app: bấm Lưu là nhận ngay trên máy admin (hiện bản mới, báo "Đã lưu"), gửi lên hệ thống chạy nền, tự gửi lại 1 lần nếu lỗi; nếu vẫn lỗi thì báo đỏ, giữ nguyên dữ liệu đã nhập để bấm Lưu lại.
+- Các máy khác nhận thông báo bản mới khi mở app sau khi hệ thống đã nhận.
+- Server không đổi. Kiểm thử: test-release 30/30, test-network-queue 6/6.

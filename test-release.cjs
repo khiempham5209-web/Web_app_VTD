@@ -102,13 +102,15 @@ function sheet(data){return {getLastRow:()=>data.length,getLastColumn:()=>data[0
    vm.runInContext(extract('cacheDailyClaim'),ctx);assert.equal(await ctx.cacheDailyClaim('docOpsSku'),false);
    assert.equal(await ctx.cacheDailyClaim('docOpsSku',true),true);day='12/09/2026';assert.equal(await ctx.cacheDailyClaim('docOpsSku'),true);
  });
- await test('Update config saves server first and always reports errors without clearing input',async()=>{
-   const nodes={updateLatestVersion:{value:'5.9.3'},updateApkUrl:{value:'https://example.test/app.apk'},updateFolderUrl:{value:''},updateNote:{value:'New'},saveUpdateConfigButton:{},updateSaveStatus:{style:{}}};let calls=0,mode='success';const messages=[];
-   const ctx={live:{},appConfig:{update:{latestVersion:'5.8'}},appUpdateConfig:()=>ctx.appConfig.update,canAdminConfig:()=>true,el:id=>nodes[id],toast:m=>messages.push(m),api:async()=>{calls++;if(mode==='throw')throw Error('network');if(mode==='denied')return {ok:false,message:'Denied'};return {ok:true};},mergeSystemConfig:()=>{},saveAppConfig:()=>{if(mode==='quota')throw Error('QuotaExceeded');}};vm.createContext(ctx);vm.runInContext(extract('saveUpdateConfig'),ctx);
-   mode='quota';await ctx.saveUpdateConfig();assert.equal(calls,1);assert.match(messages.at(-1),/Đã lưu lên hệ thống/);assert.equal(nodes.saveUpdateConfigButton.disabled,false);
-   ctx.appConfig.update={latestVersion:'5.8'};mode='denied';await ctx.saveUpdateConfig();assert.equal(ctx.appConfig.update.latestVersion,'5.8');assert.match(messages.at(-1),/Denied/);
+ await test('Update config applies instantly on the admin device, sends in background, reports failure without clearing input',async()=>{
+   const nodes={updateLatestVersion:{value:'5.9.16'},updateApkUrl:{value:'https://example.test/app.apk'},updateFolderUrl:{value:''},updateNote:{value:'New'},updateSaveStatus:{style:{}}};let calls=0,mode='success';const messages=[];
+   const ctx={live:{},view:'settings',settings:()=>{},setTimeout:f=>f(),Promise,appConfig:{update:{latestVersion:'5.8'}},appUpdateConfig:()=>ctx.appConfig.update,canAdminConfig:()=>true,el:id=>nodes[id],toast:m=>messages.push(m),api:async()=>{calls++;if(mode==='throw')throw Error('network');if(mode==='denied')return {ok:false,message:'Denied'};return {ok:true};},mergeSystemConfig:()=>{},saveAppConfig:()=>{if(mode==='quota')throw Error('QuotaExceeded');}};vm.createContext(ctx);vm.runInContext(extract('saveUpdateConfig'),ctx);
+   const pending=ctx.saveUpdateConfig();assert.equal(ctx.appConfig.update.latestVersion,'5.9.16','applied before server answers');assert.match(messages.at(-1),/Đã lưu bản 5.9.16/);await pending;
+   assert.equal(calls,1);assert.match(nodes.updateSaveStatus.textContent,/Đã gửi lên hệ thống/);assert.equal(ctx.live.updateConfigSaving,false);
+   mode='quota';calls=0;await ctx.saveUpdateConfig();assert.equal(calls,1);assert.match(nodes.updateSaveStatus.textContent,/Đã gửi lên hệ thống/);
+   mode='denied';calls=0;await ctx.saveUpdateConfig();assert.equal(calls,2,'one follow-up attempt');assert.match(messages.at(-1),/Denied/);assert.equal(nodes.updateLatestVersion.value,'5.9.16');
    mode='throw';await ctx.saveUpdateConfig();assert.match(messages.at(-1),/network/);assert.equal(ctx.live.updateConfigSaving,false);
-   mode='success';await ctx.saveUpdateConfig();assert.match(messages.at(-1),/Đã lưu cấu hình cập nhật lên hệ thống/);
+   ctx.live.updateConfigSaving=true;calls=0;await ctx.saveUpdateConfig();assert.equal(calls,0);assert.match(messages.at(-1),/Đang gửi lần lưu trước/);
  });
  await test('Staff login returns update, theme and PN endpoint without admin permission',()=>{
    const ctx={console,Logger:{log:()=>{}},Utilities:{getUuid:()=> 'test-token'},CacheService:{getScriptCache:()=>({get:()=>null})}};vm.createContext(ctx);vm.runInContext(vtd,ctx);

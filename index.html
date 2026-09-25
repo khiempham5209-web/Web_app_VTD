@@ -4588,7 +4588,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.15";
+    const APP_VERSION = "5.9.16";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -6855,7 +6855,7 @@
     }
     async function saveUpdateConfig(){
       if (!canAdminConfig()) return toast("Bạn không có quyền lưu cấu hình cập nhật.", "err");
-      if(live.updateConfigSaving)return;
+      if(live.updateConfigSaving)return toast("Đang gửi lần lưu trước lên hệ thống, chờ vài giây rồi lưu lại.","err");
       const update=Object.assign({},appUpdateConfig(),{
         latestVersion:(el('updateLatestVersion')?.value || '').trim(),
         apkUrl:(el('updateApkUrl')?.value || '').trim(),
@@ -6866,19 +6866,24 @@
         const status=el('updateSaveStatus');if(status){status.textContent=message;status.style.color=error?'#b42318':'#067647';}
         toast(message,error?'err':'ok');
       };
-      const button=el('saveUpdateConfigButton');
+      // Bấm lưu là nhận ngay trên máy admin; gửi lên hệ thống chạy nền, không bắt admin đứng chờ Google.
       live.updateConfigSaving=true;
-      if(button){button.disabled=true;button.textContent='Đang lưu…';}
-      const status=el('updateSaveStatus');if(status)status.textContent='Đang gửi cấu hình lên hệ thống…';
+      live.configSavedAt=Date.now();
+      appConfig.update=update;
+      try {saveAppConfig(false);} catch(err) {}
+      if (view === "settings") settings();
+      const setStatus=(message,error=false)=>{const status=el('updateSaveStatus');if(status){status.textContent=message;status.style.color=error?'#b42318':'#067647';}};
+      toast(`Đã lưu bản ${update.latestVersion || ''}. Đang gửi lên hệ thống…`,'ok');
+      setStatus('Đã lưu trên máy. Đang gửi lên hệ thống…');
       try {
-        const res=await api('saveSystemConfig',{config:{update},_silent:true});
+        let res=await api('saveSystemConfig',{config:{update},_silent:true});
+        if(!res || !res.ok){await new Promise(r=>setTimeout(r,3000));res=await api('saveSystemConfig',{config:{update},_silent:true});}
         if(!res || !res.ok)throw Error(res && res.message || 'API chưa xác nhận lưu cấu hình.');
-        appConfig.update=update;
-        try {mergeSystemConfig(res.config || {});saveAppConfig(false);}
-        catch(err){show('Đã lưu lên hệ thống, nhưng chưa lưu được cấu hình trên máy: '+String(err.message || err),true);return;}
-        show('Đã lưu cấu hình cập nhật lên hệ thống.');
-      } catch(err){show('Chưa xác nhận lưu cấu hình: '+String(err.message || err),true);}
-      finally{live.updateConfigSaving=false;if(button){button.disabled=false;button.textContent='Lưu cấu hình cập nhật';}}
+        live.configSavedAt=Date.now();
+        try {mergeSystemConfig(res.config || {});saveAppConfig(false);} catch(err) {}
+        setStatus('Đã gửi lên hệ thống. Các máy khác nhận thông báo bản mới khi mở app.');
+      } catch(err){show('Chưa gửi được lên hệ thống, bấm Lưu lại: '+String(err.message || err),true);}
+      finally{live.updateConfigSaving=false;}
     }
     function queueImageDb(){
       return new Promise((resolve, reject) => {
