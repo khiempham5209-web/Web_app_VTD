@@ -7,7 +7,7 @@ const end = html.indexOf('    function timeoutResult(');
 assert.ok(start > 0 && end > start, 'network queue block not found');
 const source = html.slice(start, end);
 
-function makeContext(respond) {
+function makeContext(respond, opts = {}) {
   const calls = [];
   let active = 0, maxActive = 0;
   const ctx = {
@@ -23,7 +23,7 @@ function makeContext(respond) {
     }
   };
   vm.createContext(ctx);
-  vm.runInContext(source, ctx);
+  vm.runInContext(opts.fastGuard ? source.replace('NET_JOB_MAX_MS = 200000', 'NET_JOB_MAX_MS = 50') : source, ctx);
   return {ctx, calls, max: () => maxActive, active: () => active};
 }
 const tick = (ms = 0) => new Promise(r => setTimeout(r, ms));
@@ -125,6 +125,32 @@ async function test(name, fn) { await fn(); console.log('PASS', name); }
     assert.equal(t.calls.filter(c => c.action === 'init').length, 2, 'new read after save is a fresh request');
     t.calls.filter(c => c.action === 'init').forEach(c => c.done({ok: true}));
     await oldRead;
+  });
+  await test('A request that never answers cannot block the queue: slot released, later orders still sent', async () => {
+    const t = makeContext(c => { if (c.action !== 'saveRaw') c.done({ok: true}); }, {fastGuard: true});
+    const hung = [1,2,3,4].map(i => t.ctx.apiTransport('saveRaw', {_silent: true, id: 'H' + i}));
+    await tick();
+    assert.equal(t.calls.length, 4, 'four hung order saves occupy all slots');
+    const later = t.ctx.apiTransport('init', {_silent: true});
+    await tick(120);
+    const results = await Promise.all(hung);
+    assert.ok(results.every(r => r.ok === false && r.timeout), 'hung saves end as timeout errors');
+    assert.equal((await later).ok, true, 'request queued behind hung ones is sent');
+  });
+
+  await test('Android bridge: request whose callback was removed still finishes at timeout; resume no longer removes callbacks', async () => {
+    const callbacks = {};
+    const ctx = {console, Promise, Map, Set, JSON, Object, String, Number, Date, Math, clearTimeout, live: {token: 't'}, APP_VERSION: 'x', nativeCallbacks: callbacks,
+      setTimeout: (f, ms) => setTimeout(f, ms > 1000 ? 30 : ms),
+      window: {VTDNative: {api: () => {}}}, activeApiUrl: () => 'u', setLoading: () => {}, handleApiResponse: (a, r) => r};
+    vm.createContext(ctx); vm.runInContext(source, ctx);
+    const p = ctx.apiTransport('dashboard', {_silent: true});
+    await tick();
+    Object.keys(callbacks).forEach(id => delete callbacks[id]);
+    const res = await p;
+    assert.equal(res.ok, false); assert.equal(res.timeout, true);
+    const clear = html.slice(html.indexOf('    function clearLoading(){'), html.indexOf('    async function withLoading('));
+    assert.ok(!/delete nativeCallbacks/.test(clear), 'clearLoading must not delete in-flight native requests');
   });
   console.log('TOTAL network queue tests passed');
 })().catch(err => { console.error(err); process.exit(1); });

@@ -4588,7 +4588,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.16";
+    const APP_VERSION = "5.9.17";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -5340,6 +5340,7 @@
     const NET_MAX_TOTAL = 4;       // tổng request cùng lúc
     const NET_MAX_BACKGROUND = 3;  // request nền tối đa, luôn chừa ít nhất 1 chỗ cho thao tác người dùng
     const NET_MAX_LOW = 2;         // request báo cáo/admin tối đa
+    const NET_JOB_MAX_MS = 200000; // không request nào được giữ chỗ quá 200 giây (timeout dài nhất 150 giây)
     const NET_LOW_ACTIONS = new Set(["reportLookupCacheStatus","reportQueueErrors","queueErrors","queueRetryRequests","ackQueueRetryRequests","lookupCacheStatus","forgotPassRequests","loginReport","activityPing","storeInfo","adminConfig","clientDiagnostics"]);
     const NET_WRITE_PATTERN = /^(login|logout|save|update|upload|delete|queueRecord|create|add|confirm|reset|change|requestQueueRetry|runCommand|forgotPass$)/i;
     // Lệnh an toàn để tự thử lại khi Google làm mất phản hồi: lệnh đọc, và lệnh ghi cấu hình kiểu "đặt giá trị"
@@ -5367,7 +5368,13 @@
         netState.queue.splice(i, 1);
         netState.active[job.p]++;
         let released = false;
-        const release = () => { if (released) return; released = true; netState.active[job.p]--; setTimeout(netPump, 0); };
+        const release = () => { if (released) return; released = true; clearTimeout(guard); netState.active[job.p]--; setTimeout(netPump, 0); };
+        // Chốt an toàn: request nào chưa kết thúc sau NET_JOB_MAX_MS thì trả chỗ lại cho hàng đợi,
+        // để một request treo không bao giờ chặn được các đơn phía sau.
+        const guard = setTimeout(() => {
+          release();
+          job.resolve({ok:false, timeout:true, message:"Request quá lâu chưa phản hồi, đã nhả hàng đợi để chạy tiếp."});
+        }, NET_JOB_MAX_MS);
         Promise.resolve().then(job.run).then(v => { release(); job.resolve(v); }, e => { release(); job.reject(e); });
       }
     }
@@ -5437,8 +5444,8 @@
         const request = {url: apiUrl, action, params, callbackId: "cb_" + Date.now() + "_" + Math.random().toString(16).slice(2)};
         return new Promise(resolve => {
           const timeoutMs = action === "dashboard" ? 150000 : action === "search" ? 150000 : action === "storeInfo" ? 120000 : 90000;
+          // Hết giờ thì luôn kết thúc request, kể cả khi callback đã bị xóa ở nơi khác.
           const timer = setTimeout(() => {
-            if (!nativeCallbacks[request.callbackId]) return;
             delete nativeCallbacks[request.callbackId];
             resolve({ok:false, timeout:true, message:"API phản hồi quá lâu, bấm tải lại để thử lại."});
           }, timeoutMs);
@@ -5555,11 +5562,9 @@
       overlay.classList.toggle("active", live.loadingCount > 0);
     }
     function clearLoading(){
+      // Chỉ tắt màn hình chờ. Không xóa request Android đang chạy: trước đây mỗi lần mở lại app
+      // các request bị xóa mà không kết thúc, giữ chỗ hàng đợi mãi và làm đơn sau đứng im.
       live.loadingCount = 0;
-      Object.keys(nativeCallbacks).forEach(id => {
-        if (nativeCallbacks[id] && nativeCallbacks[id].timer) clearTimeout(nativeCallbacks[id].timer);
-        delete nativeCallbacks[id];
-      });
       const overlay = el("loadingOverlay");
       if (overlay) overlay.classList.remove("active");
     }

@@ -32,3 +32,10 @@ Kiểm thử: test-release 30/30, test-network-queue 5/5 (giới hạn song song
 - Cài đặt → Cập nhật app: bấm Lưu là nhận ngay trên máy admin (hiện bản mới, báo "Đã lưu"), gửi lên hệ thống chạy nền, tự gửi lại 1 lần nếu lỗi; nếu vẫn lỗi thì báo đỏ, giữ nguyên dữ liệu đã nhập để bấm Lưu lại.
 - Các máy khác nhận thông báo bản mới khi mở app sau khi hệ thống đã nhận.
 - Server không đổi. Kiểm thử: test-release 30/30, test-network-queue 6/6.
+
+## 5.9.17 — sửa lỗi hàng đợi bị nghẹn vĩnh viễn
+
+- Nguyên nhân: clearLoading (chạy mỗi lần mở lại app từ nền) xóa request Android đang chạy mà không kết thúc. Từ 5.9.14, mỗi request như vậy giữ chỗ hàng đợi mãi; chuyển app vài lần là hết 4 chỗ, app ngừng gửi mọi request, đơn nhập sau đứng Pending.
+- clearLoading chỉ tắt màn hình chờ, không xóa request. Request Android luôn kết thúc khi hết giờ.
+- Chốt an toàn: không request nào giữ chỗ quá 200 giây.
+- Kiểm thử: test-network-queue 8/8 (2 test mới tái hiện đúng lỗi; bản 5.9.16 bị treo ở test này), test-release 30/30 và các bộ chẩn đoán. Server không đổi.
