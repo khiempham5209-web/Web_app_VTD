@@ -4588,7 +4588,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.17";
+    const APP_VERSION = "5.9.18";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -7907,6 +7907,9 @@
         files: []
       }));
       const cleanPayload = Object.assign({}, payload || {}, {
+        syncKey: record.syncKey || pnSyncKey(record),
+        orderNo: record.orderNo || record.soDonHang || "",
+        maDonGhtk: record.maDonGhtk || "",
         maDon,
         clientId: itemLocalId,
         clientBatchId,
@@ -8098,6 +8101,16 @@
             queue = localQueue();
             const updated = queue.find(x => x.localId === item.localId);
             if (!updated) continue;
+            // Server PN bận hoặc Google làm mất phản hồi: server chống trùng theo clientId nên gửi lại an toàn.
+            // Giữ đơn ở hàng chờ để lượt sau gửi lại, tối đa 6 lần mới báo lỗi.
+            if (!res.ok && (res.code === "PN_BUSY" || netResponseLost(res)) && Number(updated.attempts || 0) < 6) {
+              updated.status = "pending";
+              updated.lastError = res.message || "Mất phản hồi, sẽ gửi lại.";
+              updated.lastStep = "saveDocOpsRetry";
+              saveLocalQueue(queue);
+              updateInputSyncBadge();
+              continue;
+            }
             if (!res.ok) {
               updated.status = "error";
               updated.lastError = res.message || "Sync Nhập PN lỗi";
@@ -8123,6 +8136,10 @@
             scheduleQueueReport();
             const cachedRows = docOpsRowsCache();
             saveDocOpsRowsCache(cachedRows.map(row => String(row.localId || "") === String(updated.localId || "") ? Object.assign({}, row, {syncStatus:"Done", linkAnh: res.linkAnh || row.linkAnh || "", rowNumber: res.rowNumber || row.rowNumber || ""}) : row));
+            if (res.record) {
+              try { await docOpsRememberRecords([res.record]); }
+              catch (cacheError) { keySyncSchedule(30000); }
+            }
             if (res.dataVersion) await docOpsLookupWriteMeta({dataVersion:String(res.dataVersion), updatedAt:new Date().toISOString()});
             live.docOpsTodayLoaded = false;
             if (view === "home") loadDocOpsToday(true);
@@ -9859,6 +9876,15 @@
       try {
         const manifest = await docOpsApi("init", {_silent:true});
         if (!manifest || !manifest.ok) throw new Error((manifest && manifest.message) || "Không kiểm tra được dữ liệu Chứng từ PN");
+        const sourceEpoch = String(manifest.sourceEpoch || "legacy");
+        if (sourceEpoch === "pn-full-v1" || sourceEpoch !== String(docOpsLookupMetaMemory.sourceEpoch || "legacy")) {
+          if (!await keySyncReconcile("docOpsLookup")) throw new Error("Chưa đối soát xong nguồn chứng từ mới; giữ nguyên cache và hàng đợi.");
+          await docOpsLookupWriteMeta({sourceEpoch});
+          if (sourceEpoch === "pn-full-v1") {
+            await loadDocOpsToday(true);
+            return true; // keyed incremental sync survives filtering/sorting and relocation
+          }
+        }
         const remoteLastRow = Math.max(1, Number(manifest.lastRow || 1));
         const remoteVersion = String(manifest.dataVersion || "");
         const previousVersion = String(docOpsLookupMetaMemory.dataVersion || "");
@@ -10419,6 +10445,7 @@
       docOpsState.xacThuc = "Đã nhận chứng từ";
       docOpsState.status = "Bình thường";
       docOpsState.note = "";
+      docOpsState.maEcomCt = "";
       docOpsState.items = [];
       docOpsState.docCollapsed = false;
       docOpsState.productCollapsed = false;
@@ -10471,6 +10498,7 @@
           returnType: docOpsState.returnType,
           xacThuc: docOpsState.xacThuc,
           status: docOpsState.status,
+          maEcomCt: String(el("docOpsEcomCt")?.value || docOpsState.maEcomCt || "").trim(),
           note: el("docOpsNote")?.value || docOpsState.note || "",
           items:products.map(item => Object.assign({}, item, {images:[]}))
         };
@@ -10504,6 +10532,7 @@
             <label>Xác thực hóa đơn<select onchange="docOpsState.xacThuc=this.value"><option ${docOpsState.xacThuc==="Đã nhận chứng từ"?"selected":""}>Đã nhận chứng từ</option><option ${docOpsState.xacThuc==="Chưa nhận chứng từ"?"selected":""}>Chưa nhận chứng từ</option></select></label>
             <label>Trạng thái<select onchange="docOpsState.status=this.value"><option ${docOpsState.status==="Bình thường"?"selected":""}>Bình thường</option><option ${docOpsState.status==="Sai/thiếu chứng từ"?"selected":""}>Sai/thiếu chứng từ</option></select></label>
           </div>
+          <label style="margin-top:12px">Mã ecom CT<div class="scan-row"><input id="docOpsEcomCt" placeholder="Scan hoặc nhập mã ecom CT" value="${html(docOpsState.maEcomCt || "")}" oninput="docOpsState.maEcomCt=this.value"><button class="scan-btn" type="button" title="Quét mã ecom CT" aria-label="Quét mã ecom CT" onclick="openCodeScanner('docOpsEcomCt')">${scanIcon("Quét mã ecom CT")}</button></div></label>
           <label style="margin-top:12px">Ghi chú chứng từ<textarea id="docOpsNote" placeholder="Nhập ghi chú nếu có" oninput="docOpsState.note=this.value">${html(docOpsState.note || "")}</textarea></label>
           <h2 style="margin-top:16px">Ảnh chứng từ</h2>
           <div class="file-actions"><button type="button" onclick="openFilePicker('docOpsCamera')">Chụp ảnh</button><button type="button" onclick="openFilePicker('docOpsLibrary')">Chọn từ thư viện</button></div>
@@ -11085,6 +11114,7 @@
         const res=await keySyncCall(type,{offset,version});
         if (!first) first=res;
         if (!Array.isArray(res.entries) || (version && version!==res.version)) throw new Error('Danh sách đối soát không hợp lệ.');
+        if (first.sourceEpoch !== res.sourceEpoch) throw new Error("Nguồn API thay đổi trong khi tải; sẽ đối soát lại.");
         version=res.version; all.push(...res.entries);
         if (res.done) break;
         if (!(res.nextOffset>offset)) throw new Error('Phân trang đối soát không tiến lên.');
@@ -11141,7 +11171,7 @@
       if (type==='masterSku') await keySyncPublishProducts();
       else {
         docOpsLookupMemory=await keySyncRead(store);
-        await docOpsLookupWriteMeta({lastRow:manifest.lastRow,count:docOpsLookupMemory.length});
+        await docOpsLookupWriteMeta({lastRow:manifest.lastRow,count:docOpsLookupMemory.length,sourceEpoch:String(manifest.sourceEpoch || "legacy")});
       }
       const complete=!manifest.invalidCount && !manifest.duplicateCount;
       const reported=await keySyncProgress(type,Object.assign({},base,{status:complete?'done':'error',downloaded:(await keySyncRead(store)).length,matched:manifest.total,missing:0,changed:0,

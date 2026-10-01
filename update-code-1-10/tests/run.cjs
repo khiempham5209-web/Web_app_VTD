@@ -167,13 +167,70 @@ test('Duplicate API clientId returns same result, uploads once, mirrors full and
  assert.equal(e.sheets.get('Chứng từ_FF').getRange(2,7).getValue(),'Đã nhận chứng từ');
  assert.equal(e.c.apiSave_({...p,note:'changed'}).ok,false);
 });
-test('Upload uncertainty is quarantined; same request never automatically uploads twice',()=>{
+test('Drive upload error can be resent; an upload that died is retried after 10 minutes',()=>{
  const e=environment();seed(e);e.c.pnMigrateFull();
- e.run("var uploadCount=0; uploadFiles_=()=>{uploadCount++;throw new Error('lost response');};");
- const p={clientId:'uncertain',maDon:'G1',returnType:'Chứng từ',files:[{base64:'AA=='}]};
+ e.run("var uploadCount=0; uploadFiles_=()=>{uploadCount++;if(uploadCount===1)throw new Error('lost response');return {linkAnh:'https://example.invalid/p',files:[{id:'1'}],folderUrl:''};};");
+ const p={clientId:'u1',maDon:'G1',returnType:'Chứng từ',files:[{base64:'AA=='}]};
  assert.throws(()=>e.c.apiSave_(p),/lost response/);
- assert.throws(()=>e.c.apiSave_(p),/chưa xác định/);
+ assert.equal(e.c.apiSave_(p).ok,true,'resend after a Drive error is not stuck');
+ assert.equal(e.run('uploadCount'),2);
+ const q={clientId:'u2',maDon:'G1',returnType:'Chứng từ',files:[{base64:'AA=='}]};
+ const stageKey=e.c.pnRequestKey_('u2')+':docs';
+ e.c.pnJournalWrite_(stageKey,'RUNNING',{startedAtMs:Date.now()});
+ assert.throws(()=>e.c.apiSave_(q),/đang được tải/);
+ e.c.pnJournalWrite_(stageKey,'RUNNING',{startedAtMs:Date.now()-11*60*1000});
+ assert.equal(e.c.apiSave_(q).ok,true,'dead upload older than 10 minutes is retried');
+});
+test('Resend with new _diagRequestId, appVersion and re-encoded image returns the saved result',()=>{
+ const e=environment();seed(e);e.c.pnMigrateFull();
+ e.run("var uploadCount=0; uploadFiles_=()=>{uploadCount++;return {linkAnh:'https://example.invalid/p',files:[{id:'1'}],folderUrl:''};};");
+ const a={clientId:'r1',maDon:'G1',returnType:'Chứng từ',xacThuc:'Đã nhận chứng từ',note:'OK',_diagRequestId:'diag_1',appVersion:'5.9.17',files:[{fileName:'a.jpg',base64:'AA=='}]};
+ const b={...a,_diagRequestId:'diag_2',appVersion:'5.9.18',files:[{fileName:'a.jpg',base64:'AAAA'}]};
+ const first=e.c.apiSave_(a),second=e.c.apiSave_(b);
+ assert.equal(first.ok,true);assert.equal(second.ok,true);
+ assert.equal(second.time,first.time,'second call returns the stored result');
  assert.equal(e.run('uploadCount'),1);
+ assert.equal(e.c.apiSave_({...a,note:'changed'}).ok,false,'different business content is still rejected');
+});
+test('Conflict on another order does not block saving; warning recorded for admin',()=>{
+ const e=environment();seed(e);e.c.pnMigrateFull();
+ e.run("uploadFiles_=()=>({linkAnh:'https://example.invalid/p',files:[{id:'1'}],folderUrl:''});");
+ const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
+ const rowOf=(sh,code)=>sh.rows.findIndex(r=>r&&r[1]===code)+1;
+ const mainG1=rowOf(main,'G1');assert.ok(mainG1>1,'G1 still in main');
+ const mainRow=mainG1,fullRow=rowOf(full,'G1');
+ main.getRange(mainRow,10).setValue('main edit');full.getRange(fullRow,10).setValue('full edit');
+ const g2Main=rowOf(main,'G2');
+ assert.ok(g2Main>1,'G2 still in main');
+ const res=e.c.apiSave_({clientId:'c1',maDon:'G2',returnType:'Chứng từ',xacThuc:'Đã nhận chứng từ',files:[{base64:'AA=='}]});
+ assert.equal(res.ok,true,'save of another order succeeds');
+ assert.match(res.mirrorWarning,/Xung đột/);
+ assert.match(String(e.props.PN_MIRROR_ERROR||''),/Xung đột/);
+ assert.equal(full.getRange(rowOf(full,'G2'),7).getValue(),'Đã nhận chứng từ');
+});
+test('Shared lock busy returns retryable PN_BUSY instead of a raw exception',()=>{
+ const e=environment();seed(e);e.c.pnMigrateFull();
+ e.run("LockService={getScriptLock:()=>({tryLock(){return false;},waitLock(){},releaseLock(){}})};");
+ const res=e.c.apiSave_({clientId:'busy',maDon:'G1',returnType:'Chứng từ',files:[{base64:'AA=='}]});
+ assert.equal(res.ok,false);assert.equal(res.code,'PN_BUSY');assert.equal(res.retryable,true);
+});
+test('Photos upload outside the shared lock',()=>{
+ const e=environment();seed(e);e.c.pnMigrateFull();
+ e.run("var depthAtUpload=-1; uploadFiles_=()=>{depthAtUpload=pnLockDepth_;return {linkAnh:'https://example.invalid/p',files:[{id:'1'}],folderUrl:''};};");
+ assert.equal(e.c.apiSave_({clientId:'o1',maDon:'G1',returnType:'Chứng từ',files:[{base64:'AA=='}]}).ok,true);
+ assert.equal(e.run('depthAtUpload'),0);
+});
+test('Mã ecom CT is written when sent and never cleared by an app that does not send it',()=>{
+ const e=environment();seed(e);e.c.pnMigrateFull();
+ e.run("uploadFiles_=()=>({linkAnh:'https://example.invalid/p',files:[{id:'1'}],folderUrl:''});");
+ const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
+ const rowOf=(sh,code)=>sh.rows.findIndex(r=>r&&r[1]===code)+1;
+ assert.equal(e.c.apiSave_({clientId:'e1',maDon:'G1',returnType:'Chứng từ',maEcomCt:'EC123',files:[{base64:'AA=='}]}).ok,true);
+ assert.equal(full.getRange(rowOf(full,'G1'),12).getValue(),'EC123');
+ assert.equal(main.getRange(rowOf(main,'G1'),12).getValue(),'EC123');
+ main.getRange(rowOf(main,'G2'),12).setValue('KEEP');
+ assert.equal(e.c.apiSave_({clientId:'e2',maDon:'G2',returnType:'Chứng từ',files:[{base64:'AA=='}]}).ok,true);
+ assert.equal(full.getRange(rowOf(full,'G2'),12).getValue(),'KEEP');
 });
 test('Product rows deduplicate by request item ID',()=>{
  const e=environment();const sh=e.sheets.get('Hoàn sản phẩm'),c=e.c.pnProductIdColumn_(sh),r=Array(c).fill('');r[2]='G1';r[c-1]='request:item';

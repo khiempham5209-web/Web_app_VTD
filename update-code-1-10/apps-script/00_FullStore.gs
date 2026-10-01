@@ -29,7 +29,9 @@ function pnHash_(v) {
 function pnWithLock_(fn) {
   if (pnLockDepth_) return fn();
   const lock = LockService.getScriptLock();
-  lock.waitLock(30000); pnLockDepth_++;
+  // Lỗi có mã PN_BUSY để apiSave_ trả về "đang bận, gửi lại" thay vì lỗi khó hiểu.
+  if (!lock.tryLock(30000)) throw new Error('PN_BUSY: Hệ thống PN đang bận (khóa), thử lại sau.');
+  pnLockDepth_++;
   try { return fn(); } finally { pnLockDepth_--; lock.releaseLock(); }
 }
 function pnRequireReady_() {

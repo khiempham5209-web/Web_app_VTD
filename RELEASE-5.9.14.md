@@ -39,3 +39,18 @@ Kiểm thử: test-release 30/30, test-network-queue 5/5 (giới hạn song song
 - clearLoading chỉ tắt màn hình chờ, không xóa request. Request Android luôn kết thúc khi hết giờ.
 - Chốt an toàn: không request nào giữ chỗ quá 200 giây.
 - Kiểm thử: test-network-queue 8/8 (2 test mới tái hiện đúng lỗi; bản 5.9.16 bị treo ở test này), test-release 30/30 và các bộ chẩn đoán. Server không đổi.
+
+## 5.9.18 — API PN tab full + Mã ecom CT
+
+App:
+- Áp 5 điểm sửa app cho API PN mới (update-code-1-10/patch-frontend.cjs): gửi syncKey/orderNo/maDonGhtk, đối soát nguồn pn-full-v1, nhớ hồ sơ server trả về.
+- Màn Nhập PN: thêm ô "Mã ecom CT" (scan hoặc nhập tay) trước Ghi chú chứng từ; gửi lên cùng chứng từ.
+- Đơn PN bị PN_BUSY hoặc mất phản hồi: giữ ở hàng chờ và gửi lại (tối đa 6 lần) thay vì báo lỗi ngay.
+
+API PN (update-code-1-10/apps-script, 00 và 11):
+- Dấu vân tay chống trùng chỉ tính nội dung nghiệp vụ (bỏ _diagRequestId, appVersion, base64...): gửi lại cùng đơn nhận kết quả cũ, không bị từ chối.
+- Upload ảnh lên Drive ngoài khóa chung; khóa chỉ dùng khi ghi Sheet. Khóa bận trả PN_BUSY (retryable).
+- Upload lỗi cho gửi lại; upload chết giữa chừng cho gửi lại sau 10 phút (có thể trùng 1 file ảnh trên Drive, đơn không bị kẹt).
+- Lỗi đối soát ở dòng khác không chặn việc lưu; ghi PN_MIRROR_ERROR và trả mirrorWarning.
+- Mã ecom CT ghi theo tên cột, chỉ khi app gửi giá trị; cột ngoài vùng A–Q bị bỏ qua.
+- Kiểm thử: tests/run.cjs 35/35 (6 test mới, cả 6 thất bại trên code gốc). App: test-release 30/30, test-network-queue 8/8 và các bộ chẩn đoán. Chưa chạy trên Google thật.
