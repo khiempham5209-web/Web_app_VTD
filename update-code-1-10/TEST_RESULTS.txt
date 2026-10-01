@@ -50,4 +50,8 @@ PASS Formatting equivalence does not hide changed numbers, strings or dates
 {"ok":true,"scope":"formatRepair","migrationReady":false,"pendingMigration":[{"sheet":"Booking","row":3}],"audit":{"ok":false,"results":[{"sheet":"Booking","primary":2,"full":1,"errors":["Chưa khớp dòng 3"]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}}
 {"ok":true,"results":[{"sheet":"Booking","primary":2,"full":2,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
 PASS Repair defers uncheckpointed rows but refuses a missing known ID
-RESULT 27 tests passed.
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+{"ok":true,"scope":"formatRepair","migrationReady":false,"pendingMigration":[{"sheet":"Booking","row":2,"reason":"primaryChangedOnly"},{"sheet":"Booking","row":3}],"audit":{"ok":false,"results":[{"sheet":"Booking","primary":2,"full":1,"errors":["Chưa khớp dòng 2","Chưa khớp dòng 3"]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}}
+{"ok":true,"results":[{"sheet":"Booking","primary":2,"full":2,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS Repair defers primary-only blank derived column; migration restores it without losing late Booking
+RESULT 28 tests passed.

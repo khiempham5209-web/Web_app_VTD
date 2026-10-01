@@ -280,10 +280,19 @@ function pnRepairMigrationFormats() {
         const match=byId.get(r[29]);
         if(!match)throw new Error('Thiếu ID full: '+p.main+' dòng '+(i+2));
         if(pnFingerprint_(r,p)===pnFingerprint_(match.r,p))return;
-        const base=pnFingerprint_(r,p);
-        if(r[30]!==base||match.r[30]!==base||!r.slice(0,p.width).every((v,c)=>pnFormatOnlyEquivalent_(v,match.r[c])))
+        // Reconstruct full's typed values without accepting any changed business value.
+        // A primary-only edit may wait for normal three-way reconciliation.
+        const typedFull=match.r.slice();let formatChanged=false;
+        r.slice(0,p.width).forEach((v,c)=>{
+          if((v instanceof Date)!==(match.r[c] instanceof Date)&&pnFormatOnlyEquivalent_(v,match.r[c])) {
+            typedFull[c]=v;formatChanged=true;
+          }
+        });
+        const base=pnText_(r[30]);
+        if(!base||match.r[30]!==base||pnFingerprint_(typedFull,p)!==base)
           throw new Error('Có thay đổi dữ liệu thật; không tự sửa: '+p.main+' dòng '+(i+2));
-        changes.push({mainRow:i+2,fullRow:match.row});
+        if(pnFingerprint_(r,p)!==base)pendingMigration.push({sheet:p.main,row:i+2,reason:'primaryChangedOnly'});
+        if(formatChanged)changes.push({mainRow:i+2,fullRow:match.row});
       });
       plans.push({p,main,full,changes});
     });

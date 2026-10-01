@@ -1,5 +1,9 @@
 # Sửa migration: 4 dòng Booking chưa khớp
 
+## Bổ sung: dòng 2, cột P chính trống
+
+Đã đọc trực tiếp Booking!A2:AE2 và Booking_full!A2:AE2: P chính trống, P full = 2. Repair hiện cho phép thay đổi chỉ bên chính khi fingerprint của full (sau phục hồi kiểu Date/number tương đương) vẫn bằng checkpoint chung. Không ghi đè giá trị chính; đưa vào pendingMigration với reason primaryChangedOnly. Migration tiếp theo tính lại các cột công thức và đối soát như bình thường. Nếu full cũng thay đổi, vẫn dừng. Thay duy nhất FullStore.gs, chạy repair → migration → audit, không xóa lô nhập bù ngày 30/9. Tổng 28 kiểm thử mô phỏng.
+
 ## Bổ sung: repair báo thiếu ID dòng 2242
 
 Đọc live cho thấy Booking dòng 2242 chưa có AD:AE và khác đơn với Booking_full dòng 2242. Không ghép theo số dòng. Bản mới để các dòng chưa có cả ID/checkpoint trong `pendingMigration`; chỉ phục hồi định dạng dòng đã xác định bằng ID. ID có sẵn mà mất ở full, hoặc mất ID nhưng còn checkpoint, vẫn dừng.

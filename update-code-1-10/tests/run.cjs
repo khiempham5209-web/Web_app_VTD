@@ -320,4 +320,15 @@ test('Repair defers uncheckpointed rows but refuses a missing known ID',()=>{
  assert.throws(()=>e.c.pnRepairMigrationFormats(),/Thiếu ID full/);
  main.rows[2][29]='';assert.throws(()=>e.c.pnRepairMigrationFormats(),/checkpoint nhưng mất ID/);
 });
+test('Repair defers primary-only blank derived column; migration restores it without losing late Booking',()=>{
+ const e=environment();seed(e);e.c.pnMigrateFull();delete e.props.PN_FULL_READY;
+ const main=e.sheets.get('Booking'),full=e.sheets.get('Booking_full');
+ main.rows[1][15]='';const late=main.rows[1].slice(0,16);late[0]='30/09/2026';late[1]='late-order';main.rows.push(late);
+ const result=e.c.pnRepairMigrationFormats();assert.equal(result.ok,true);assert.equal(result.pendingMigration.length,2);
+ assert.equal(main.rows[1][15],'');assert.equal(full.rows[1][15],2);
+ e.c.pnMigrateFull();assert.equal(e.c.pnAudit_().ok,true);assert.equal(main.rows[1][15],2);
+ assert.equal(full.rows.filter(r=>r[1]==='late-order').length,1);
+ delete e.props.PN_FULL_READY;main.rows[1][15]='';full.rows[1][9]=999;
+ assert.throws(()=>e.c.pnRepairMigrationFormats(),/thay đổi dữ liệu thật/);
+});
 console.log('RESULT '+passed+' tests passed.');
