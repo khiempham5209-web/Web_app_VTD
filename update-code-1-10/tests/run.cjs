@@ -309,4 +309,15 @@ test('Formatting equivalence does not hide changed numbers, strings or dates',()
  assert.equal(e.c.pnFormatOnlyEquivalent_('46206',46206),false);
  assert.equal(e.c.pnFormatOnlyEquivalent_(2,3),false);
 });
+test('Repair defers uncheckpointed rows but refuses a missing known ID',()=>{
+ const e=environment();seed(e);e.c.pnMigrateFull();delete e.props.PN_FULL_READY;
+ const main=e.sheets.get('Booking');const fresh=main.rows[1].slice(0,16);fresh[1]='new-order';main.rows.push(fresh);
+ let result=e.c.pnRepairMigrationFormats();assert.equal(result.ok,true);assert.equal(result.migrationReady,false);
+ assert.equal(result.pendingMigration.length,1);assert.equal(result.pendingMigration[0].row,3);
+ assert.equal(main.rows[2][29],undefined);assert.equal(e.c.pnAudit_().ok,false);
+ e.c.pnMigrateFull();assert.equal(e.c.pnAudit_().ok,true);
+ delete e.props.PN_FULL_READY;main.rows[2][29]='missing-known-id';
+ assert.throws(()=>e.c.pnRepairMigrationFormats(),/Thiếu ID full/);
+ main.rows[2][29]='';assert.throws(()=>e.c.pnRepairMigrationFormats(),/checkpoint nhưng mất ID/);
+});
 console.log('RESULT '+passed+' tests passed.');

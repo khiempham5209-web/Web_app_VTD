@@ -265,13 +265,18 @@ function pnRepairMigrationFormats() {
     const props=PropertiesService.getScriptProperties();
     if(props.getProperty('PN_FULL_READY')||props.getProperty('PN_CLEANUP_PENDING'))
       throw new Error('Chỉ dùng phục hồi migration chưa hoàn tất, chưa dọn.');
-    const plans=[];
+    const plans=[],pendingMigration=[];
     PN_FULL.pairs.forEach(p=>{
       const main=pnSheet_(p.main),full=pnSheet_(p.full),history=pnRows_(full,31),byId=new Map();
       history.forEach((r,i)=>{if(r[29]){if(byId.has(r[29]))throw new Error('Trùng ID full');byId.set(r[29],{r,row:i+2});}});
       const changes=[];
       pnRows_(main,31).forEach((r,i)=>{
         if(!pnHasData_(r,p))return;
+        if(!pnText_(r[29])) {
+          if(pnText_(r[30]))throw new Error('Có checkpoint nhưng mất ID: '+p.main+' dòng '+(i+2));
+          pendingMigration.push({sheet:p.main,row:i+2});
+          return;
+        }
         const match=byId.get(r[29]);
         if(!match)throw new Error('Thiếu ID full: '+p.main+' dòng '+(i+2));
         if(pnFingerprint_(r,p)===pnFingerprint_(match.r,p))return;
@@ -284,9 +289,13 @@ function pnRepairMigrationFormats() {
     });
     plans.forEach(x=>pnCopyMappedFormats_(x.main,x.full,x.changes,x.p.width));
     SpreadsheetApp.flush();
-    const audit=pnAudit_();console.log(JSON.stringify(audit));
-    if(!audit.ok)throw new Error(JSON.stringify(audit));
-    return audit;
+    // Only uncheckpointed rows may remain pending; never weaken the migration audit.
+    const audit=pnAudit_();
+    const unexpected=audit.results.flatMap(result=>result.errors.filter(error=>
+      !pendingMigration.some(x=>x.sheet===result.sheet&&error==='Chưa khớp dòng '+x.row)));
+    if(unexpected.length)throw new Error(JSON.stringify(audit));
+    const result={ok:true,scope:'formatRepair',migrationReady:audit.ok,pendingMigration,audit};
+    console.log(JSON.stringify(result));return result;
   });
 }
 function pnMigrateFull() {

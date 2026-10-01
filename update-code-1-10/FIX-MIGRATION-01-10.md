@@ -1,5 +1,11 @@
 # Sửa migration: 4 dòng Booking chưa khớp
 
+## Bổ sung: repair báo thiếu ID dòng 2242
+
+Đọc live cho thấy Booking dòng 2242 chưa có AD:AE và khác đơn với Booking_full dòng 2242. Không ghép theo số dòng. Bản mới để các dòng chưa có cả ID/checkpoint trong `pendingMigration`; chỉ phục hồi định dạng dòng đã xác định bằng ID. ID có sẵn mà mất ở full, hoặc mất ID nhưng còn checkpoint, vẫn dừng.
+
+Thay lại duy nhất FullStore.gs bằng apps-script/00_FullStore.gs mới. Chạy pnRepairMigrationFormats(). Kết quả `ok:true, scope:formatRepair` nghĩa là bước sửa định dạng đạt; `migrationReady:false` và audit chưa khớp các dòng pending là dự kiến. Sau đó chạy pnMigrateFull() để đối soát các dòng đó theo khóa, rồi pnAuditFull(). Chỉ migration/audit cuối cùng `ok:true` mới cho phép tiếp tục triển khai. Không xóa full/AD:AE hoặc tự đánh dấu READY. 27 kiểm thử mô phỏng đạt sau bổ sung.
+
 Log thực tế: Booking 2273/2273, lỗi dòng 742, 747, 1053, 1104; File đơn 2543/2543 và Chứng từ_FF 2329/2329 khớp.
 
 Đã đọc đúng 4 dòng ở Booking và Booking_full: giá trị và ID giống nhau; cột K bên chính có định dạng DATE `d.m`, bên full có NUMBER `#,##0`. Code cũ lấy định dạng dòng 2 áp toàn bảng full, làm getValues trả Date ở chính nhưng number ở full. Không phải thiếu 4 hồ sơ. Chưa xác định giá trị nghiệp vụ Số Thùng ban đầu trước khi Sheets chuyển thành ngày; bản sửa không đoán hay đổi số thùng.

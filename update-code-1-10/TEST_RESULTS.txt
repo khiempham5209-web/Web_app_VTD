@@ -43,7 +43,11 @@ PASS Archived received/cancelled rows stay out of main, old pending returns to m
 {"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
 PASS Full source init carries epoch; frontend candidate parses and retains offline queue
 {"ok":true,"results":[{"sheet":"Booking","primary":2,"full":2,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
-{"ok":true,"results":[{"sheet":"Booking","primary":2,"full":2,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+{"ok":true,"scope":"formatRepair","migrationReady":true,"pendingMigration":[],"audit":{"ok":true,"results":[{"sheet":"Booking","primary":2,"full":2,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}}
 PASS Mixed date-formatted Booking cells survive migration and interrupted-format recovery
 PASS Formatting equivalence does not hide changed numbers, strings or dates
-RESULT 26 tests passed.
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+{"ok":true,"scope":"formatRepair","migrationReady":false,"pendingMigration":[{"sheet":"Booking","row":3}],"audit":{"ok":false,"results":[{"sheet":"Booking","primary":2,"full":1,"errors":["Chưa khớp dòng 3"]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}}
+{"ok":true,"results":[{"sheet":"Booking","primary":2,"full":2,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS Repair defers uncheckpointed rows but refuses a missing known ID
+RESULT 27 tests passed.
