@@ -331,4 +331,20 @@ test('Repair defers primary-only blank derived column; migration restores it wit
  delete e.props.PN_FULL_READY;main.rows[1][15]='';full.rows[1][9]=999;
  assert.throws(()=>e.c.pnRepairMigrationFormats(),/thay đổi dữ liệu thật/);
 });
+test('One-step recovery restores shifted IDs, preserves primary edits and late orders',()=>{
+ const e=environment();seed(e);e.c.pnMigrateFull();delete e.props.PN_FULL_READY;
+ const main=e.sheets.get('Booking');main.rows[0][16]='__PN_ID';main.rows[0][17]='__PN_BASE';
+ main.rows[1][16]=main.rows[1][29];main.rows[1][17]=main.rows[1][30];main.rows[1][29]='';main.rows[1][30]='';
+ main.rows[1][14]='Nội thành';
+ const late=main.rows[1].slice(0,16);late[1]='late';late[0]='30/09/2026';main.rows.splice(1,0,late);
+ const result=e.c.pnRecoverFullMigration();assert.equal(result.ok,true);
+ assert.equal(main.rows[2][29],main.rows[2][16]);assert.equal(main.rows[2][14],'Nội thành');
+ assert.equal(e.sheets.get('Booking_full').rows.filter(r=>r[1]==='late').length,1);
+});
+test('One-step recovery refuses wrong moved identity before writing metadata',()=>{
+ const e=environment();seed(e);e.c.pnMigrateFull();delete e.props.PN_FULL_READY;
+ const main=e.sheets.get('Booking');main.rows[0][16]='__PN_ID';main.rows[0][17]='__PN_BASE';
+ main.rows[1][16]=main.rows[1][29];main.rows[1][17]=main.rows[1][30];main.rows[1][29]='';main.rows[1][30]='';main.rows[1][1]='wrong-order';
+ assert.throws(()=>e.c.pnRecoverFullMigration(),/không khớp hồ sơ/);assert.equal(main.rows[1][29],'');
+});
 console.log('RESULT '+passed+' tests passed.');

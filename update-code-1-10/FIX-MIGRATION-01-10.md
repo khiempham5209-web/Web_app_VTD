@@ -1,5 +1,13 @@
 # Sửa migration: 4 dòng Booking chưa khớp
 
+## Hướng dẫn hiện tại — phục hồi bằng một hàm
+
+Thay nội dung FullStore.gs bằng apps-script/00_FullStore.gs mới. Tạm dừng nhập/sửa và trigger cũ. Chạy **pnRecoverFullMigration()** thay cho chuỗi thao tác thủ công bên dưới.
+
+Hàm kiểm tra ID Booking ở Q:R theo ID, checkpoint và mã đơn trong full; chỉ chép sang AD:AE khi đích trống hoặc đã khớp. Giữ Q:R làm đối chiếu, không xóa. Kiểm tra kế hoạch đối soát cả 3 cặp trước khi ghi ID; sau đó sửa định dạng và gọi migration/audit. Không clear chính, không ghi VHFF, không bật trigger hoặc dọn. Thành công có log **RECOVERY_COMPLETE** và **ok:true**. 30 kiểm thử mô phỏng đạt; chưa chạy hàm trên Apps Script thật.
+
+Các mục dưới ghi lại diễn biến và hướng dẫn cũ, không cần chạy riêng từng bước khi dùng pnRecoverFullMigration.
+
 ## Bổ sung: dòng 2, cột P chính trống
 
 Đã đọc trực tiếp Booking!A2:AE2 và Booking_full!A2:AE2: P chính trống, P full = 2. Repair hiện cho phép thay đổi chỉ bên chính khi fingerprint của full (sau phục hồi kiểu Date/number tương đương) vẫn bằng checkpoint chung. Không ghi đè giá trị chính; đưa vào pendingMigration với reason primaryChangedOnly. Migration tiếp theo tính lại các cột công thức và đối soát như bình thường. Nếu full cũng thay đổi, vẫn dừng. Thay duy nhất FullStore.gs, chạy repair → migration → audit, không xóa lô nhập bù ngày 30/9. Tổng 28 kiểm thử mô phỏng.

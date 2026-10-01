@@ -307,6 +307,56 @@ function pnRepairMigrationFormats() {
     console.log(JSON.stringify(result));return result;
   });
 }
+// One entry point for the interrupted migration with Booking metadata shifted to Q:R.
+function pnRecoverFullMigration() {
+  return pnWithLock_(()=>{
+    const props=PropertiesService.getScriptProperties();
+    if(props.getProperty('PN_FULL_READY')||props.getProperty('PN_CLEANUP_PENDING'))
+      throw new Error('Chỉ phục hồi migration chưa hoàn tất.');
+    const p=PN_FULL.pairs[0],main=pnSheet_(p.main),full=pnSheet_(p.full);
+    const headers=main.getRange(1,17,1,2).getValues()[0];
+    const rows=pnRows_(main,31),history=pnRows_(full,31),byId=new Map(),updates=[];
+    history.forEach(r=>{if(r[29]){if(byId.has(r[29]))throw new Error('Trùng ID full');byId.set(r[29],r);}});
+    const virtual=rows.map(r=>r.slice());
+    if(headers[0]==='__PN_ID'&&headers[1]==='__PN_BASE') {
+      virtual.forEach((r,i)=>{
+        if(!pnHasData_(r,p)||!pnText_(r[16]))return;
+        const id=pnText_(r[16]),base=pnText_(r[17]),other=byId.get(id);
+        if(!other||!base||base!==other[30]||pnKey_(r,p)!==pnKey_(other,p))
+          throw new Error('ID Q:R không khớp hồ sơ full: Booking dòng '+(i+2));
+        if(r[29]||r[30]) {
+          if(r[29]!==id||r[30]!==base)throw new Error('AD:AE khác Q:R: Booking dòng '+(i+2));
+          return;
+        }
+        r[29]=id;r[30]=base;updates.push({row:i+2,values:[id,base]});
+      });
+    }
+    // Preflight all pairs using virtual restored identities and equivalent Date types.
+    // Real two-sided edits, mismatched keys and duplicate IDs stop before any write.
+    PN_FULL.pairs.forEach(pair=>{
+      const primary=pair.main===p.main?virtual:pnRows_(pnSheet_(pair.main),31);
+      const archived=(pair.main===p.main?history:pnRows_(pnSheet_(pair.full),31)).map(r=>r.slice());
+      const indexed=new Map();archived.forEach(r=>{if(r[29])indexed.set(r[29],r);});
+      primary.forEach(r=>{
+        const other=indexed.get(r[29]);if(!other)return;
+        r.slice(0,pair.width).forEach((v,c)=>{
+          if((v instanceof Date)!==(other[c] instanceof Date)&&pnFormatOnlyEquivalent_(v,other[c]))other[c]=v;
+        });
+      });
+      const plan=pnPlanPair_(pair,primary,archived);
+      if(plan.issues.length)throw new Error('Chưa ghi dữ liệu. '+plan.issues.slice(0,12).join('\n'));
+    });
+    // Copy only verified metadata to the original fixed columns; retain Q:R as evidence.
+    pnSize_(main,Math.max(2,main.getLastRow()),31);
+    main.getRange(1,30,1,2).setValues([['__PN_ID','__PN_BASE']]);
+    pnWriteBlocks_(main,updates,30,2);
+    SpreadsheetApp.flush();
+    pnRepairMigrationFormats();
+    const result=pnMigrateFull();
+    console.log('RECOVERY_COMPLETE: '+JSON.stringify(result));
+    return result;
+  });
+}
 function pnMigrateFull() {
   return pnWithLock_(()=>{
     // Does not clear primary or publish external reports.
