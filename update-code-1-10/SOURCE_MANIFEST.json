@@ -1,0 +1,56 @@
+[
+  {
+    "file": "01_API.gs",
+    "source": "originals/01_API.gs",
+    "attachmentId": "f1fcd8aa-2ee2-4f03-bb79-3de77b41ace5",
+    "sha256": "8e9be5bc8156b959e2ab66c2f479ef2e099000143bd32b8f8b842fcae37896b4"
+  },
+  {
+    "file": "02_Reject.gs",
+    "source": "originals/02_Reject.gs",
+    "attachmentId": "fec7ac80-47a4-4d22-9250-7c9b34a7762e",
+    "sha256": "ead426a635e8ec71e9b535fa2c1f5316bdb19284ec81e1e9602877bad425310c"
+  },
+  {
+    "file": "03_Booking.gs",
+    "source": "originals/03_Booking.gs",
+    "attachmentId": "faf66a8b-66e7-405c-89d8-f6f822c339e4",
+    "sha256": "1523e9551193a356b321900a1bbf405e1b0d20bd4403f42867dbc5647689f024"
+  },
+  {
+    "file": "04_Handover.gs",
+    "source": "originals/04_Handover.gs",
+    "attachmentId": "4653a741-25dc-4e84-89f9-de4ae27c605a",
+    "sha256": "f147523a51fb8064c3c28df3a17687be9a800eed31072e5f363d77e6d949ff16"
+  },
+  {
+    "file": "05_SKU.gs",
+    "source": "originals/05_SKU.gs",
+    "attachmentId": "30174d06-c826-4658-aed7-e7953ac41123",
+    "sha256": "d04012516e54d2bca8e14aa16e7fd0ea17b19fa66f705689f412db91526f9a8b"
+  },
+  {
+    "file": "06_VHFF.gs",
+    "source": "originals/06_VHFF.gs",
+    "attachmentId": "0898c9c2-e478-4523-b156-587faf3b9d3a",
+    "sha256": "cc31d8c7406b482f35feb1910786a576aaf92d34f87f6f561e509f0217761ae8"
+  },
+  {
+    "file": "07_Defect.gs",
+    "source": "originals/07_Defect.gs",
+    "attachmentId": "3b005606-06b8-4464-8b53-64916b15b4fb",
+    "sha256": "c25f32cd22ab336fb3c2690b24c7c0676a30b1a1bbbe7350ed483f10012f2194"
+  },
+  {
+    "file": "08_Incident.gs",
+    "source": "originals/08_Incident.gs",
+    "attachmentId": "2737a61d-2342-47ab-a1bf-46270c7f0fb8",
+    "sha256": "54bccddd10b54c7ab60245f0813007688ab1e0142c0eb219b36a8717cd71fba0"
+  },
+  {
+    "file": "09_Area.gs",
+    "source": "originals/09_Area.gs",
+    "attachmentId": "3ba0db59-0cbf-4705-85ca-ae33cd3b9d9c",
+    "sha256": "da0883ff5a883cd934b7816a96e188332e20383e873e55ab26d936caec0fdea5"
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "factor": 0.035893879030581485,
+  "bookingRows": 2240,
+  "orderRows": 2426,
+  "mismatches": [],
+  "existingLookupErrors": [
+    {
+      "sheet": "File đơn",
+      "row": 1342,
+      "columns": [
+        "P",
+        "Q"
+      ],
+      "reason": "XLOOKUP kho không có trong DS BC; effectiveValue xác nhận #N/A"
+    }
+  ],
+  "date": "2026-09-30"
+}

@@ -1,0 +1,45 @@
+PASS All Apps Script files compile together without duplicate const declarations
+PASS Original files are byte-preserved and SHA256 matches source
+PASS Month parsing validates dates, time zones, year rollover
+PASS Current month retained; old received/cancelled removed; pending/unknown retained
+PASS Formula equivalents preserve ROUNDUP sign, first XLOOKUP match and missing result
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS Migration retains repeated File đơn rows and all 17 document fields; rerun is idempotent
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS Retry after full write but before primary checkpoint does not duplicate repeated rows
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS Primary edits push; full edits pull; conflicting edits fail closed
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+{"ok":true,"results":[{"sheet":"Booking","primary":0,"full":1,"errors":[]},{"sheet":"File đơn","primary":0,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":2,"full":4,"errors":[]}]}
+PASS Cleanup refuses when disabled or VHFF fails; success preserves pivot and full
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS API full source lists old rows after primary cleanup; save ignores stale rowNumber
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS Duplicate API clientId returns same result, uploads once, mirrors full and main
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS Upload uncertainty is quarantined; same request never automatically uploads twice
+PASS Product rows deduplicate by request item ID
+PASS Request retry survives session-token renewal and stale row relocation
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS Later retry of completed document stage cannot overwrite a newer note
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS Full archive edits remain visible in VHFF handover after primary is cleared
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS VHFF reject sync uses historical File đơn and preserves both manual Ecom columns
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS VHFF returns retain booking date after primary Booking is cleared
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS VHFF worker acknowledges all destinations and notices later archive-only edits
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":2,"full":4,"errors":[]}]}
+PASS Interrupted cleanup blocks API and resumes without detaching identities
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS Interrupted cleanup refuses to overwrite a subsequent manual edit
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS Full filter includes hidden IDs and unexpected loss of history is blocked
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS Archived received/cancelled rows stay out of main, old pending returns to main
+{"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS Full source init carries epoch; frontend candidate parses and retains offline queue
+RESULT 24 tests passed.

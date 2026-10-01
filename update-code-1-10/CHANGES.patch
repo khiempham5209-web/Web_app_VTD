@@ -1,0 +1,698 @@
+diff --git "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\01_API.gs" "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\01_API.gs"
+index 2cd8ff4..5e6e627 100644
+--- "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\01_API.gs"	
++++ "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\01_API.gs"	
+@@ -1,3 +1,4 @@
++// FULL-TABS V1: install with 00/10/11 helpers; follow README, not legacy installation comments below.
+ /*************************************************
+ CHUNG TU FF WEB API
+ 
+@@ -8,7 +9,7 @@ as Web app. Frontend goi URL /exec cua SCP rieng nay.
+ 
+ const CONFIG = {
+   spreadsheetId: "1V39AVE2JfEtMPYqnG1-J75fKPDXU37fCnJ9Na3UXOco",
+-  sheetName: "Chứng từ_FF",
++  sheetName: "Chứng từ_full",
+   skuSheetName: "DS SKU",
+   productReturnSheetName: "Hoàn sản phẩm",
+   skuSchemaVersion: 3,
+@@ -35,8 +36,10 @@ function doPost(e) {
+ }
+ 
+ function apiInit_() {
++  pnRequireReady_();
+   const sh = sheet_();
+   return ok_({
++    sourceEpoch: PN_FULL.epoch,
+     sheetName: sh.getName(),
+     lastRow: sh.getLastRow(),
+     lastColumn: sh.getLastColumn(),
+@@ -248,7 +251,7 @@ function productReturnIndexForDate_(dateText) {
+   return out;
+ }
+ 
+-function apiSave_(params) {
++function pnApiSaveCore_(params) {
+   const query = clean_(params.maDon || params.query || params.po || params.orderNo);
+   const rowNumber = Number(params.rowNumber || 0);
+   if (!query && !rowNumber) return fail_("Thieu ma don can luu.");
+@@ -266,7 +269,7 @@ function apiSave_(params) {
+   const sh = sheet_();
+   const headers = headers_(sh);
+   const col = headerMap_(headers);
+-  const found = resolveRecordForSave_(sh, col, rowNumber, query);
++  const found = pnResolveSave_(sh, col, params);
+   if (!found || !found.rowNumber) return fail_("Khong tim thay dong can cap nhat trong Chung tu_FF.");
+ 
+   const maDonForFolder = clean_(query || found.record.maDon || found.record.po || found.record.orderNo);
+@@ -279,30 +282,24 @@ function apiSave_(params) {
+     if (invalid) return fail_(invalid);
+   }
+ 
+-  const upload = hasDocuments ? uploadFiles_(maDonForFolder, files) : {linkAnh: "", files: [], folderUrl: ""};
++  const upload = hasDocuments ? pnUploadOnce_("docs", () => uploadFiles_(maDonForFolder, files)) : {linkAnh: "", files: [], folderUrl: ""};
+   if (items.some(item => item.productSchema >= 2)) {
+     const hc = headerMap_(headers_(productReturnSheet_()));
+     if (!firstCol_(hc,['phan loai']) || !firstCol_(hc,['han su dung'])) return fail_('Thiếu header Phân loại hoặc Hạn sử dụng trong Hoàn sản phẩm.');
+   }
+-  const productUploads = items.map(item => uploadProductFiles_(found.record.orderNo || params.orderNo || maDonForFolder, item));
+-  const now = new Date();
++  const productUploads = items.map((item, i) => pnUploadOnce_("product:" + i, () => uploadProductFiles_(found.record.orderNo || params.orderNo || maDonForFolder, item)));
++  const now = pnRequestNow_();
+   const dateText = Utilities.formatDate(now, CONFIG.timezone, "dd/MM/yyyy");
+   const clockText = Utilities.formatDate(now, CONFIG.timezone, "HH:mm:ss");
+   const timeText = dateText + " " + clockText;
+   const user = clean_(params.userEmail || params.user || Session.getActiveUser().getEmail() || "");
+ 
+-  if (hasDocuments) {
+-    setCellByAliases_(sh, found.rowNumber, col, ["xac thuc hoa don"], clean_(params.xacThuc || params.xacThucHoaDon));
+-    setCellByAliases_(sh, found.rowNumber, col, ["ghi chu chung tu"], String(params.note || params.ghiChu || ""));
+-    if (upload.linkAnh) setCellByAliases_(sh, found.rowNumber, col, ["link anh"], upload.linkAnh);
+-    setCellByAliases_(sh, found.rowNumber, col, ["trang thai"], clean_(params.status || params.trangThai));
+-    setCellByAliases_(sh, found.rowNumber, col, ["thoi gian"], timeText);
+-    setCellByAliases_(sh, found.rowNumber, col, ["user thao tac"], user);
+-  }
++  if (hasDocuments) pnWriteDocumentOnce_(sh, found.rowNumber, col, params, upload, timeText, user);
+ 
+   const productRows = [];
+   if (hasProducts) {
+     const productSheet = productReturnSheet_();
++    pnProductIdColumn_(productSheet);
+     const productHeaders = headers_(productSheet);
+     const productCol = headerMap_(productHeaders);
+     items.forEach((item, index) => {
+@@ -327,11 +324,11 @@ function apiSave_(params) {
+       setArrayByAliases_(values, productCol, ["hinh anh", "link anh"], productUploads[index].linkAnh);
+       setArrayByAliases_(values, productCol, ["user thao tac", "user"], user);
+       setArrayByAliases_(values, productCol, ["cbm"], calculateProductCbm_(item));
++      values[pnProductIdColumn_(productSheet) - 1] = pnItemId_(item, index);
+       productRows.push(values);
+     });
+     if (productRows.length) {
+-      const startRow = Math.max(2, productSheet.getLastRow() + 1);
+-      productSheet.getRange(startRow, 1, productRows.length, productHeaders.length).setValues(productRows);
++      pnAppendProductsOnce_(productSheet, productRows, productHeaders.length);
+     }
+   }
+ 
+@@ -345,7 +342,7 @@ function apiSave_(params) {
+   }
+ 
+   SpreadsheetApp.flush();
+-  if (hasDocuments) callRejectSyncLocal_(found.rowNumber);
++  pnMarkDirty_(); // VHFF worker retries independently; never hide a failed sync.
+   const dataVersion = String(Date.now());
+   PropertiesService.getScriptProperties().setProperty("PN_DOCOPS_DATA_VERSION", dataVersion);
+   const response = ok_({
+@@ -363,7 +360,7 @@ function apiSave_(params) {
+     rowRelocated: rowNumber >= 2 && found.rowNumber !== rowNumber,
+     dataVersion
+   });
+-  rememberSavedRequest_(clientId, response);
++  // Durable request journal is finalized by apiSave_ after mirroring.
+   return response;
+ }
+ 
+@@ -526,6 +523,7 @@ function callRejectSyncLocal_(rowNumber) {
+ 
+ function sheet_() {
+   const ss = SpreadsheetApp.openById(CONFIG.spreadsheetId);
++  pnRequireReady_();
+   const sh = ss.getSheetByName(CONFIG.sheetName);
+   if (!sh) throw new Error("Khong thay tab " + CONFIG.sheetName);
+   return sh;
+@@ -544,7 +542,7 @@ function productReturnSheet_() {
+ }
+ 
+ function headers_(sh) {
+-  return sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0];
++  return pnHeaders_(sh);
+ }
+ 
+ function headerMap_(headers) {
+@@ -561,6 +559,8 @@ function findRecord_(query) {
+   const col = headerMap_(headers_(sh));
+   const values = sh.getRange(2, 1, lastRow - 1, lastCol).getDisplayValues();
+   const q = norm_(query);
++  const matches = values.map((row,i) => ({row,i})).filter(x => [pick_(x.row,col,["ma don ghtk","ma don"]),pick_(x.row,col,["ma po","po"]),pick_(x.row,col,["so don hang","od"])].some(v => norm_(v) === q));
++  if(matches.length > 1) throw new Error("Mã tra cứu khớp nhiều đơn; hãy dùng Số đơn hàng hoặc Mã GHTK duy nhất.");
+   for (let i = 0; i < values.length; i++) {
+     const row = values[i];
+     const candidates = [
+@@ -777,6 +777,7 @@ function safeName_(value) {
+ function ok_(data) {
+   data = data || {};
+   data.ok = true;
++  data.sourceEpoch = PN_FULL.epoch;
+   return data;
+ }
+ 
+@@ -807,7 +808,7 @@ function ks_pack(records, invalidRows, sourceId, lastRow) {
+ function ks_reply(snapshot, params) {
+   params = params || {};
+   if (params.version && params.version !== snapshot.version) return {ok:false, changed:true, message:'Nguồn đã thay đổi; cần đối soát lại.'};
+-  const common = {ok:true, protocol:1, version:snapshot.version, sourceId:snapshot.sourceId,
++  const common = {ok:true, sourceEpoch:PN_FULL.epoch, protocol:1, version:snapshot.version, sourceId:snapshot.sourceId,
+     total:snapshot.entries.length, invalidCount:snapshot.invalidRows.length, duplicateCount:snapshot.duplicates.length,
+     invalidRows:snapshot.invalidRows.slice(0, 30), duplicateRows:snapshot.duplicates.slice(0, 30), lastRow:snapshot.lastRow};
+   if (Array.isArray(params.keys)) {
+
+diff --git "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\02_Reject.gs" "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\02_Reject.gs"
+index 6b94dc0..69c6c54 100644
+--- "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\02_Reject.gs"	
++++ "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\02_Reject.gs"	
+@@ -1,3 +1,4 @@
++// FULL-TABS V1: install with 00/10/11 helpers; follow README, not legacy installation comments below.
+ /*************************************************
+ SYNC CHUNG TU KHONG DAT YC
+ 
+@@ -21,13 +22,14 @@ Sau khi paste code:
+ 
+ const REJECT_SYNC_CONFIG = {
+   sourceSpreadsheetId: "1V39AVE2JfEtMPYqnG1-J75fKPDXU37fCnJ9Na3UXOco",
+-  sourceSheetName: "Chứng từ_FF",
+-  orderSheetName: "File đơn",
++  sourceSheetName: "Chứng từ_full",
++  orderSheetName: "File đơn_full",
+   targetSpreadsheetId: "1ZLqeo_djwMJofqBCD3Ilk6lIkUmVsEfK7T5Oj9D6wmI",
+   targetSheetName: "Chứng từ không đạt YC"
+ };
+ 
+-function installSyncChungTuKhongDatYCTrigger() {
++function installSyncChungTuKhongDatYCTrigger() { return pnInstallTriggers(); /* superseded */
++
+   const fn = "onEditSyncChungTuKhongDatYC";
+   ScriptApp.getProjectTriggers()
+     .filter(t => t.getHandlerFunction() === fn)
+@@ -90,6 +92,8 @@ function syncAllChungTuKhongDatYC() {
+ 
+ function syncChungTuKhongDatYCRows_(rowNumbers) {
+   const sources = rejectSyncSourceRecordsByRows_(rowNumbers);
++  const pnKeys=sources.map(r=>rejectSyncNorm_(r.maDonGhtk)).filter(Boolean);
++  if(new Set(pnKeys).size!==pnKeys.length)throw new Error("Chứng từ trùng Mã GHTK; hoãn sync để tránh ghi sai đích.");
+   const orderMap = rejectSyncOrderInfoMap_();
+   const target = rejectSyncTargetSheet_();
+   rejectSyncEnsureTargetHeaders_(target);
+@@ -171,13 +175,7 @@ function rejectSyncTargetRowMapByMaDon_(sh, col) {
+ }
+ 
+ function rejectSyncWithLock_(fn) {
+-  const lock = LockService.getScriptLock();
+-  lock.waitLock(30000);
+-  try {
+-    return fn();
+-  } finally {
+-    lock.releaseLock();
+-  }
++  return pnWithLock_(fn);
+ }
+ 
+ /*
+@@ -368,7 +366,7 @@ function rejectSyncMapTrangThai_(value) {
+ }
+ 
+ function rejectSyncHeaders_(sh) {
+-  return sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0];
++  return pnHeaders_(sh);
+ }
+ 
+ function rejectSyncHeaderMap_(headers) {
+
+diff --git "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\03_Booking.gs" "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\03_Booking.gs"
+index dbe84a1..65d4b49 100644
+--- "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\03_Booking.gs"	
++++ "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\03_Booking.gs"	
+@@ -1,3 +1,4 @@
++// FULL-TABS V1: install with 00/10/11 helpers; follow README, not legacy installation comments below.
+ /*************************************************
+ SYNC BOOKING -> CHUNG TU_FF
+ 
+@@ -28,12 +29,13 @@ Sau khi paste code:
+ const BOOKING_SYNC_CONFIG = {
+   spreadsheetId: "1V39AVE2JfEtMPYqnG1-J75fKPDXU37fCnJ9Na3UXOco",
+   bookingSheetName: "Booking",
+-  orderSheetName: "File đơn",
+-  targetSheetName: "Chứng từ_FF",
++  orderSheetName: "File đơn_full",
++  targetSheetName: "Chứng từ_full",
+   timezone: "Asia/Saigon"
+ };
+ 
+-function installSyncBookingToChungTuFFTrigger() {
++function installSyncBookingToChungTuFFTrigger() { return pnInstallTriggers(); /* superseded */
++
+   const editFn = "onEditSyncBookingToChungTuFF";
+   const changeFn = "onChangeSyncBookingToChungTuFF";
+   ScriptApp.getProjectTriggers()
+@@ -210,6 +212,8 @@ function syncBookingRowsToChungTuFF_(startRow, endRow) {
+   const nextRow = Math.max(target.getLastRow() + 1, 2);
+   target.getRange(nextRow, 1, output.length, outputWidth).setValues(output);
+   bookingSyncApplyControlColumnsBatch_(target, targetCol, nextRow, output.length);
++  pnStampFullIds_(PN_FULL.pairs[2]);
++  pnMarkDirty_();
+   return {ok: true, added: output.length, skipped};
+ }
+ 
+@@ -578,13 +582,7 @@ function bookingSyncUpdateTargetDatesFromBookingRows_(startRow, endRow) {
+ }
+ 
+ function bookingSyncWithLock_(fn) {
+-  const lock = LockService.getScriptLock();
+-  lock.waitLock(30000);
+-  try {
+-    return fn();
+-  } finally {
+-    lock.releaseLock();
+-  }
++  return pnWithLock_(fn);
+ }
+ 
+ function bookingSyncRangeIntersectsAnyColumn_(range, columns) {
+@@ -594,7 +592,7 @@ function bookingSyncRangeIntersectsAnyColumn_(range, columns) {
+ }
+ 
+ function bookingSyncHeaders_(sh) {
+-  return sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0];
++  return pnHeaders_(sh);
+ }
+ 
+ function bookingSyncHeaderMap_(headers) {
+
+diff --git "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\04_Handover.gs" "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\04_Handover.gs"
+index 3f844e1..68a2d96 100644
+--- "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\04_Handover.gs"	
++++ "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\04_Handover.gs"	
+@@ -1,3 +1,4 @@
++// FULL-TABS V1: install with 00/10/11 helpers; follow README, not legacy installation comments below.
+ /*************************************************
+ SYNC BAN GIAO CHUNG TU
+ 
+@@ -21,12 +22,13 @@ Sau khi paste code:
+ 
+ const HANDOVER_SYNC_CONFIG = {
+   spreadsheetId: "1V39AVE2JfEtMPYqnG1-J75fKPDXU37fCnJ9Na3UXOco",
+-  sourceSheetName: "Chứng từ_FF",
++  sourceSheetName: "Chứng từ_full",
+   targetSheetName: "Bàn giao chứng từ",
+   timezone: "Asia/Saigon"
+ };
+ 
+-function installSyncBanGiaoChungTuTrigger() {
++function installSyncBanGiaoChungTuTrigger() { return pnInstallTriggers(); /* superseded */
++
+   const editFn = "onEditSyncBanGiaoChungTu";
+   const openFn = "onOpenSyncBanGiaoChungTu";
+   ScriptApp.getProjectTriggers()
+@@ -368,7 +370,7 @@ function handoverSyncTargetSheet_() {
+ }
+ 
+ function handoverSyncHeaders_(sh) {
+-  return sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0];
++  return pnHeaders_(sh);
+ }
+ 
+ function handoverSyncHeaderMap_(headers) {
+
+diff --git "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\05_SKU.gs" "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\05_SKU.gs"
+index 569ac03..07817e3 100644
+--- "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\05_SKU.gs"	
++++ "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\05_SKU.gs"	
+@@ -1,3 +1,4 @@
++// FULL-TABS V1: install with 00/10/11 helpers; follow README, not legacy installation comments below.
+ /*************************************************
+ SYNC TT NHAP <-> DS SKU  (DS SKU la NGUON CHUAN: chi them ma moi / dien o trong, khong ghi de)
+ 
+@@ -37,7 +38,8 @@ const SKU_ALIAS = {
+   quyCach: ["quy cach/thung", "quy cách/thùng", "quy cach", "quy cách"]
+ };
+ 
+-function installSyncTTNhapDSSKUTrigger() {
++function installSyncTTNhapDSSKUTrigger() { return pnInstallTriggers(); /* superseded */
++
+   const fn = "onEditSyncTTNhapDSSKU";
+   ScriptApp.getProjectTriggers()
+     .filter(t => t.getHandlerFunction() === fn)
+@@ -301,13 +303,7 @@ function skuSyncFormatTargetRows_(target, startRow, numRows) {
+ }
+ 
+ function skuSyncWithLock_(fn) {
+-  const lock = LockService.getScriptLock();
+-  lock.waitLock(30000);
+-  try {
+-    return fn();
+-  } finally {
+-    lock.releaseLock();
+-  }
++  return pnWithLock_(fn);
+ }
+ 
+ function skuSyncRangeIntersectsAnyColumn_(range, columns) {
+
+diff --git "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\06_VHFF.gs" "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\06_VHFF.gs"
+index 0c115c0..af10956 100644
+--- "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\06_VHFF.gs"	
++++ "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\06_VHFF.gs"	
+@@ -1,7 +1,8 @@
++// FULL-TABS V1: install with 00/10/11 helpers; follow README, not legacy installation comments below.
+ const SOURCE_SPREADSHEET_ID = '1V39AVE2JfEtMPYqnG1-J75fKPDXU37fCnJ9Na3UXOco';
+ const TARGET_SPREADSHEET_ID = '1ZLqeo_djwMJofqBCD3Ilk6lIkUmVsEfK7T5Oj9D6wmI';
+ 
+-const DOC_SOURCE_SHEET = 'Chứng từ_FF';
++const DOC_SOURCE_SHEET = 'Chứng từ_full';
+ const DOC_TARGET_SHEET = 'Đã bàn giao CT';
+ const PRODUCT_SOURCE_SHEET = 'Hoàn sản phẩm';
+ const PRODUCT_TARGET_SHEET = 'Bàn giao SP_Hàng hoàn';
+@@ -97,7 +98,7 @@ function syncBanGiaoSanPham() {
+     requiredAnyHeaders: ['Mã vật tư', 'Tên sản phẩm', 'Mã đơn'],
+     handoverHeader: 'Ngày bàn giao',
+     lookupByOrderNumber: {
+-      sheetName: 'Booking',
++      sheetName: 'Booking_full',
+       // Booking dung cot Row Labels lam khoa, gia tri cua cot nay la So don hang.
+       sourceKeyHeaders: ['Row Labels', 'Số đơn hàng', 'Mã đơn hàng KH', 'Mã đơn hàng', 'OD'],
+       lookupValueHeaders: ['Ngày'],
+@@ -107,7 +108,7 @@ function syncBanGiaoSanPham() {
+   });
+ }
+ 
+-function onEdit(e) {
++function pnLegacyBanGiaoOnEdit(e) {
+   handleBanGiaoEdit(e);
+ }
+ 
+@@ -137,7 +138,8 @@ function handleBanGiaoEdit(e) {
+   });
+ }
+ 
+-function setupBanGiaoTrigger() {
++function setupBanGiaoTrigger() { return pnInstallTriggers(); /* superseded */
++
+   const ss = SpreadsheetApp.openById(SOURCE_SPREADSHEET_ID);
+   ScriptApp.getProjectTriggers()
+     .filter(trigger => trigger.getHandlerFunction() === 'handleBanGiaoEdit')
+@@ -181,12 +183,14 @@ function syncSheetByDate_(config) {
+     return dateDiff || a.sourceIndex - b.sourceIndex;
+   });
+ 
+-  clearTargetContent_(targetSheet, outputWidth);
++  pnRequireReady_();
++  const pnOldLast = targetSheet.getLastRow();
+   targetSheet.getRange(1, 1, 1, outputWidth).setValues([config.targetHeaders]);
+   if (output.length) {
+     targetSheet.getRange(2, 1, output.length, outputWidth).setValues(output.map(item => item.values));
+   }
+ 
++  if (pnOldLast > output.length + 1) targetSheet.getRange(output.length + 2, 1, pnOldLast - output.length - 1, outputWidth).clearContent();
+   applyTargetFormats_(targetSheet, config, Math.max(output.length + 1, 2));
+ }
+ 
+@@ -240,12 +244,14 @@ function syncSheetWhenHasProduct_(config) {
+     return a.sourceIndex - b.sourceIndex;
+   });
+ 
+-  clearTargetContent_(targetSheet, outputWidth);
++  pnRequireReady_();
++  const pnOldLast = targetSheet.getLastRow();
+   targetSheet.getRange(1, 1, 1, outputWidth).setValues([config.targetHeaders]);
+   if (output.length) {
+     targetSheet.getRange(2, 1, output.length, outputWidth).setValues(output.map(item => item.values));
+   }
+ 
++  if (pnOldLast > output.length + 1) targetSheet.getRange(output.length + 2, 1, pnOldLast - output.length - 1, outputWidth).clearContent();
+   applyTargetFormats_(targetSheet, config, Math.max(output.length + 1, 2));
+ }
+ 
+@@ -345,11 +351,5 @@ function hasValue_(value) {
+ }
+ 
+ function banGiaoWithLock_(fn) {
+-  const lock = LockService.getScriptLock();
+-  lock.waitLock(30000);
+-  try {
+-    return fn();
+-  } finally {
+-    lock.releaseLock();
+-  }
++  return pnWithLock_(fn);
+ }
+
+diff --git "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\07_Defect.gs" "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\07_Defect.gs"
+index d7a2937..b85e94c 100644
+--- "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\07_Defect.gs"	
++++ "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\07_Defect.gs"	
+@@ -1,3 +1,4 @@
++// FULL-TABS V1: install with 00/10/11 helpers; follow README, not legacy installation comments below.
+ /*************************************************
+ SYNC HANG LOI -> HANG LOI CHUYEN SANG GHTK
+ 
+@@ -32,7 +33,8 @@ const DEFECT_SYNC_CONFIG = {
+   targetColumnCount: 8
+ };
+ 
+-function installSyncHangLoiGHTKTrigger() {
++function installSyncHangLoiGHTKTrigger() { return pnInstallTriggers(); /* superseded */
++
+   const fn = "onEditSyncHangLoiGHTK";
+   ScriptApp.getProjectTriggers()
+     .filter(t => t.getHandlerFunction() === fn)
+@@ -136,10 +138,12 @@ function syncAllHangLoiToGHTK() {
+     });
+   }
+ 
+-  defectSyncClearTargetData_(target);
++  pnRequireReady_();
++  const pnOldLast = target.getLastRow();
+   if (output.length) {
+     target.getRange(DEFECT_SYNC_CONFIG.targetDataStartRow, 1, output.length, DEFECT_SYNC_CONFIG.targetColumnCount).setValues(output);
+   }
++  if(pnOldLast > output.length + 1) target.getRange(output.length + 2, 1, pnOldLast - output.length - 1, DEFECT_SYNC_CONFIG.targetColumnCount).clearContent();
+   defectSyncFormatTarget_(target, output.length);
+   return {ok: true, count: output.length};
+ }
+@@ -320,13 +324,7 @@ function defectSyncClean_(value) {
+ }
+ 
+ function defectSyncWithLock_(fn) {
+-  const lock = LockService.getScriptLock();
+-  lock.waitLock(30000);
+-  try {
+-    return fn();
+-  } finally {
+-    lock.releaseLock();
+-  }
++  return pnWithLock_(fn);
+ }
+ 
+ function defectSyncNorm_(value) {
+
+diff --git "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\08_Incident.gs" "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\08_Incident.gs"
+index 7f449e0..ea9bca8 100644
+--- "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\08_Incident.gs"	
++++ "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\08_Incident.gs"	
+@@ -1,3 +1,4 @@
++// FULL-TABS V1: install with 00/10/11 helpers; follow README, not legacy installation comments below.
+ /*************************************************
+ SYNC SU VU -> SU VU BANH XEP
+ 
+@@ -12,8 +13,8 @@ Sau khi paste code:
+ const SUVU_BANH_XEP_SYNC_CONFIG = {
+   sourceSpreadsheetId: "1V39AVE2JfEtMPYqnG1-J75fKPDXU37fCnJ9Na3UXOco",
+   sourceSheetId: 529840243,
+-  orderSheetId: 1754451801,
+-  orderSheetName: "File đơn",
++  orderSheetId: 872196600,
++  orderSheetName: "File đơn_full",
+   targetSpreadsheetId: "1ZLqeo_djwMJofqBCD3Ilk6lIkUmVsEfK7T5Oj9D6wmI",
+   targetSheetId: 318091884,
+   headerRow: 1,
+@@ -32,7 +33,8 @@ const SUVU_BANH_XEP_SYNC_CONFIG = {
+   ]
+ };
+ 
+-function installSyncSuVuBanhXepTrigger() {
++function installSyncSuVuBanhXepTrigger() { return pnInstallTriggers(); /* superseded */
++
+   const handlers = ["onEditSyncSuVuBanhXep", "onEditSyncSuvuBanhXep"];
+   ScriptApp.getProjectTriggers()
+     .filter(t => handlers.indexOf(t.getHandlerFunction()) >= 0)
+@@ -46,7 +48,8 @@ function installSyncSuVuBanhXepTrigger() {
+   return "Installed trigger: onEditSyncSuVuBanhXep";
+ }
+ 
+-function installSyncSuvuBanhXepTrigger() {
++function installSyncSuvuBanhXepTrigger() { return pnInstallTriggers(); /* superseded */
++
+   return installSyncSuVuBanhXepTrigger();
+ }
+ 
+@@ -124,7 +127,8 @@ function syncAllSuVuBanhXep_() {
+     });
+   }
+ 
+-  suVuBanhXepClearTarget_(target, targetWidth);
++  pnRequireReady_();
++  const pnOldLast = target.getLastRow();
+   target
+     .getRange(SUVU_BANH_XEP_SYNC_CONFIG.headerRow, 1, 1, outputHeaders.length)
+     .setValues([outputHeaders]);
+@@ -135,6 +139,7 @@ function syncAllSuVuBanhXep_() {
+       .setValues(outputRows);
+   }
+ 
++  if(pnOldLast > outputRows.length + 1) target.getRange(outputRows.length + 2, 1, pnOldLast - outputRows.length - 1, targetWidth).clearContent();
+   suVuBanhXepFormatTarget_(target, outputRows.length, outputHeaders.length);
+ 
+   return {
+@@ -176,7 +181,7 @@ function suVuBanhXepOrderInfoMap_() {
+   if (lastRow < 2) return {};
+ 
+   const lastCol = sh.getLastColumn();
+-  const headers = sh.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
++  const headers = pnHeaders_(sh);
+   const col = suVuBanhXepHeaderMap_(headers);
+   const values = sh.getRange(2, 1, lastRow - 1, lastCol).getDisplayValues();
+   const out = {};
+@@ -297,25 +302,7 @@ function suVuBanhXepPick_(row, col, aliases, fallbackIndex) {
+   return "";
+ }
+ 
+-function suVuBanhXepSyncWithLock_(fn) {
+-  const lock = LockService.getScriptLock();
+-
+-  if (!lock.tryLock(10000)) {
+-    const result = {
+-      ok: false,
+-      skipped: true,
+-      reason: "Dang co sync khac chay, thu lai sau vai giay"
+-    };
+-    console.warn(JSON.stringify(result));
+-    return result;
+-  }
+-
+-  try {
+-    return fn();
+-  } finally {
+-    lock.releaseLock();
+-  }
+-}
++function suVuBanhXepSyncWithLock_(fn) { return pnWithLock_(fn); }
+ 
+ function suVuBanhXepClean_(value) {
+   return String(value == null ? "" : value).trim();
+
+diff --git "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\09_Area.gs" "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\09_Area.gs"
+index 9b75763..5cb46f7 100644
+--- "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\09_Area.gs"	
++++ "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\apps-script\\09_Area.gs"	
+@@ -1,3 +1,4 @@
++// FULL-TABS V1: install with 00/10/11 helpers; follow README, not legacy installation comments below.
+ /*************************************************
+ SYNC KHU VUC BOOKING / FILE DON -> BOOKING
+ 
+@@ -21,13 +22,14 @@ Sau khi paste code:
+ const KHUVUC_BOOKING_SYNC_CONFIG = {
+   spreadsheetId: "1V39AVE2JfEtMPYqnG1-J75fKPDXU37fCnJ9Na3UXOco",
+   bookingSheetName: "Booking",
+-  orderSheetName: "File đơn",
++  orderSheetName: "File đơn_full",
+   bookingAreaHeader: "Khu vực",
+   bookingAreaInsertAfterAliases: ["note", "cbm", "thanh tien", "thành tiền"],
+   dataStartRow: 2
+ };
+ 
+-function installSyncKhuVucBookingToChungTuFFTrigger() {
++function installSyncKhuVucBookingToChungTuFFTrigger() { return pnInstallTriggers(); /* superseded */
++
+   const editFn = "onEditSyncKhuVucBookingToChungTuFF";
+   const changeFn = "onChangeSyncKhuVucBookingToChungTuFF";
+   ScriptApp.getProjectTriggers()
+@@ -275,7 +277,7 @@ function khuVucBookingSheetByName_(sheetName) {
+ }
+ 
+ function khuVucBookingHeaders_(sh) {
+-  return sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0];
++  return pnHeaders_(sh);
+ }
+ 
+ function khuVucBookingHeaderMap_(headers) {
+@@ -295,20 +297,7 @@ function khuVucBookingFirstCol_(col, aliases) {
+   return 0;
+ }
+ 
+-function khuVucBookingSyncWithLock_(fn) {
+-  const lock = LockService.getScriptLock();
+-  if (!lock.tryLock(10000)) {
+-    const result = {ok: false, skipped: true, reason: "Dang co sync khac chay, thu lai sau vai giay"};
+-    console.warn(JSON.stringify(result));
+-    return result;
+-  }
+-
+-  try {
+-    return fn();
+-  } finally {
+-    lock.releaseLock();
+-  }
+-}
++function khuVucBookingSyncWithLock_(fn) { return pnWithLock_(fn); }
+ 
+ function khuVucBookingListToMap_(items) {
+   const out = {};
+
+diff --git "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\frontend-index.html" "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\frontend\\index.html"
+index b34a3fd..3919adc 100644
+--- "a/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\originals\\frontend-index.html"	
++++ "b/D:\\Projeck_FF\\Ph\341\272\241m Nguy\303\252n\\github-update\\update-code-1-10\\frontend\\index.html"	
+@@ -7907,6 +7907,9 @@
+         files: []
+       }));
+       const cleanPayload = Object.assign({}, payload || {}, {
++        syncKey: record.syncKey || pnSyncKey(record),
++        orderNo: record.orderNo || record.soDonHang || "",
++        maDonGhtk: record.maDonGhtk || "",
+         maDon,
+         clientId: itemLocalId,
+         clientBatchId,
+@@ -8123,6 +8126,10 @@
+             scheduleQueueReport();
+             const cachedRows = docOpsRowsCache();
+             saveDocOpsRowsCache(cachedRows.map(row => String(row.localId || "") === String(updated.localId || "") ? Object.assign({}, row, {syncStatus:"Done", linkAnh: res.linkAnh || row.linkAnh || "", rowNumber: res.rowNumber || row.rowNumber || ""}) : row));
++            if (res.record) {
++              try { await docOpsRememberRecords([res.record]); }
++              catch (cacheError) { keySyncSchedule(30000); }
++            }
+             if (res.dataVersion) await docOpsLookupWriteMeta({dataVersion:String(res.dataVersion), updatedAt:new Date().toISOString()});
+             live.docOpsTodayLoaded = false;
+             if (view === "home") loadDocOpsToday(true);
+@@ -9859,6 +9866,15 @@
+       try {
+         const manifest = await docOpsApi("init", {_silent:true});
+         if (!manifest || !manifest.ok) throw new Error((manifest && manifest.message) || "Không kiểm tra được dữ liệu Chứng từ PN");
++        const sourceEpoch = String(manifest.sourceEpoch || "legacy");
++        if (sourceEpoch === "pn-full-v1" || sourceEpoch !== String(docOpsLookupMetaMemory.sourceEpoch || "legacy")) {
++          if (!await keySyncReconcile("docOpsLookup")) throw new Error("Chưa đối soát xong nguồn chứng từ mới; giữ nguyên cache và hàng đợi.");
++          await docOpsLookupWriteMeta({sourceEpoch});
++          if (sourceEpoch === "pn-full-v1") {
++            await loadDocOpsToday(true);
++            return true; // keyed incremental sync survives filtering/sorting and relocation
++          }
++        }
+         const remoteLastRow = Math.max(1, Number(manifest.lastRow || 1));
+         const remoteVersion = String(manifest.dataVersion || "");
+         const previousVersion = String(docOpsLookupMetaMemory.dataVersion || "");
+@@ -11085,6 +11101,7 @@
+         const res=await keySyncCall(type,{offset,version});
+         if (!first) first=res;
+         if (!Array.isArray(res.entries) || (version && version!==res.version)) throw new Error('Danh sách đối soát không hợp lệ.');
++        if (first.sourceEpoch !== res.sourceEpoch) throw new Error("Nguồn API thay đổi trong khi tải; sẽ đối soát lại.");
+         version=res.version; all.push(...res.entries);
+         if (res.done) break;
+         if (!(res.nextOffset>offset)) throw new Error('Phân trang đối soát không tiến lên.');
+@@ -11141,7 +11158,7 @@
+       if (type==='masterSku') await keySyncPublishProducts();
+       else {
+         docOpsLookupMemory=await keySyncRead(store);
+-        await docOpsLookupWriteMeta({lastRow:manifest.lastRow,count:docOpsLookupMemory.length});
++        await docOpsLookupWriteMeta({lastRow:manifest.lastRow,count:docOpsLookupMemory.length,sourceEpoch:String(manifest.sourceEpoch || "legacy")});
+       }
+       const complete=!manifest.invalidCount && !manifest.duplicateCount;
+       const reported=await keySyncProgress(type,Object.assign({},base,{status:complete?'done':'error',downloaded:(await keySyncRead(store)).length,matched:manifest.total,missing:0,changed:0,
