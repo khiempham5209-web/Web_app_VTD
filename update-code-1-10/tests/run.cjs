@@ -277,4 +277,36 @@ test('Full source init carries epoch; frontend candidate parses and retains offl
  assert.match(html,/syncKey: record.syncKey \|\| pnSyncKey\(record\)/);
  assert.doesNotMatch(html,/indexedDB\.deleteDatabase/);
 });
+test('Mixed date-formatted Booking cells survive migration and interrupted-format recovery',()=>{
+ const originalCopy=Range.prototype.copyTo;
+ const serial=d=>(Date.parse(fmt(d,'yyyy-MM-dd HH:mm:ss').replace(' ','T')+'Z')-Date.UTC(1899,11,30))/86400000;
+ Range.prototype.copyTo=function(target,type){
+  if(type===1)for(let i=0;i<target.n;i++)for(let j=0;j<target.w;j++){
+   const source=this.sh.getRange(this.r+i%this.n,this.c+j).getValue(),cell=target.sh.getRange(target.r+i,target.c+j),value=cell.getValue();
+   if(source instanceof Date&&typeof value==='number')cell.setValue(new Date(Date.UTC(1899,11,30)+value*86400000-7*3600000));
+   else if(!(source instanceof Date)&&value instanceof Date)cell.setValue(serial(value));
+  }
+  return this;
+ };
+ try{
+  const e=environment();seed(e);const main=e.sheets.get('Booking'),full=e.sheets.get('Booking_full');
+  main.rows.push(main.rows[1].slice());main.rows[2][1]='mixed';main.rows[2][10]=new Date('2026-07-03T17:00:00Z');
+  e.c.pnMigrateFull();assert.equal(e.c.pnAudit_().ok,true);
+  assert(full.rows[2][10] instanceof Date);
+  delete e.props.PN_FULL_READY;full.rows[2][10]=serial(main.rows[2][10]);
+  assert.equal(e.c.pnAudit_().ok,false);
+  e.c.pnRepairMigrationFormats();assert.equal(e.c.pnAudit_().ok,true);
+  assert.equal(main.rows[2][10].getTime(),full.rows[2][10].getTime());
+  full.rows[2][10]=serial(main.rows[2][10])+1;
+  assert.throws(()=>e.c.pnRepairMigrationFormats(),/thay đổi dữ liệu thật/);
+ }finally{Range.prototype.copyTo=originalCopy;}
+});
+test('Formatting equivalence does not hide changed numbers, strings or dates',()=>{
+ const e=environment();
+ const date=new Date(Date.UTC(1899,11,30)+46206*86400000-7*3600000);
+ assert.equal(e.c.pnFormatOnlyEquivalent_(date,46206),true);
+ assert.equal(e.c.pnFormatOnlyEquivalent_(date,46207),false);
+ assert.equal(e.c.pnFormatOnlyEquivalent_('46206',46206),false);
+ assert.equal(e.c.pnFormatOnlyEquivalent_(2,3),false);
+});
 console.log('RESULT '+passed+' tests passed.');

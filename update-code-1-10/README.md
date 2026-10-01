@@ -4,6 +4,8 @@ Bộ cập nhật 3 tab full — Phạm Nguyên, ngày 01/10/2026. Thư mục Gi
 
 ## Trạng thái bàn giao
 
+**Bản sửa lỗi migration 01/10:** nếu Booking báo lệch các dòng 742, 747, 1053, 1104, làm theo [FIX-MIGRATION-01-10.md](FIX-MIGRATION-01-10.md). Đã sửa lỗi copy định dạng dòng 2 sang cả bảng; thêm phục hồi có đối soát. Tổng kiểm thử sau bản sửa: 26.
+
 Đã tạo bộ mã ứng viên riêng, dựa trên đúng 9 đoạn code người dùng gửi. Chưa sửa mã đang triển khai, chưa chạy migration, chưa xóa công thức hay clear dữ liệu trên Google Sheets thật. Không đổi URL API.
 
 24 bài kiểm thử tự động đã chạy trên bộ mô phỏng Apps Script/Sheets; toàn bộ 12 file .gs và JavaScript inline trong bản app mới đều qua kiểm tra cú pháp. Đây chưa phải kiểm thử trên dịch vụ Google hoặc trên điện thoại thật. Cần chạy trình tự nghiệm thu dưới đây trước khi bật dọn tự động.

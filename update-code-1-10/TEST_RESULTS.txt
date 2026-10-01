@@ -42,4 +42,8 @@ PASS Full filter includes hidden IDs and unexpected loss of history is blocked
 PASS Archived received/cancelled rows stay out of main, old pending returns to main
 {"ok":true,"results":[{"sheet":"Booking","primary":1,"full":1,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
 PASS Full source init carries epoch; frontend candidate parses and retains offline queue
-RESULT 24 tests passed.
+{"ok":true,"results":[{"sheet":"Booking","primary":2,"full":2,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+{"ok":true,"results":[{"sheet":"Booking","primary":2,"full":2,"errors":[]},{"sheet":"File đơn","primary":2,"full":2,"errors":[]},{"sheet":"Chứng từ_FF","primary":4,"full":4,"errors":[]}]}
+PASS Mixed date-formatted Booking cells survive migration and interrupted-format recovery
+PASS Formatting equivalence does not hide changed numbers, strings or dates
+RESULT 26 tests passed.

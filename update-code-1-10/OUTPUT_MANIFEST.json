@@ -1,7 +1,7 @@
 [
   {
     "file": "README.md",
-    "sha256": "7e4ad0d293a07d29caaa66e1c7b8c9e8d3008a601cdd9bdeb5269f2fb421ba9d"
+    "sha256": "033ce092e17a647752fcf260ad4a09032ff1a70b2e66af7b96ecabe746b88d4e"
   },
   {
     "file": "FORMULA_AUDIT.json",
@@ -13,7 +13,7 @@
   },
   {
     "file": "apps-script/00_FullStore.gs",
-    "sha256": "c78b4322f07dec360ace2674c65ec6e82d4eadd27ac558cc59ec1a4743f5da1c"
+    "sha256": "3fe3eb1f3acc4097a4ee0285c117e055b714bf7468b4e194824d7c5175090449"
   },
   {
     "file": "apps-script/01_API.gs",

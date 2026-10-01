@@ -185,11 +185,8 @@ function pnReconcilePair_(p) {
       metas.push({row:c.mainRow,values:[c.id,fh]});
   }
   pnWriteBlocks_(full,writes,1,31);
-  if(writes.length) {
-    const max=Math.max.apply(null,writes.map(x=>x.row));
-    main.getRange(2,1,1,p.width).copyTo(full.getRange(2,1,max-1,p.width),SpreadsheetApp.CopyPasteType.PASTE_FORMAT,false);
-    main.getRange(2,1,1,p.width).copyTo(full.getRange(2,1,max-1,p.width),SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION,false);
-  }
+  // Preserve each source row's types/formats; never repaint history from row 2.
+  pnCopyMappedFormats_(main,full,plan.changes.filter(c=>c.direction==='append'||c.direction==='push'),p.width);
   pnWriteBlocks_(main,pulls,1,p.width);
   pnWriteBlocks_(main,metas,30,2);
   // Refresh Month for edits made directly on full, without rewriting business data.
@@ -242,6 +239,56 @@ function pnAudit_() {
   return {ok:results.every(r=>!r.errors.length),results};
 }
 function pnAuditFull() { return pnWithLock_(()=>{const r=pnAudit_();console.log(JSON.stringify(r));return r;}); }
+function pnCopyMappedFormats_(source,target,changes,width) {
+  for(let i=0;i<changes.length;) {
+    const first=changes[i];let j=i+1;
+    while(j<changes.length&&changes[j].mainRow===first.mainRow+j-i&&changes[j].fullRow===first.fullRow+j-i)j++;
+    const from=source.getRange(first.mainRow,1,j-i,width),to=target.getRange(first.fullRow,1,j-i,width);
+    from.copyTo(to,SpreadsheetApp.CopyPasteType.PASTE_FORMAT,false);
+    from.copyTo(to,SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION,false);
+    i=j;
+  }
+}
+function pnFormatOnlyEquivalent_(a,b) {
+  if(a instanceof Date && b instanceof Date)return a.getTime()===b.getTime();
+  if(a===b)return true;
+  const date=a instanceof Date?a:b instanceof Date?b:null;
+  const number=a instanceof Date?b:a;
+  if(!date||typeof number!=='number'||!Number.isFinite(number))return false;
+  const local=Utilities.formatDate(date,PN_FULL.timezone,'yyyy-MM-dd HH:mm:ss');
+  const serial=(Date.parse(local.replace(' ','T')+'Z')-Date.UTC(1899,11,30))/86400000;
+  return Math.abs(serial-number)<1e-8;
+}
+// Recovery for the initial migration's row-2 format bug. No business values/IDs are written.
+function pnRepairMigrationFormats() {
+  return pnWithLock_(()=>{
+    const props=PropertiesService.getScriptProperties();
+    if(props.getProperty('PN_FULL_READY')||props.getProperty('PN_CLEANUP_PENDING'))
+      throw new Error('Chỉ dùng phục hồi migration chưa hoàn tất, chưa dọn.');
+    const plans=[];
+    PN_FULL.pairs.forEach(p=>{
+      const main=pnSheet_(p.main),full=pnSheet_(p.full),history=pnRows_(full,31),byId=new Map();
+      history.forEach((r,i)=>{if(r[29]){if(byId.has(r[29]))throw new Error('Trùng ID full');byId.set(r[29],{r,row:i+2});}});
+      const changes=[];
+      pnRows_(main,31).forEach((r,i)=>{
+        if(!pnHasData_(r,p))return;
+        const match=byId.get(r[29]);
+        if(!match)throw new Error('Thiếu ID full: '+p.main+' dòng '+(i+2));
+        if(pnFingerprint_(r,p)===pnFingerprint_(match.r,p))return;
+        const base=pnFingerprint_(r,p);
+        if(r[30]!==base||match.r[30]!==base||!r.slice(0,p.width).every((v,c)=>pnFormatOnlyEquivalent_(v,match.r[c])))
+          throw new Error('Có thay đổi dữ liệu thật; không tự sửa: '+p.main+' dòng '+(i+2));
+        changes.push({mainRow:i+2,fullRow:match.row});
+      });
+      plans.push({p,main,full,changes});
+    });
+    plans.forEach(x=>pnCopyMappedFormats_(x.main,x.full,x.changes,x.p.width));
+    SpreadsheetApp.flush();
+    const audit=pnAudit_();console.log(JSON.stringify(audit));
+    if(!audit.ok)throw new Error(JSON.stringify(audit));
+    return audit;
+  });
+}
 function pnMigrateFull() {
   return pnWithLock_(()=>{
     // Does not clear primary or publish external reports.
