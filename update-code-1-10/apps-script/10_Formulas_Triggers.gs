@@ -106,6 +106,7 @@ function pnHandleEdit(e) {
         if(name==='Booking_full')pnSyncBookingFullRows_(r1,r2);
       }
       if(name==='Bàn giao chứng từ'&&e.range.getA1Notation()==='A1'){refreshBanGiaoChungTuDropdown();syncBanGiaoChungTuBySelectedDate();}
+      pnAfterActivity_();
       return result;
     });
   } catch(err) {
@@ -132,6 +133,7 @@ function pnSyncAreaAll_() {
   } finally { KHUVUC_BOOKING_SYNC_CONFIG.bookingSheetName=previous; }
 }
 // Lưới an toàn 5 phút: bắt thay đổi không qua onEdit (script, API, dán từ nơi khác). Không chạy VHFF ở đây.
+// Chạy tay khi cần đối soát lại toàn bộ (ví dụ sau khi dán dữ liệu bằng script khác). KHÔNG cài trigger theo giờ.
 function pnScheduledReconcile() {
   try {
     return pnWithLock_(()=>{
@@ -146,11 +148,48 @@ function pnScheduledReconcile() {
     throw err;
   } finally { pnV2Start_=0; }
 }
-// Đồng bộ VHFF chạy riêng, mỗi lần một việc, để không giữ khóa lâu.
-function pnVhffWorker() {
-  try { return pnWithLock_(()=>{ pnRequireReady_(); return pnV2VhffStep_(); }); }
-  catch(err) { if(/PN_BUSY/.test(String(err&&err.message||err)))return {ok:false,busy:true}; throw err; }
+// Việc định kỳ chạy theo sự kiện (sửa Sheet, mở Sheet), trong cùng khóa và trong thời gian cho phép:
+// - Dọn tháng cũ: 1 lần/ngày, ở lần đầu tiên trong ngày.
+// - Lần sửa trước bị bỏ qua vì khóa bận: đồng bộ bù.
+// - VHFF: khi có thay đổi, mỗi lần làm 1 phần (cách nhau ít nhất 2 phút) để không giữ khóa lâu.
+function pnAfterActivity_() {
+  const props=PropertiesService.getScriptProperties();
+  const today=Utilities.formatDate(new Date(),PN_FULL.timezone,'yyyy-MM-dd');
+  if(props.getProperty('PN_DAILY_DONE')!==today&&!pnV2OverBudget_()){
+    if(props.getProperty('PN_FULL_CLEANUP')==='enabled'){
+      const sync=pnV2SyncAll_({fullSweep:true,areaSweep:true});
+      if(sync.partial)return;
+      pnV2Cleanup_();
+    }
+    props.setProperty('PN_DAILY_DONE',today);
+  }
+  if(props.getProperty('PN_SYNC_REQUESTED')&&!pnV2OverBudget_()){
+    const sync=pnV2SyncAll_({});
+    if(!sync.partial)props.deleteProperty('PN_SYNC_REQUESTED');
+  }
+  const last=Number(props.getProperty('PN_VHFF_LAST_STEP')||0);
+  if((props.getProperty('PN_VHFF_DIRTY')||props.getProperty('PN_VHFF_CYCLE'))&&Date.now()-last>120000&&!pnV2OverBudget_()){
+    props.setProperty('PN_VHFF_LAST_STEP',String(Date.now()));
+    try { pnV2VhffStep_(); } catch(err) { console.error('VHFF: '+String(err&&err.message||err)); }
+  }
 }
+// Chạy tay: đồng bộ VHFF hết các phần còn lại ngay.
+function pnRunVhffNow() {
+  return pnWithLock_(()=>{
+    pnRequireReady_();pnV2Start_=Date.now();
+    try {
+      const steps=[];
+      for(let i=0;i<PN_VHFF_JOBS_.length+1&&!pnV2OverBudget_();i++){
+        const r=pnV2VhffStep_();steps.push(r);
+        if(r.skipped||r.done)break;
+      }
+      return {ok:true,steps};
+    } finally { pnV2Start_=0; }
+  });
+}
+
+// Giữ tên hàm cho tương thích; không còn được cài trigger theo giờ.
+function pnVhffWorker() { return pnRunVhffNow(); }
 
 function pnSyncVHFF_() {
   pnRequireReady_();
@@ -194,6 +233,7 @@ function pnSourceRevision_() {
   return pnHash_(specs.map(([name,width])=>{const sh=pnSheet_(name);return [name,pnRows_(sh,width||sh.getLastColumn())];}));
 }
 function pnSyncVHFF() { return pnWithLock_(()=>pnSyncVHFF_()); }
+// Chỉ còn trigger theo SỰ KIỆN: sửa Sheet và mở Sheet. Không có trigger chạy theo giờ.
 function pnInstallTriggers() {
   pnRequireReady_();
   const old=new Set([
@@ -206,12 +246,21 @@ function pnInstallTriggers() {
   ScriptApp.getProjectTriggers().filter(t=>old.has(t.getHandlerFunction())).forEach(t=>ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('pnHandleEdit').forSpreadsheet(PN_FULL.spreadsheetId).onEdit().create();
   ScriptApp.newTrigger('pnOpen').forSpreadsheet(PN_FULL.spreadsheetId).onOpen().create();
-  ScriptApp.newTrigger('pnScheduledReconcile').timeBased().everyMinutes(5).create();
-  ScriptApp.newTrigger('pnVhffWorker').timeBased().everyMinutes(10).create();
-  ScriptApp.newTrigger('pnCleanupDaily').timeBased().atHour(1).everyDays(1).inTimezone(PN_FULL.timezone).create();
-  // Quy tắc dọn tháng cũ đã chốt: bật mặc định. Tắt bằng pnDisableCleanup nếu cần.
   PropertiesService.getScriptProperties().setProperty('PN_FULL_CLEANUP','enabled');
-  return 'Đã cài trigger: sửa tay, đối soát 5 phút, VHFF 10 phút, dọn 1 giờ sáng.';
+  return 'Đã cài trigger: khi sửa Sheet và khi mở Sheet. Không có trigger theo giờ. Dọn tháng cũ chạy 1 lần/ngày ở lần sửa/mở đầu tiên.';
 }
 
-function pnOpen() { pnRequireReady_();return onOpenSyncBanGiaoChungTu(); }
+function pnOpen() {
+  try {
+    return pnWithLock_(()=>{
+      pnRequireReady_();
+      pnV2Start_=Date.now();
+      const r=onOpenSyncBanGiaoChungTu();
+      pnAfterActivity_();
+      return r;
+    });
+  } catch(err) {
+    if(/PN_BUSY/.test(String(err&&err.message||err)))return {ok:false,busy:true};
+    throw err;
+  } finally { pnV2Start_=0; }
+}

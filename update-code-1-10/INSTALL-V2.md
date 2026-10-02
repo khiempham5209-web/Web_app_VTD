@@ -15,13 +15,21 @@
 ## Các bước
 
 1. Dán 4 file trên vào project. Lưu.
-2. Chạy hàm **`pnInstallTriggers`** một lần: cài lại trigger (sửa tay, đối soát 5 phút, VHFF 10 phút, dọn 1 giờ sáng) và bật dọn tháng cũ.
+2. Chạy hàm **`pnInstallTriggers`** một lần: xóa mọi trigger cũ (kể cả trigger 5 phút, 10 phút, 1 giờ sáng), chỉ cài 2 trigger theo sự kiện: **khi sửa Sheet** và **khi mở Sheet**. Không còn trigger chạy theo giờ.
 3. Chạy hàm **`pnMirrorAll`** một lần: lượt đồng bộ đầu của bản mới. Kết quả phải có `"ok": true`.
    - Lượt này tự xác định đúng bên vừa sửa từ dấu vân tay kiểu cũ, rồi chuyển sang kiểu mới.
    - Nếu có tab `_PN_CONFLICTS` (ẩn) thì xem các dòng trong đó: đó là bản bị thay khi hai bên cùng sửa.
 4. Chạy **`pnCleanupPreview`** để xem các dòng tháng cũ sẽ rời tab chính trong lần dọn tới.
    Muốn dọn ngay thì chạy **`pnCleanupDaily`**.
 5. Deploy → Manage deployments → Edit → **New version** (giữ URL) để API app dùng code mới.
+
+## Không có trigger theo giờ
+
+- Sửa tay: đồng bộ đúng dòng vừa sửa.
+- App lưu đơn: API ghi Chứng từ_full rồi đẩy đúng dòng đó sang Chứng từ_FF.
+- Dọn tháng cũ: tự chạy 1 lần/ngày ở lần sửa hoặc mở Sheet đầu tiên trong ngày.
+- VHFF: khi có thay đổi, mỗi lần sửa Sheet làm 1 phần. Cần cập nhật ngay thì chạy tay `pnRunVhffNow`.
+- Dữ liệu vào bằng script/nguồn khác (không qua sửa tay, không qua app): chạy tay `pnScheduledReconcile`.
 
 ## Quy tắc vận hành
 

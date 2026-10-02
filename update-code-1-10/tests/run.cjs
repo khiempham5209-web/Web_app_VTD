@@ -594,4 +594,15 @@ test('V2 scale: with 3000 rows per tab, Sheet calls stay constant (not per row);
  assert.equal(e.sheets.get('Chứng từ_full').getRange(rowOf(e.sheets.get('Chứng từ_full'),4,'2500'),10).getValue(),'sửa 1 dòng');
  auditOk(e);
 });
+test('No time trigger: first Sheet edit of the day runs the daily cleanup once; later edits do not',()=>{
+ const e=v2env();e.props.PN_FULL_CLEANUP='enabled';e.c.pnMirrorAll();
+ const main=e.sheets.get('Chứng từ_FF');
+ edit(e,'Chứng từ_FF',rowOf(main,4,'1'),10,'sửa đầu ngày');
+ assert.equal(rowOf(main,4,'3'),0,'old received order cleaned on first edit of the day');
+ assert.ok(e.props.PN_DAILY_DONE,'daily marker set');
+ let cleaned=0;e.run("var __c=pnV2Cleanup_;pnV2Cleanup_=function(){globalThis.__n=(globalThis.__n||0)+1;return __c();};");
+ edit(e,'Chứng từ_FF',rowOf(main,4,'1'),10,'sửa lần 2');
+ assert.equal(e.run('globalThis.__n||0'),0,'no second cleanup the same day');
+ auditOk(e);
+});
 console.log('RESULT '+passed+' tests passed.');
