@@ -44,10 +44,14 @@ function pnSize_(sh, rows, cols) {
   if (sh.getMaxRows() < rows) sh.insertRowsAfter(sh.getMaxRows(), rows - sh.getMaxRows());
   if (sh.getMaxColumns() < cols) sh.insertColumnsAfter(sh.getMaxColumns(), cols - sh.getMaxColumns());
 }
+// Tiêu đề dùng cho map cột của các script: tab chính = khối nghiệp vụ liền nhau từ A; tab full = mọi cột.
 function pnHeaders_(sh) {
   const pair = pnPair_(sh.getName());
-  return sh.getRange(1,1,1,pair ? pair.width : sh.getLastColumn()).getDisplayValues()[0];
+  if (!pair) return sh.getRange(1,1,1,Math.max(1,sh.getLastColumn())).getDisplayValues()[0];
+  const L = pnV2Layout_(sh, sh.getName() === pair.full);
+  return L.isFull ? L.headers : L.headers.slice(0, L.width);
 }
+
 function pnRows_(sh, width) {
   return sh.getLastRow() < 2 ? [] : sh.getRange(2,1,sh.getLastRow()-1,width).getValues();
 }
@@ -240,7 +244,8 @@ function pnAudit_() {
   });
   return {ok:results.every(r=>!r.errors.length),results};
 }
-function pnAuditFull() { return pnWithLock_(()=>{const r=pnAudit_();console.log(JSON.stringify(r));return r;}); }
+function pnAuditFull() { return pnWithLock_(()=>{const r=PN_FULL.pairs.map(pnV2Audit_);console.log(JSON.stringify(r));return {ok:r.every(x=>x.ok),results:r};}); }
+
 function pnCopyMappedFormats_(source,target,changes,width) {
   for(let i=0;i<changes.length;) {
     const first=changes[i];let j=i+1;
@@ -374,18 +379,19 @@ function pnMigrateFull() {
     return audit;
   });
 }
+// Chạy tay một lượt đồng bộ đầy đủ và trả kết quả đối soát từng tab.
 function pnMirrorAll() {
   return pnWithLock_(()=>{
     pnRequireReady_();
-    // Reconcile user edits before recalculating derived columns.
-    PN_FULL.pairs.forEach(pnReconcilePair_);
-    pnComputeColumns_();
-    PN_FULL.pairs.forEach(pnReconcilePair_);
-    pnMaterializeDocs_();
-    PN_FULL.pairs.forEach(pnEnsureFullFilter_);
-    return pnAudit_();
+    const started=!pnV2Start_; if(started)pnV2Start_=Date.now();
+    try {
+      const sync=pnV2SyncAll_({});
+      const audit=PN_FULL.pairs.map(pnV2Audit_);
+      return {ok:audit.every(a=>a.ok),sync,results:audit};
+    } finally { if(started)pnV2Start_=0; }
   });
 }
+
 function pnEnsureFullFilter_(p) {
   const sh=pnSheet_(p.full);
   sh.hideColumns(p.width+2,31-p.width-1);
@@ -401,53 +407,43 @@ function pnEnsureFullFilter_(p) {
   const filter=sh.getRange(1,1,needed,31).createFilter();
   criteria.forEach((c,i)=>{if(c)filter.setColumnFilterCriteria(i+1,c);});
 }
+// Xem trước: các dòng tháng cũ sẽ rời tab chính (đã khớp full; chứng từ chỉ khi đã nhận/hủy).
 function pnCleanupPreview() {
   return pnWithLock_(()=>{
     pnRequireReady_();
-    const audit=pnAudit_(),month=pnCurrentMonth_();
-    return {audit,month,pendingRequests:pnPendingRequests_().length,blockedByVHFF:!!PropertiesService.getScriptProperties().getProperty('PN_VHFF_DIRTY'),
-      candidates:PN_FULL.pairs.map(p=>({sheet:p.main,rows:pnRows_(pnSheet_(p.main),31)
-        .map((r,i)=>pnEligible_(r,p,month)?i+2:0).filter(Boolean)}))};
+    const month=pnCurrentMonth_();
+    return {month,audit:PN_FULL.pairs.map(pnV2Audit_),candidates:PN_FULL.pairs.map(p=>{
+      const cfg=pnV2Cfg_(p),M=pnV2EnsureColumns_(p).M;
+      return {sheet:p.main,rows:pnV2Read_(M).map((r,i)=>pnV2Rec_(M,cfg,r)&&pnV2Eligible_(M,cfg,r,month)?i+2:0).filter(Boolean)};
+    })};
   });
 }
+
+// 1 giờ sáng: đồng bộ đủ (kể cả quét toàn bộ Booking -> Chứng từ một lần/ngày), rồi dọn tháng cũ.
+// Không phụ thuộc VHFF: dọn chỉ bỏ khỏi tab chính dòng đã có y hệt ở full.
 function pnCleanupDaily() {
   return pnWithLock_(()=>{
     if(PropertiesService.getScriptProperties().getProperty('PN_FULL_CLEANUP')!=='enabled')
-      return {ok:false,reason:'Dọn tự động chưa bật. Chạy preview trước.'};
-    if(pnPendingRequests_().length)throw new Error('Còn thao tác app chưa hoàn tất; không dọn.');
-    pnMirrorAll();
-    pnSyncVHFF_();
-    const preview=pnCleanupPreview();
-    if(!preview.audit.ok||preview.blockedByVHFF)throw new Error('Chưa đối soát đủ hoặc VHFF còn lỗi; không dọn.');
-    const results=[];
-    for(const p of PN_FULL.pairs){
-      const sh=pnSheet_(p.main),before=pnRows_(sh,31);
-      const eligible=before.filter(r=>pnEligible_(r,p,preview.month));
-      if(!eligible.length){results.push({sheet:p.main,removed:0});continue;}
-      const kept=before.filter(r=>pnHasData_(r,p)&&!pnEligible_(r,p,preview.month));
-      // Refuse a stale plan. Manual sheet edits cannot be locked by ScriptLock.
-      if(pnHash_(before)!==pnHash_(pnRows_(sh,31)))throw new Error('Nguồn vừa thay đổi, hoãn dọn: '+p.main);
-      // Snapshot business values + metadata for recovery before compacting; never delete whole sheet rows.
-      pnBackupCleanup_(p,before);
-      PropertiesService.getScriptProperties().setProperty('PN_CLEANUP_PENDING',JSON.stringify({main:p.main,month:preview.month}));
-      const data=kept.map(r=>r.slice(0,p.width));
-      const meta=kept.map(r=>[r[29]||'',r[30]||'']);
-      if(data.length){sh.getRange(2,1,data.length,p.width).setValues(data);sh.getRange(2,30,meta.length,2).setValues(meta);}
-      if(before.length>kept.length){
-        sh.getRange(kept.length+2,1,before.length-kept.length,p.width).clearContent();
-        sh.getRange(kept.length+2,30,before.length-kept.length,2).clearContent();
-      }
-      const check=pnRows_(sh,31);
-      const expected=kept.map(r=>[r.slice(0,p.width),r.slice(29,31)]);
-      const actual=check.filter(r=>pnHasData_(r,p)).map(r=>[r.slice(0,p.width),r.slice(29,31)]);
-      if(pnHash_(expected)!==pnHash_(actual))throw new Error('Đối soát sau dọn không khớp; giữ khóa phục hồi.');
-      PropertiesService.getScriptProperties().deleteProperty('PN_CLEANUP_PENDING');
-      results.push({sheet:p.main,removed:eligible.length});
-    }
-    return {ok:true,results};
+      return {ok:false,reason:'Dọn tự động đang tắt. Bật bằng pnEnableCleanup.'};
+    pnRequireReady_();
+    pnV2Start_=Date.now();
+    try {
+      const sync=pnV2SyncAll_({fullSweep:true,areaSweep:true});
+      if(sync.partial)return {ok:false,reason:'Đồng bộ chưa xong trong thời gian cho phép; hoãn dọn.'};
+      return pnV2Cleanup_();
+    } finally { pnV2Start_=0; }
   });
 }
+
 function pnResumeCleanup() {
+  return pnWithLock_(()=>{
+    const props=PropertiesService.getScriptProperties(),raw=props.getProperty('PN_CLEANUP_PENDING');
+    if(!raw)return {ok:true,skipped:true};
+    if(JSON.parse(raw).engine===PN_V2.engine)return pnV2ResumeCleanup_();
+    return pnResumeCleanupLegacy_();
+  });
+}
+function pnResumeCleanupLegacy_() {
   return pnWithLock_(()=>{
     const props=PropertiesService.getScriptProperties(),raw=props.getProperty('PN_CLEANUP_PENDING');
     if(!raw)return {ok:true,skipped:true};
@@ -477,12 +473,12 @@ function pnResumeCleanup() {
     return {ok:true,sheet:p.main,removed:backup.filter(r=>pnEligible_(r,p,state.month)).length};
   });
 }
+
 function pnEnableCleanup() {
-  const p=pnCleanupPreview();
-  if(!p.audit.ok||p.blockedByVHFF||p.pendingRequests)throw new Error('Phải hoàn tất thao tác app, đối soát và sync VHFF trước.');
   PropertiesService.getScriptProperties().setProperty('PN_FULL_CLEANUP','enabled');
-  return p;
+  return pnCleanupPreview();
 }
+
 function pnDisableCleanup() { PropertiesService.getScriptProperties().deleteProperty('PN_FULL_CLEANUP'); }
 function pnBackupCleanup_(p,rows) {
   const name='_PN_BACKUP_'+p.main,ss=pnSS_(),sh=ss.getSheetByName(name)||ss.insertSheet(name);

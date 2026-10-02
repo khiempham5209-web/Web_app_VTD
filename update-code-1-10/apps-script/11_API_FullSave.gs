@@ -97,11 +97,14 @@ function pnPreUpload_(params) {
 function pnItemId_(item,index) { return pnRequest_.clientId+':'+(item.clientItemId||('item:'+index)); }
 function pnEncodeRow_(row) { return row.map(v=>v instanceof Date?{date:v.toISOString()}:v); }
 function pnDecodeRow_(row) { return row.map(v=>v&&typeof v==='object'&&v.date?new Date(v.date):v); }
+// Ghi chứng từ vào đúng dòng của đơn ở Chứng từ_full, theo TÊN cột. Chỉ ghi các ô thay đổi; không đụng cột kỹ thuật.
 function pnWriteDocumentOnce_(sh,row,col,params,upload,timeText,user) {
-  const key=pnRequest_.key+':document-write',p=PN_FULL.pairs[2];
+  const key=pnRequest_.key+':document-write';
   let stage=pnJournalRead_(key);
   if(stage&&stage.state==='DONE')return;
-  const current=sh.getRange(row,1,1,p.width).getValues()[0];
+  const L=pnV2Layout_(sh,true),width=pnV2ReadWidth_(L),names=Object.keys(L.cols);
+  const current=sh.getRange(row,1,1,width).getValues()[0];
+  const sig=r=>pnHash_(pnV2Sig_(L,r,names));
   if(!stage) {
     const next=current.slice();
     const values=[
@@ -111,26 +114,25 @@ function pnWriteDocumentOnce_(sh,row,col,params,upload,timeText,user) {
       [['thoi gian'],timeText],[['user thao tac'],user]
     ];
     if(upload.linkAnh)values.push([['link anh'],upload.linkAnh]);
-    // Mã ecom CT (cột L): chỉ ghi khi app gửi giá trị, để app cũ không xóa mã đã nhập tay trên Sheet.
+    // Mã ecom CT: chỉ ghi khi app gửi giá trị, để app cũ không xóa mã đã nhập tay trên Sheet.
     const maEcomCt=clean_(params.maEcomCt);
     if(maEcomCt)values.push([['ma ecom ct'],maEcomCt]);
-    // Ghi theo TÊN cột (header), không theo số cột. Cột nằm ngoài vùng nghiệp vụ A–Q mà API đồng bộ
-    // chính/full thì bỏ qua, không làm hỏng cả lần lưu.
-    values.forEach(([aliases,value])=>{
-      const c=firstCol_(col,aliases);
-      if(c&&c<=p.width)next[c-1]=value;
-      else if(c)console.warn('Cột '+aliases[0]+' nằm ngoài vùng A–Q, bỏ qua.');
-    });
-    const data={before:pnFingerprint_(current,p),after:pnFingerprint_(next,p),values:pnEncodeRow_(next)};
+    values.forEach(([aliases,value])=>{ const i=pnV2Col_(L,aliases); if(i!=null)next[i]=value; });
+    const data={before:sig(current),after:sig(next),values:pnEncodeRow_(next)};
     pnJournalWrite_(key,'PREPARED',data);stage={state:'PREPARED',data};
   }
-  const fingerprint=pnFingerprint_(current,p);
+  const fingerprint=sig(current);
   if(fingerprint!==stage.data.before&&fingerprint!==stage.data.after)
     throw new Error('Hồ sơ đã thay đổi trong lúc khôi phục thao tác; không ghi đè bản mới.');
-  if(fingerprint!==stage.data.after)sh.getRange(row,1,1,p.width).setValues([pnDecodeRow_(stage.data.values)]);
+  if(fingerprint!==stage.data.after){
+    const next=pnDecodeRow_(stage.data.values),up=new Map();
+    names.forEach(n=>{const i=L.cols[n];if(pnV2Canon_(next[i])!==pnV2Canon_(current[i]))pnV2Put_(up,row,i,next[i]);});
+    pnV2Flush_(sh,up);
+  }
   SpreadsheetApp.flush();
   pnJournalWrite_(key,'DONE',stage.data);
 }
+
 function pnProductIdColumn_(sh) {
   const headers=sh.getRange(1,1,1,Math.max(1,sh.getLastColumn())).getDisplayValues()[0];
   const old=headers.indexOf('__PN_ITEM_ID');
@@ -150,24 +152,26 @@ function pnAppendProductsOnce_(sh,rows,width) {
     sh.getRange(start,1,missing.length,width).setValues(missing);
   }
 }
+// Tìm đơn trong Chứng từ_full theo khóa (syncKey/Số đơn hàng/GHTK/PO), đọc đủ mọi cột theo tiêu đề.
 function pnResolveSave_(sh,col,params) {
   const expected=pnText_(params.syncKey),query=pnText_(params.orderNo||params.maDonGhtk||params.maDon||params.query||params.po);
   if(!expected&&!query)throw new Error('Cần khóa đơn; không lưu chỉ bằng số dòng.');
-  const values=sh.getLastRow()>1?sh.getRange(2,1,sh.getLastRow()-1,17).getDisplayValues():[];
-  const records=values.map((r,i)=>({rowNumber:i+2,record:recordFromRow_(r,col,i+2)}));
+  const L=pnV2Layout_(sh,true),cfg=pnV2Cfg_(PN_FULL.pairs[2]);
+  const map=headerMap_(L.headers);
+  const values=sh.getLastRow()>1?sh.getRange(2,1,sh.getLastRow()-1,pnV2ReadWidth_(L)).getDisplayValues():[];
+  const records=values.map((r,i)=>pnV2Rec_(L,cfg,r)?{rowNumber:i+2,record:recordFromRow_(r,map,i+2)}:null).filter(Boolean);
   const matches=records.filter(x=>expected?x.record.syncKey===expected:recordMatchesQuery_(x.record,query));
   if(matches.length!==1)throw new Error(matches.length?'Mã khớp nhiều đơn; dùng Số đơn hàng duy nhất.':'Không tìm thấy đơn trong Chứng từ_full.');
   return matches[0];
 }
-function pnMirrorDocs_() {
-  pnReconcilePair_(PN_FULL.pairs[2]);
-  pnMaterializeDocs_();
-  pnEnsureFullFilter_(PN_FULL.pairs[2]);
+
+// Đồng bộ cặp Chứng từ. fullRow: dòng API vừa ghi ở full -> bản API thắng và được đẩy sang Chứng từ_FF.
+function pnMirrorDocs_(fullRow) {
+  return pnV2SyncPair_(PN_FULL.pairs[2], fullRow?{prefer:{side:'full',rows:new Set([fullRow])}}:{});
 }
-// Đối soát chính/full khi lưu đơn: lỗi ở dòng KHÁC (xung đột, full giảm dòng...) không được chặn
-// việc lưu của mọi máy. Ghi lỗi lại cho admin; trigger 5 phút vẫn báo và thử lại.
-function pnMirrorDocsSafe_() {
-  try { pnMirrorDocs_(); return ''; }
+
+function pnMirrorDocsSafe_(fullRow) {
+  try { pnMirrorDocs_(fullRow); return ''; }
   catch(err) {
     const message=String(err&&err.message||err);
     PropertiesService.getScriptProperties().setProperty('PN_MIRROR_ERROR',new Date().toISOString()+' '+message.slice(0,4000));
@@ -175,6 +179,7 @@ function pnMirrorDocsSafe_() {
     return message;
   }
 }
+
 function pnBusyResponse_(err) {
   if(!/PN_BUSY/.test(String(err&&err.message||err)))throw err;
   return {ok:false,code:'PN_BUSY',retryable:true,message:'Hệ thống PN đang bận, app sẽ gửi lại sau ít giây.'};
@@ -227,7 +232,7 @@ function pnSaveLocked_(params,key,signature) {
         }
         state.coreResponse=response;pnJournalWrite_(key,'PENDING',state);
       }
-      const mirrorAfter=pnMirrorDocsSafe_();
+      const mirrorAfter=pnMirrorDocsSafe_(state.coreResponse&&state.coreResponse.rowNumber||response.rowNumber);
       pnMarkDirty_();
       const record=pnResolveSave_(sheet_(),headerMap_(headers_(sheet_())),params).record;
       const type=norm_(params.returnType||params.loaiHoan||'Chung tu');

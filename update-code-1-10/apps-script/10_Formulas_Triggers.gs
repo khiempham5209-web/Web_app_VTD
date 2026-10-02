@@ -80,48 +80,40 @@ function pnComputeColumns_() {
     pnWriteBlocks_(plan.sh,updates,plan.col,count);
   }
 }
-function pnStampFullIds_(p) {
-  const sh=pnSheet_(p.full),rows=pnRows_(sh,31),updates=[];
-  rows.forEach((r,i)=>{
-    if(!pnHasData_(r,p)||r[29])return;
-    updates.push({row:i+2,values:['full:'+p.main+':'+Utilities.getUuid(),pnFingerprint_(r,p)]});
-  });
-  pnWriteBlocks_(sh,updates,30,2);
-}
+// Bộ đồng bộ v2 tự cấp ID cho dòng mới ở full trong cùng lượt đồng bộ; giữ tên hàm cho các script cũ gọi.
+function pnStampFullIds_(p) { return 0; }
+
+// Sửa tay trên Sheet: chỉ xử lý các dòng vừa sửa (bên vừa sửa thắng nếu hai bên cùng đổi), rồi đẩy tiếp
+// sang các tab phụ thuộc. Đọc mỗi tab một lần, chỉ ghi ô khác. Khóa bận thì để lượt định kỳ làm, không báo lỗi.
 function pnHandleEdit(e) {
   if(!e||!e.range)return;
-  return pnWithLock_(()=>{
-    pnRequireReady_();
-    const name=e.range.getSheet().getName(),p=pnPair_(name);
-    // Manual edits are authoritative changes, not a blind full-row overwrite.
-    if(p&&name===p.full)pnStampFullIds_(p);
-    if(name==='Booking') {
-      const sh=e.range.getSheet(),col=bookingSyncHeaderMap_(pnHeaders_(sh));
-      bookingSyncFillMissingBookingDates_(sh,col,Math.max(2,e.range.getRow()),e.range.getLastRow());
-    }
-    pnMirrorAll();
-    if(name==='Booking'||name==='Booking_full') {
-      if(name==='Booking') {
-        syncBookingRowsToChungTuFF_(Math.max(2,e.range.getRow()),e.range.getLastRow());
-        bookingSyncUpdateTargetDatesFromBookingRows_(Math.max(2,e.range.getRow()),e.range.getLastRow());
-      } else pnSyncBookingFullRows_(Math.max(2,e.range.getRow()),e.range.getLastRow());
-    }
-    if(['Booking','Booking_full','File đơn','File đơn_full','DS BC','TT Nhập'].includes(name)){
-      fillMissingGhtkCodesInChungTuFF();
-      pnSyncAreaAll_();
-    }
-    if(name==='Chứng từ_FF')bookingSyncRepairControlColumnsForEditedTargetRange_(e.range);
-    if(name==='Chứng từ_full')bookingSyncRepairControlColumnsForEditedTargetRange_(e.range);
-    if(name==='TT Nhập'||name==='DS SKU')onEditSyncTTNhapDSSKU(e);
-    if(name==='Hàng lỗi'||name==='DS SKU')onEditSyncHangLoiGHTK(e);
-    pnStampFullIds_(PN_FULL.pairs[2]);
-    pnMirrorAll();
-    pnMarkDirty_();
-    if(name==='Bàn giao chứng từ'&&e.range.getA1Notation()==='A1'){
-      refreshBanGiaoChungTuDropdown();syncBanGiaoChungTuBySelectedDate();
-    }
-  });
+  const sh=e.range.getSheet(),name=sh.getName(),p=pnPair_(name);
+  const watched=['Booking','Booking_full','File đơn','File đơn_full','Chứng từ_FF','Chứng từ_full','DS BC','TT Nhập','DS SKU','Hàng lỗi','Bàn giao chứng từ'];
+  if(watched.indexOf(name)<0)return;
+  try {
+    return pnWithLock_(()=>{
+      pnRequireReady_();
+      pnV2Start_=Date.now();
+      const r1=Math.max(2,e.range.getRow()),r2=Math.max(r1,e.range.getLastRow());
+      if(name==='Booking'){const col=bookingSyncHeaderMap_(pnHeaders_(sh));bookingSyncFillMissingBookingDates_(sh,col,r1,r2);}
+      if(name==='Chứng từ_FF'||name==='Chứng từ_full')bookingSyncRepairControlColumnsForEditedTargetRange_(e.range);
+      if(name==='TT Nhập'||name==='DS SKU')onEditSyncTTNhapDSSKU(e);
+      if(name==='Hàng lỗi'||name==='DS SKU')onEditSyncHangLoiGHTK(e);
+      let result=null;
+      if(p||name==='DS BC'||name==='TT Nhập'){
+        const rows=new Set();if(p)for(let r=r1;r<=r2;r++)rows.add(r);
+        result=pnV2SyncAll_(p?{pair:p.main,prefer:{side:name===p.main?'main':'full',rows}}:{});
+        if(name==='Booking_full')pnSyncBookingFullRows_(r1,r2);
+      }
+      if(name==='Bàn giao chứng từ'&&e.range.getA1Notation()==='A1'){refreshBanGiaoChungTuDropdown();syncBanGiaoChungTuBySelectedDate();}
+      return result;
+    });
+  } catch(err) {
+    if(/PN_BUSY/.test(String(err&&err.message||err))){PropertiesService.getScriptProperties().setProperty('PN_SYNC_REQUESTED',String(Date.now()));return {ok:false,busy:true};}
+    throw err;
+  } finally { pnV2Start_=0; }
 }
+
 function pnSyncBookingFullRows_(start,end) {
   const previous=BOOKING_SYNC_CONFIG.bookingSheetName;
   try {
@@ -139,22 +131,27 @@ function pnSyncAreaAll_() {
     }
   } finally { KHUVUC_BOOKING_SYNC_CONFIG.bookingSheetName=previous; }
 }
+// Lưới an toàn 5 phút: bắt thay đổi không qua onEdit (script, API, dán từ nơi khác). Không chạy VHFF ở đây.
 function pnScheduledReconcile() {
-  return pnWithLock_(()=>{
-    pnRequireReady_();
-    pnMirrorAll();
-    // Repairs script/API imports that do not fire onEdit.
-    const sh=pnSheet_('Booking_full');
-    if(sh.getLastRow()>1){
-      pnSyncBookingFullRows_(2,sh.getLastRow());
-    }
-    fillMissingGhtkCodesInChungTuFF();
-    pnSyncAreaAll_();
-    pnStampFullIds_(PN_FULL.pairs[2]);
-    pnMirrorAll();
-    return pnSyncVHFF_();
-  });
+  try {
+    return pnWithLock_(()=>{
+      pnRequireReady_();
+      pnV2Start_=Date.now();
+      const result=pnV2SyncAll_({});
+      if(!result.partial)PropertiesService.getScriptProperties().deleteProperty('PN_SYNC_REQUESTED');
+      return result;
+    });
+  } catch(err) {
+    if(/PN_BUSY/.test(String(err&&err.message||err)))return {ok:false,busy:true};
+    throw err;
+  } finally { pnV2Start_=0; }
 }
+// Đồng bộ VHFF chạy riêng, mỗi lần một việc, để không giữ khóa lâu.
+function pnVhffWorker() {
+  try { return pnWithLock_(()=>{ pnRequireReady_(); return pnV2VhffStep_(); }); }
+  catch(err) { if(/PN_BUSY/.test(String(err&&err.message||err)))return {ok:false,busy:true}; throw err; }
+}
+
 function pnSyncVHFF_() {
   pnRequireReady_();
   const props=PropertiesService.getScriptProperties(),sourceBefore=pnSourceRevision_();
@@ -204,13 +201,17 @@ function pnInstallTriggers() {
     'onEditSyncBanGiaoChungTu','onOpenSyncBanGiaoChungTu','onEditSyncTTNhapDSSKU',
     'handleBanGiaoEdit','onEditSyncHangLoiGHTK','onEditSyncSuVuBanhXep','onEditSyncSuvuBanhXep',
     'onEditSyncKhuVucBookingToChungTuFF','onChangeSyncKhuVucBookingToChungTuFF',
-    'pnHandleEdit','pnScheduledReconcile','pnCleanupDaily','pnOpen'
+    'pnHandleEdit','pnScheduledReconcile','pnCleanupDaily','pnOpen','pnVhffWorker'
   ]);
   ScriptApp.getProjectTriggers().filter(t=>old.has(t.getHandlerFunction())).forEach(t=>ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('pnHandleEdit').forSpreadsheet(PN_FULL.spreadsheetId).onEdit().create();
   ScriptApp.newTrigger('pnOpen').forSpreadsheet(PN_FULL.spreadsheetId).onOpen().create();
   ScriptApp.newTrigger('pnScheduledReconcile').timeBased().everyMinutes(5).create();
+  ScriptApp.newTrigger('pnVhffWorker').timeBased().everyMinutes(10).create();
   ScriptApp.newTrigger('pnCleanupDaily').timeBased().atHour(1).everyDays(1).inTimezone(PN_FULL.timezone).create();
-  return 'Đã cài trigger trong project này. Dọn chỉ chạy sau pnEnableCleanup.';
+  // Quy tắc dọn tháng cũ đã chốt: bật mặc định. Tắt bằng pnDisableCleanup nếu cần.
+  PropertiesService.getScriptProperties().setProperty('PN_FULL_CLEANUP','enabled');
+  return 'Đã cài trigger: sửa tay, đối soát 5 phút, VHFF 10 phút, dọn 1 giờ sáng.';
 }
+
 function pnOpen() { pnRequireReady_();return onOpenSyncBanGiaoChungTu(); }

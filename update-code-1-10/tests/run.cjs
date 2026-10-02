@@ -135,11 +135,14 @@ test('Cleanup refuses when disabled or VHFF fails; success preserves pivot and f
  const e=environment();seed(e);e.c.pnMigrateFull();
  assert.equal(e.c.pnCleanupDaily().ok,false);
  e.props.PN_FULL_CLEANUP='enabled';
- e.run("pnSyncVHFF_=()=>{throw new Error('VHFF unavailable');};");
- assert.throws(()=>e.c.pnCleanupDaily(),/VHFF unavailable/);
+ // Quy tắc mới: dọn không phụ thuộc VHFF; chỉ bỏ dòng tháng cũ đã khớp full.
+ e.run("pnSyncVHFF_=()=>{throw new Error('VHFF must not be required');};");
  assert.equal(e.sheets.get('Chứng từ_FF').getRange(5,5).getValue(),'4');
- e.run("pnSyncVHFF_=()=>{PropertiesService.getScriptProperties().deleteProperty('PN_VHFF_DIRTY');return {ok:true};};");
  const r=e.c.pnCleanupDaily();assert.equal(r.ok,true);
+ assert.equal(e.sheets.get('Booking').getRange(2,2).getValue(),'','old-month Booking row left main');
+ assert.equal(e.sheets.get('Booking_full').getRange(2,2).getValue(),'2','Booking history kept');
+ assert.equal(e.sheets.get('File đơn').getRange(2,1).getValue(),'','old-month File đơn rows left main');
+ assert.equal(e.sheets.get('File đơn_full').getLastRow(),3,'File đơn history kept');
  assert.equal(e.sheets.get('Chứng từ_full').getLastRow(),5);
  assert.equal(e.sheets.get('Chứng từ_FF').getRange(4,5).getValue(),'');
  assert.equal(e.sheets.get('Chứng từ_FF').getRange(3,5).getValue(),'2');
@@ -192,7 +195,7 @@ test('Resend with new _diagRequestId, appVersion and re-encoded image returns th
  assert.equal(e.run('uploadCount'),1);
  assert.equal(e.c.apiSave_({...a,note:'changed'}).ok,false,'different business content is still rejected');
 });
-test('Conflict on another order does not block saving; warning recorded for admin',()=>{
+test('Two-sided edit on another order is resolved (main wins, losing copy logged) and never blocks saving',()=>{
  const e=environment();seed(e);e.c.pnMigrateFull();
  e.run("uploadFiles_=()=>({linkAnh:'https://example.invalid/p',files:[{id:'1'}],folderUrl:''});");
  const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
@@ -204,8 +207,11 @@ test('Conflict on another order does not block saving; warning recorded for admi
  assert.ok(g2Main>1,'G2 still in main');
  const res=e.c.apiSave_({clientId:'c1',maDon:'G2',returnType:'Chứng từ',xacThuc:'Đã nhận chứng từ',files:[{base64:'AA=='}]});
  assert.equal(res.ok,true,'save of another order succeeds');
- assert.match(res.mirrorWarning,/Xung đột/);
- assert.match(String(e.props.PN_MIRROR_ERROR||''),/Xung đột/);
+ assert.equal(res.mirrorWarning,'');
+ // Hai bên cùng sửa G1: tab chính thắng, hai tab khớp lại, bản full bị thay được lưu ở _PN_CONFLICTS.
+ assert.equal(full.getRange(rowOf(full,'G1'),10).getValue(),'main edit');
+ assert.equal(main.getRange(rowOf(main,'G1'),10).getValue(),'main edit');
+ assert.match(JSON.stringify(e.sheets.get('_PN_CONFLICTS').rows),/full edit/);
  assert.equal(full.getRange(rowOf(full,'G2'),7).getValue(),'Đã nhận chứng từ');
 });
 test('Shared lock busy returns retryable PN_BUSY instead of a raw exception',()=>{
@@ -309,11 +315,17 @@ test('Interrupted cleanup refuses to overwrite a subsequent manual edit',()=>{
  assert.throws(()=>e.c.pnResumeCleanup(),/sửa tay/);
  assert.equal(sh.getRange(2,10).getValue(),'new manual note');
 });
-test('Full filter includes hidden IDs and unexpected loss of history is blocked',()=>{
+test('Full filter includes hidden IDs; loss of history raises an alert and is restored from main',()=>{
  const e=environment();seed(e);e.c.pnMigrateFull();
  assert.equal(e.sheets.get('Chứng từ_full').getFilter().getRange().getNumColumns(),31);
+ e.c.pnMirrorAll();
+ const lost=e.sheets.get('Chứng từ_full').rows[4].slice(0,17);
  e.sheets.get('Chứng từ_full').getRange(5,1,1,31).clearContent();
- assert.throws(()=>e.c.pnMirrorAll(),/giảm số hồ sơ/);
+ // Không chặn đồng bộ; báo động và chép lại vào full dòng còn ở tab chính.
+ const r=e.c.pnMirrorAll();
+ assert.match(String(e.props.PN_FULL_LOSS||''),/giảm/);
+ assert.equal(r.ok,true,'main and full match again');
+ assert.ok(e.sheets.get('Chứng từ_full').rows.some(x=>x&&x[4]===lost[4]&&x[1]===lost[1]),'lost history row restored from main');
 });
 test('Archived received/cancelled rows stay out of main, old pending returns to main',()=>{
  const e=environment();seed(e);e.c.pnMigrateFull();
@@ -403,5 +415,183 @@ test('One-step recovery refuses wrong moved identity before writing metadata',()
  const main=e.sheets.get('Booking');main.rows[0][16]='__PN_ID';main.rows[0][17]='__PN_BASE';
  main.rows[1][16]=main.rows[1][29];main.rows[1][17]=main.rows[1][30];main.rows[1][29]='';main.rows[1][30]='';main.rows[1][1]='wrong-order';
  assert.throws(()=>e.c.pnRecoverFullMigration(),/không khớp hồ sơ/);assert.equal(main.rows[1][29],'');
+});
+
+// ===== Bộ đồng bộ v2: theo tên cột, chỉ xử lý dòng thay đổi, chính ⇄ full khớp 100% =====
+function v2env(){const e=environment();seed(e);e.c.pnMigrateFull();return e;}
+function auditOk(e){const r=e.run('PN_FULL.pairs.map(pnV2Audit_)');r.forEach(x=>assert.equal(x.ok,true,x.sheet+': '+x.errors.join('; ')));}
+function rowOf(sh,col,val){return sh.rows.findIndex((r,i)=>i>0&&r&&String(r[col])===String(val))+1;}
+function countWrites(fn){const orig=Range.prototype.setValues;let n=0;Range.prototype.setValues=function(rows){n++;return orig.call(this,rows);};try{fn();}finally{Range.prototype.setValues=orig;}return n;}
+function edit(e,sheet,row,col,value){const sh=e.sheets.get(sheet);sh.getRange(row,col).setValue(value);return e.c.pnHandleEdit({range:sh.getRange(row,col)});}
+function docRow(order,date,status){const r=doc(order,date,status);return r;}
+test('V2 upgrade from legacy fingerprints: first run only rewrites base/ID, no business change; second run writes nothing',()=>{
+ const e=v2env();
+ const snap=['Booking','Booking_full','File đơn','File đơn_full','Chứng từ_FF','Chứng từ_full'].map(n=>JSON.stringify(e.sheets.get(n).rows.map(r=>(r||[]).slice(0,18))));
+ e.c.pnMirrorAll();
+ const after=['Booking','Booking_full','File đơn','File đơn_full','Chứng từ_FF','Chứng từ_full'].map(n=>JSON.stringify(e.sheets.get(n).rows.map(r=>(r||[]).slice(0,18))));
+ assert.deepEqual(after,snap,'no business value changed by the upgrade');
+ assert.equal(e.props.PN_ENGINE,'v2');auditOk(e);
+ assert.equal(countWrites(()=>e.c.pnMirrorAll()),0,'unchanged data -> zero writes');
+});
+test('V2 columns matched by header name: reordering main columns causes no false change',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const main=e.sheets.get('Chứng từ_FF');
+ // Đổi chỗ cột "Khách Hàng"(C) và "Mã PO"(D) ở tab chính, kèm dữ liệu.
+ main.rows.forEach(r=>{if(r){const t=r[2];r[2]=r[3];r[3]=t;}});
+ const fullBefore=JSON.stringify(e.sheets.get('Chứng từ_full').rows.map(r=>(r||[]).slice(0,17)));
+ e.c.pnMirrorAll();
+ assert.equal(JSON.stringify(e.sheets.get('Chứng từ_full').rows.map(r=>(r||[]).slice(0,17))),fullBefore,'full untouched');
+ auditOk(e);
+});
+test('V2 manual edit: main -> full and full -> main (current month), only edited row written',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
+ const m=rowOf(main,4,'1'),f=rowOf(full,4,'1');
+ edit(e,'Chứng từ_FF',m,10,'ghi chú từ tab chính');
+ assert.equal(full.getRange(f,10).getValue(),'ghi chú từ tab chính');
+ edit(e,'Chứng từ_full',f,11,'note từ full');
+ assert.equal(main.getRange(m,11).getValue(),'note từ full');
+ auditOk(e);
+});
+test('V2 new rows: main -> full with ID and Tháng; full row of current month -> main',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
+ const nr=main.getLastRow()+1;main.getRange(nr,1,1,17).setValues([docRow(7,'02/10/2026','Chưa nhận chứng từ')]);
+ e.c.pnHandleEdit({range:main.getRange(nr,1,1,17)});
+ const fr=rowOf(full,4,'7');assert.ok(fr>1,'order 7 in full');
+ assert.equal(full.getRange(fr,18).getValue(),'2026-10');assert.ok(String(full.getRange(fr,30).getValue()).length>5,'full has ID');
+ const fnew=full.getLastRow()+1;full.getRange(fnew,1,1,17).setValues([docRow(8,'03/10/2026','Chưa nhận chứng từ')]);
+ e.c.pnScheduledReconcile();
+ assert.ok(rowOf(main,4,'8')>1,'order 8 copied to main');
+ auditOk(e);
+});
+test('V2 empty or default-only rows are not records and are never copied to full',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
+ const before=full.getLastRow(),nr=main.getLastRow()+1;
+ const blank=Array(17).fill('');blank[6]='Chưa nhận chứng từ';blank[14]='Bình thường';blank[8]=false;
+ main.getRange(nr,1,1,17).setValues([blank]);
+ e.c.pnScheduledReconcile();
+ assert.equal(full.getLastRow(),before,'no row added to full');
+});
+test('V2 copy-pasted row with the old hidden ID becomes a new record; original untouched',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
+ const src=rowOf(main,4,'1'),copy=main.rows[src-1].slice();copy[4]='9';copy[1]='G9';
+ const nr=main.getLastRow()+1;main.rows[nr-1]=copy;
+ e.c.pnScheduledReconcile();
+ assert.ok(rowOf(full,4,'9')>1,'copy added as new full record');
+ assert.notEqual(main.getRange(nr,30).getValue(),main.getRange(src,30).getValue(),'copy got its own ID');
+ assert.equal(full.getRange(rowOf(full,4,'1'),2).getValue(),'G1','original record unchanged');
+ auditOk(e);
+});
+test('V2 new main column is added to full by name and synced',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
+ main.getRange(1,18).setValue('Cột mới');main.getRange(2,18).setValue('giá trị mới');
+ e.c.pnScheduledReconcile();
+ const col=full.rows[0].indexOf('Cột mới')+1;assert.ok(col>18,'header added in a free column of full');
+ assert.equal(full.getRange(rowOf(full,1,main.getRange(2,2).getValue()),col).getValue(),'giá trị mới');
+ auditOk(e);
+});
+test('V2 daily cleanup: received/cancelled old docs and old Booking/File đơn leave main; unreceived stays; reverted status returns',()=>{
+ const e=v2env();e.props.PN_FULL_CLEANUP='enabled';
+ assert.equal(e.c.pnCleanupDaily().ok,true);
+ const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
+ assert.ok(rowOf(main,4,'2')>1,'old unreceived kept');
+ assert.equal(rowOf(main,4,'3'),0,'old received removed');assert.equal(rowOf(main,4,'4'),0,'old cancelled removed');
+ assert.ok(rowOf(full,4,'3')>1&&rowOf(full,4,'4')>1,'history kept in full');
+ assert.equal(e.sheets.get('File đơn').getRange(2,20).getValue(),'pivot','pivot untouched');
+ edit(e,'Chứng từ_full',rowOf(full,4,'3'),7,'Chưa nhận chứng từ');
+ assert.ok(rowOf(main,4,'3')>1,'reverted to unreceived -> back to main');
+ auditOk(e);
+});
+test('V2 API save writes only the right order, identical in full and main, even with reordered columns',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ e.run("uploadFiles_=()=>({linkAnh:'https://example.invalid/p',files:[{id:'1'}],folderUrl:''});");
+ const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
+ main.rows.forEach(r=>{if(r){const t=r[9];r[9]=r[10];r[10]=t;}}); // đổi chỗ "Ghi chú chứng từ" và "Note" ở tab chính
+ e.c.pnMirrorAll();
+ const others=()=>JSON.stringify([main,full].map(sh=>sh.rows.filter((r,i)=>i>0&&r&&String(r[4])!=='2').map(r=>r.slice(0,17))));
+ const before=others();
+ const res=e.c.apiSave_({clientId:'v2api',maDon:'G2',returnType:'Chứng từ',xacThuc:'Đã nhận chứng từ',note:'ghi chú app',maEcomCt:'EC-9',files:[{base64:'AA=='}]});
+ assert.equal(res.ok,true);
+ assert.equal(others(),before,'no other order changed');
+ const fr=rowOf(full,4,'2'),mr=rowOf(main,4,'2');
+ assert.equal(full.getRange(fr,7).getValue(),'Đã nhận chứng từ');assert.equal(main.getRange(mr,7).getValue(),'Đã nhận chứng từ');
+ assert.equal(full.getRange(fr,10).getValue(),'ghi chú app');assert.equal(main.getRange(mr,11).getValue(),'ghi chú app','note by header in moved main column');
+ assert.equal(full.getRange(fr,12).getValue(),'EC-9');assert.equal(main.getRange(mr,12).getValue(),'EC-9');
+ auditOk(e);
+});
+test('V2 busy lock: scheduled run and edit return quietly; edit leaves a sync request',()=>{
+ const e=v2env();
+ e.run("LockService={getScriptLock:()=>({tryLock(){return false;},waitLock(){},releaseLock(){}})};");
+ assert.equal(e.c.pnScheduledReconcile().busy,true);
+ const sh=e.sheets.get('Chứng từ_FF');
+ assert.equal(e.c.pnHandleEdit({range:sh.getRange(2,10)}).busy,true);
+ assert.ok(e.props.PN_SYNC_REQUESTED);
+});
+test('V2 pipeline: new Booking row creates the order in Chứng từ_full and Chứng từ_FF; new File đơn fills GHTK in both',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const bk=e.sheets.get('Booking'),nr=bk.getLastRow()+1,row=Array(16).fill('');
+ row[0]='02/10/2026';row[1]='77';row[3]='Customer X';row[4]='PO77';row[5]='Addr';row[9]=10;
+ bk.getRange(nr,1,1,16).setValues([row]);e.c.pnHandleEdit({range:bk.getRange(nr,1,1,16)});
+ const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
+ assert.ok(rowOf(e.sheets.get('Booking_full'),1,'77')>1,'booking in Booking_full');
+ assert.ok(rowOf(full,4,'77')>1,'order in Chứng từ_full');assert.ok(rowOf(main,4,'77')>1,'order in Chứng từ_FF');
+ const fd=e.sheets.get('File đơn'),fr=fd.getLastRow()+1,frow=Array(18).fill('');
+ frow[0]='GH77';frow[1]='2026-10-02 10:00:00';frow[6]='Depot';frow[10]='77';
+ fd.getRange(fr,1,1,18).setValues([frow]);e.c.pnHandleEdit({range:fd.getRange(fr,1,1,18)});
+ assert.equal(full.getRange(rowOf(full,4,'77'),2).getValue(),'GH77');
+ assert.equal(main.getRange(rowOf(main,4,'77'),2).getValue(),'GH77');
+ auditOk(e);
+});
+test('V2 first run after upgrade picks the side that really changed (legacy base)',()=>{
+ const e=v2env();
+ const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
+ main.getRange(rowOf(main,4,'1'),10).setValue('sửa ở chính trước nâng cấp');
+ full.getRange(rowOf(full,4,'2'),11).setValue('sửa ở full trước nâng cấp');
+ e.c.pnMirrorAll();
+ assert.equal(full.getRange(rowOf(full,4,'1'),10).getValue(),'sửa ở chính trước nâng cấp');
+ assert.equal(main.getRange(rowOf(main,4,'2'),11).getValue(),'sửa ở full trước nâng cấp');
+ assert.ok(!e.sheets.get('_PN_CONFLICTS'),'no false conflict');
+ auditOk(e);
+});
+test('V2 edited side wins when both sides changed; losing copy is logged',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
+ const m=rowOf(main,4,'1'),f=rowOf(full,4,'1');
+ main.getRange(m,10).setValue('bản chính');
+ edit(e,'Chứng từ_full',f,10,'bản full vừa sửa tay');
+ assert.equal(main.getRange(m,10).getValue(),'bản full vừa sửa tay');
+ assert.match(JSON.stringify(e.sheets.get('_PN_CONFLICTS').rows),/bản chính/);
+ auditOk(e);
+});
+test('V2 scale: with 3000 rows per tab, Sheet calls stay constant (not per row); one edit writes only that row',()=>{
+ const e=environment();seed(e);
+ const docs=e.sheets.get('Chứng từ_FF'),bk=e.sheets.get('Booking'),fd=e.sheets.get('File đơn');
+ for(let i=100;i<3100;i++){
+  docs.rows.push(doc(i,'0'+(1+i%9)+'/10/2026','Chưa nhận chứng từ'));
+  const b=Array(16).fill('');b[0]='01/10/2026';b[1]=String(i);b[9]=i%40;bk.rows.push(b);
+  const f=Array(18).fill('');f[0]='G'+i;f[1]='2026-10-01 08:00:00';f[6]='Depot';f[10]=String(i);fd.rows.push(f);
+ }
+ e.c.pnMigrateFull();e.c.pnMirrorAll();
+ const calls={read:0,write:0};
+ const gv=Range.prototype.getValues,gd=Range.prototype.getDisplayValues,sv=Range.prototype.setValues;
+ Range.prototype.getValues=function(){calls.read++;return gv.call(this);};
+ Range.prototype.getDisplayValues=function(){calls.read++;return gd.call(this);};
+ Range.prototype.setValues=function(r){calls.write++;return sv.call(this,r);};
+ try {
+  e.c.pnScheduledReconcile();
+  assert.equal(calls.write,0,'no change -> no write');
+  assert.ok(calls.read<80,'reads independent of row count: '+calls.read);
+  calls.read=0;calls.write=0;
+  const m=rowOf(docs,4,'2500');docs.getRange(m,10).setValue('sửa 1 dòng');
+  e.c.pnHandleEdit({range:docs.getRange(m,10)});
+  assert.ok(calls.write<=6,'one edited row -> few writes: '+calls.write);
+  assert.ok(calls.read<80,'reads independent of row count: '+calls.read);
+ } finally { Range.prototype.getValues=gv;Range.prototype.getDisplayValues=gd;Range.prototype.setValues=sv; }
+ assert.equal(e.sheets.get('Chứng từ_full').getRange(rowOf(e.sheets.get('Chứng từ_full'),4,'2500'),10).getValue(),'sửa 1 dòng');
+ auditOk(e);
 });
 console.log('RESULT '+passed+' tests passed.');
