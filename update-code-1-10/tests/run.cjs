@@ -26,11 +26,18 @@ class Range{
  getRow(){return this.r;}getColumn(){return this.c;}getNumRows(){return this.n;}getNumColumns(){return this.w;}
  getLastRow(){return this.r+this.n-1;} getSheet(){return this.sh;}
  getA1Notation(){return 'A1';}
- copyTo(){return this;}
+ copyTo(to,type){if(type===2){const m=this.sh.fmt?.dv;if(m){const fm=(to.sh.fmt??={}),d=(fm.dv??=new Map());for(let i=0;i<to.n;i++)for(let j=0;j<to.w;j++){const v=m.get((this.r+(i%this.n))+':'+(this.c+j));if(v!=null)d.set((to.r+i)+':'+(to.c+j),v);}}}return this;}
  createFilter(){const range=this,filter={getRange:()=>range,getColumnFilterCriteria:()=>null,setColumnFilterCriteria(){return this;},remove(){range.sh.filter=null;}};this.sh.filter=filter;return filter;}
  createTextFinder(q){const range=this;return {matchEntireCell(){return this;},useRegularExpression(){return this;},findAll(){return range.getValues().flatMap((r,i)=>String(r[0])===q?[new Range(range.sh,range.r+i,range.c)]:[]);}}}
 }
-for(const method of ['setNumberFormat','setDataValidation','clearDataValidations','clearFormat','setBorder','setFontFamily','setFontSize','setVerticalAlignment','setFontWeight','setHorizontalAlignment','setWrap','merge','breakApart'])Range.prototype[method]=function(){return this;};
+const FMT_KINDS={Backgrounds:'bg',FontColors:'fc',FontWeights:'fw',FontLines:'fl',NumberFormats:'nf',DataValidations:'dv'};
+for(const [name,k] of Object.entries(FMT_KINDS)){
+ Range.prototype['get'+name]=function(){const m=this.sh.fmt?.[k]||new Map();return Array.from({length:this.n},(_,i)=>Array.from({length:this.w},(_,j)=>m.get((this.r+i)+':'+(this.c+j))??null));};
+ Range.prototype['set'+name]=function(rows){assert.equal(rows.length,this.n);const fm=(this.sh.fmt??={});const m=(fm[k]??=new Map());rows.forEach((row,i)=>{assert.equal(row.length,this.w);row.forEach((v,j)=>{if(v==null)m.delete((this.r+i)+':'+(this.c+j));else m.set((this.r+i)+':'+(this.c+j),v);});});return this;};
+}
+Range.prototype.clearFormat=function(){for(const k of ['bg','fc','fw','fl','nf']){const m=this.sh.fmt?.[k];if(!m)continue;for(let i=0;i<this.n;i++)for(let j=0;j<this.w;j++)m.delete((this.r+i)+':'+(this.c+j));}return this;};
+Range.prototype.clearDataValidations=function(){const m=this.sh.fmt?.dv;if(m)for(let i=0;i<this.n;i++)for(let j=0;j<this.w;j++)m.delete((this.r+i)+':'+(this.c+j));return this;};
+for(const method of ['setNumberFormat','setDataValidation','setBorder','setFontFamily','setFontSize','setVerticalAlignment','setFontWeight','setHorizontalAlignment','setWrap','merge','breakApart'])Range.prototype[method]=function(){return this;};
 class Sheet{
  constructor(name,rows=[]){this.name=name;this.rows=rows;this.maxRows=1000;this.maxCols=40;this.formulas=new Map();}
  getName(){return this.name;} getLastRow(){let n=this.rows.length;while(n&&!this.rows[n-1]?.some(x=>x!==''&&x!=null))n--;return n;}
@@ -603,6 +610,31 @@ test('No time trigger: first Sheet edit of the day runs the daily cleanup once; 
  let cleaned=0;e.run("var __c=pnV2Cleanup_;pnV2Cleanup_=function(){globalThis.__n=(globalThis.__n||0)+1;return __c();};");
  edit(e,'Chứng từ_FF',rowOf(main,4,'1'),10,'sửa lần 2');
  assert.equal(e.run('globalThis.__n||0'),0,'no second cleanup the same day');
+ auditOk(e);
+});
+test('Cleanup moves each row together with its colours/dropdowns; vacated rows are wiped clean; new rows take no colour',()=>{
+ const e=v2env();e.props.PN_FULL_CLEANUP='enabled';e.c.pnMirrorAll();
+ const main=e.sheets.get('Chứng từ_FF');
+ const rG3=rowOf(main,4,'3'),rG2=rowOf(main,4,'2'),last=main.getLastRow();
+ main.getRange(rG3,1,1,17).setBackgrounds([Array(17).fill('#ff0000')]);       // đơn sẽ bị dọn: tô đỏ
+ main.getRange(rG2,1,1,17).setBackgrounds([Array(17).fill('#00ff00')]);       // đơn giữ lại: tô xanh
+ main.getRange(2,1,last-1,17).setDataValidations(Array.from({length:last-1},()=>Array(17).fill('dropdown')));
+ main.rows.push(Array(17).fill(''));main.rows[main.rows.length-1][8]=false;   // dòng mẫu trống chỉ có checkbox
+ main.getRange(main.rows.length,1,1,17).setDataValidations([Array(17).fill('dropdown')]);
+ e.c.pnCleanupDaily();
+ const g2=rowOf(main,4,'2');
+ assert.equal(main.getRange(g2,1).getBackgrounds()[0][0],'#00ff00','kept row keeps its own colour');
+ const colours=main.getRange(2,1,main.getLastRow()+3,17).getBackgrounds().flat();
+ assert.ok(!colours.includes('#ff0000'),'colour of removed order not left on any row');
+ const firstEmpty=main.getLastRow()+1;
+ assert.equal(main.getRange(firstEmpty,1).getDataValidations()[0][0],null,'vacated row has no dropdown/checkbox');
+ assert.equal(main.getRange(firstEmpty,1).getBackgrounds()[0][0],null,'vacated row has no colour');
+ const nr=main.getLastRow()+1;main.getRange(nr,1,1,17).setValues([doc(55,'05/10/2026','Chưa nhận chứng từ')]);
+ const full=e.sheets.get('Chứng từ_full'),fr=full.getLastRow()+1;full.getRange(fr,1,1,17).setValues([doc(56,'05/10/2026','Chưa nhận chứng từ')]);
+ e.c.pnScheduledReconcile();
+ const r56=rowOf(main,4,'56');
+ assert.equal(main.getRange(r56,1).getBackgrounds()[0][0],null,'new row from full takes no colour of another order');
+ assert.equal(main.getRange(r56,1).getDataValidations()[0][0],'dropdown','new row takes the template dropdown');
  auditOk(e);
 });
 console.log('RESULT '+passed+' tests passed.');

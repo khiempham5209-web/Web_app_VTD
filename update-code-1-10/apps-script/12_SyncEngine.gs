@@ -195,12 +195,15 @@ function pnV2Put_(map, row, col, value) {
   map.get(row)[col] = value;
 }
 // Sao chép định dạng/validation của dòng mẫu (dòng 2) cho các dòng vừa thêm.
+// Dòng mới thêm vào chỉ lấy dropdown/checkbox và định dạng số của dòng mẫu (dòng 2), KHÔNG lấy màu/chữ của đơn khác.
 function pnV2CopyFormat_(L, start, count, width) {
   if (!count || start <= 2 || width < 1) return;
   const from = L.sh.getRange(2, 1, 1, width), to = L.sh.getRange(start, 1, count, width);
-  from.copyTo(to, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
   from.copyTo(to, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
+  const numbers = from.getNumberFormats()[0];
+  to.setNumberFormats(Array.from({length: count}, () => numbers.slice()));
 }
+
 function pnV2LastDataRow_(L, cfg, rows) {
   for (let i = rows.length - 1; i >= 0; i--) if (pnV2Rec_(L, cfg, rows[i]) || (L.id != null && pnText_(rows[i][L.id]))) return i + 2;
   return 1;
@@ -445,6 +448,20 @@ function pnV2Blocks_(rows) {
 /* Dọn mỗi ngày: xóa khỏi tab chính dòng tháng cũ đã khớp 100% với full (cùng ID, cùng nội dung).
  * Chứng từ_FF: chỉ dòng Đã nhận chứng từ / Shop hủy OD. Dòng chưa xác định ngày, chưa khớp: giữ lại.
  * Ghi lại phần còn lại liền nhau từ dòng 2 (không deleteRows để không lệch pivot/công thức). */
+// Định dạng được dời theo dòng khi dọn (màu, chữ, số, dropdown/checkbox).
+const PN_V2_FORMATS_ = [['getBackgrounds', 'setBackgrounds'], ['getFontColors', 'setFontColors'], ['getFontWeights', 'setFontWeights'],
+  ['getFontLines', 'setFontLines'], ['getNumberFormats', 'setNumberFormats'], ['getDataValidations', 'setDataValidations']];
+// Ô có nội dung thật (bỏ qua ô trống và checkbox chưa tích).
+function pnV2Meaningful_(L, row) {
+  for (let i = 0; i < L.width; i++) { const c = pnV2Canon_(row[i]); if (c !== '' && c !== 'FALSE') return true; }
+  return false;
+}
+/* Dọn mỗi ngày: xóa khỏi tab chính dòng tháng cũ đã khớp 100% với full (cùng ID, cùng nội dung).
+ * Chứng từ_FF: chỉ dòng Đã nhận chứng từ / Shop hủy OD. Dòng chưa xác định ngày, chưa khớp: giữ lại.
+ * Dòng đang gõ dở (chưa có mã nhưng có nội dung) được giữ. Dòng mẫu trống (chỉ dropdown/checkbox chưa tích) bị xóa sạch.
+ * Dồn phần còn lại lên từ dòng 2 KÈM định dạng của chính dòng đó; các dòng trống phía dưới được xóa sạch
+ * giá trị, màu, định dạng, dropdown/checkbox. Chỉ trong vùng bảng (cột A tới cột cuối của bảng) + cột ID ẩn;
+ * không deleteRows để không lệch pivot/công thức bên phải (File đơn T:W). */
 function pnV2Cleanup_() {
   const month = pnCurrentMonth_(), results = [];
   for (const p of PN_FULL.pairs) {
@@ -452,29 +469,47 @@ function pnV2Cleanup_() {
     const fById = new Map();
     pnV2Read_(F).forEach(r => { const id = pnText_(r[F.id]); if (id) fById.set(id, r); });
     const before = pnV2Read_(M), cols = pnV2CleanupCols_(M);
-    const remove = [], kept = [];
+    let removed = 0, blank = 0;
+    const keptIdx = [];
     before.forEach((r, i) => {
-      if (!pnV2Rec_(M, cfg, r)) return;
+      if (!pnV2Rec_(M, cfg, r)) { if (pnV2Meaningful_(M, r)) keptIdx.push(i); else if (pnV2Has_(M, r, names) || (M.id != null && pnText_(r[M.id]))) blank++; return; }
       const f = fById.get(pnText_(r[M.id]));
       const ok = pnV2Eligible_(M, cfg, r, month) && f && pnV2Sig_(M, r, names) === pnV2Sig_(F, f, names);
-      (ok ? remove : kept).push(r);
+      if (ok) removed++; else keptIdx.push(i);
     });
-    if (!remove.length) { results.push({sheet: p.main, removed: 0}); continue; }
+    if (!removed) { results.push({sheet: p.main, removed: 0}); continue; }
     const pick = r => cols.map(c => r[c] === undefined ? '' : r[c]);
     const total = before.length, wanted = [];
-    for (let i = 0; i < total; i++) wanted.push(i < kept.length ? pick(kept[i]) : cols.map(() => ''));
+    for (let i = 0; i < total; i++) wanted.push(i < keptIdx.length ? pick(before[keptIdx[i]]) : cols.map(() => ''));
+    // Định dạng của vùng bảng, đọc một lần.
+    const block = M.width ? M.sh.getRange(2, 1, total, M.width) : null;
+    const formats = block ? PN_V2_FORMATS_.map(([get]) => block[get]()) : [];
     pnV2Backup_(p, M, before.map(pick), cols, wanted);
     PropertiesService.getScriptProperties().setProperty('PN_CLEANUP_PENDING', JSON.stringify({main: p.main, month, engine: PN_V2.engine}));
     pnV2WriteCols_(M, cols, wanted);
+    if (block) {
+      if (keptIdx.length) {
+        const keptRange = M.sh.getRange(2, 1, keptIdx.length, M.width);
+        PN_V2_FORMATS_.forEach(([, set], k) => keptRange[set](keptIdx.map(i => formats[k][i])));
+      }
+      const vacated = total - keptIdx.length;
+      if (vacated > 0) {
+        const start = keptIdx.length + 2, range = M.sh.getRange(start, 1, vacated, M.width);
+        range.clearFormat();
+        // Hết dòng giữ lại: giữ dropdown/checkbox ở dòng 2 làm mẫu cho dòng mới.
+        if (keptIdx.length) range.clearDataValidations();
+        else if (vacated > 1) M.sh.getRange(3, 1, vacated - 1, M.width).clearDataValidations();
+      }
+    }
     // Đọc lại đúng số dòng đã ghi (kể cả các dòng cuối vừa xóa trống) để đối chiếu.
     const check = M.sh.getRange(2, 1, total, pnV2ReadWidth_(M)).getValues().map(pick);
     if (pnHash_(check) !== pnHash_(wanted)) throw new Error('Đối soát sau dọn không khớp ở ' + p.main + '; giữ khóa phục hồi.');
     PropertiesService.getScriptProperties().deleteProperty('PN_CLEANUP_PENDING');
-    results.push({sheet: p.main, removed: remove.length});
+    results.push({sheet: p.main, removed, blankCleared: blank});
   }
   return {ok: true, results};
 }
-// Cột được dọn: khối nghiệp vụ + __PN_ID + __PN_BASE. Không đụng cột khác (pivot, ghi chú bên phải).
+
 function pnV2CleanupCols_(M) {
   const cols = [];
   for (let i = 0; i < M.width; i++) cols.push(i);
