@@ -661,4 +661,23 @@ test('API save and a manual edit on Chứng từ read only the ID column + the o
  assert.equal(full.getRange(rowOf(full,4,'2600'),10).getValue(),'sửa tay','manual edit reached full');
  auditOk(e);
 });
+test('Pasting 20 Booking rows into 3000 existing: only those rows go to Booking_full; their orders appear in both Chứng từ tabs; few writes',()=>{
+ const e=environment();seed(e);
+ const bk=e.sheets.get('Booking'),docs=e.sheets.get('Chứng từ_FF');
+ for(let i=100;i<3100;i++){const b=Array(16).fill('');b[0]='01/10/2026';b[1]=String(i);b[9]=5;bk.rows.push(b);docs.rows.push(doc(i,'01/10/2026','Chưa nhận chứng từ'));}
+ e.c.pnMigrateFull();e.c.pnMirrorAll();
+ const start=bk.getLastRow()+1,paste=[];
+ for(let i=0;i<20;i++){const b=Array(16).fill('');b[0]='02/10/2026';b[1]=String(9000+i);b[3]='Cust';b[4]='PO'+i;b[5]='Addr';b[9]=10;paste.push(b);}
+ bk.getRange(start,1,20,16).setValues(paste);
+ let writes=0;const sv=Range.prototype.setValues;Range.prototype.setValues=function(r){writes++;return sv.call(this,r);};
+ try { e.c.pnHandleEdit({range:bk.getRange(start,1,20,16)}); } finally { Range.prototype.setValues=sv; }
+ const bf=e.sheets.get('Booking_full'),full=e.sheets.get('Chứng từ_full');
+ for(let i=0;i<20;i++){
+  assert.ok(rowOf(bf,1,String(9000+i))>1,'booking '+(9000+i)+' in Booking_full');
+  assert.ok(rowOf(full,4,String(9000+i))>1,'order in Chứng từ_full');
+  assert.ok(rowOf(docs,4,String(9000+i))>1,'order in Chứng từ_FF');
+ }
+ assert.ok(writes<=25,'batched writes, not per row of the whole tab: '+writes);
+ auditOk(e);
+});
 console.log('RESULT '+passed+' tests passed.');

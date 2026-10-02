@@ -604,55 +604,196 @@ function pnListNonRecordRows() {
 /* Đồng bộ đúng MỘT hồ sơ (dòng rowNo trên tab side) giữa tab chính và full. Chỉ đọc cột ID của tab kia và đúng
  * 2 dòng liên quan, nên giữ khóa rất ngắn. prefer = true: bên side thắng khi khác nhau (vừa sửa tay / API vừa ghi).
  * Trường hợp hiếm (chưa có ID, ID trùng, hồ sơ chưa có ở tab kia) thì chuyển sang đồng bộ cả cặp như cũ. */
-function pnV2SyncOne_(p, side, rowNo, prefer) {
-  const cfg = pnV2Cfg_(p), L = pnV2EnsureColumns_(p), M = L.M, F = L.F, names = pnV2Names_(M);
+function pnV2SyncOne_(p, side, rowNo, prefer) { return pnV2SyncRows_(p, side, [rowNo], prefer); }
+// Giá trị một cột (theo tên) của cả tab, đã chuẩn hóa. Dùng để biết script nghiệp vụ vừa đổi những dòng nào.
+function pnV2ColSnap_(sh, isFull, aliases) {
+  const L = pnV2Layout_(sh, isFull), c = pnV2Col_(L, aliases), last = sh.getLastRow();
+  if (c == null || last < 2) return [];
+  return sh.getRange(2, c + 1, last - 1, 1).getValues().map(r => pnV2Canon_(r[0]));
+}
+function pnV2ColDiff_(before, after) {
+  const out = [];
+  for (let i = 0; i < Math.max(before.length, after.length); i++) if ((before[i] || '') !== (after[i] || '')) out.push(i + 2);
+  return out;
+}
+/* Đồng bộ ĐÚNG các dòng rowList (trên tab side) với tab còn lại. Chỉ đọc: khối dòng vừa đổi, cột ID/mã của tab kia
+ * và các dòng tương ứng. Dòng mới (chưa có ID) -> thêm vào tab kia; dòng đã có -> cập nhật đúng dòng cùng ID.
+ * prefer = true: bên side thắng khi hai bên khác nhau (vừa sửa tay / API / script vừa ghi). */
+function pnV2SyncRows_(p, side, rowList, prefer) {
+  const res = {ok: true, changed: 0, added: 0, conflicts: 0, otherRows: []};
+  const rowsIn = Array.from(new Set((rowList || []).map(Number).filter(r => r >= 2))).sort((a, b) => a - b);
+  if (!rowsIn.length) return res;
+  const cfg = pnV2Cfg_(p), month = pnCurrentMonth_(), L = pnV2EnsureColumns_(p), M = L.M, F = L.F, names = pnV2Names_(M);
   const src = side === 'main' ? M : F, dst = side === 'main' ? F : M;
-  const fallback = () => pnV2SyncPair_(p, prefer ? {prefer: {side, rows: new Set([rowNo])}} : {});
-  if (rowNo < 2 || rowNo > src.sh.getLastRow()) return {skipped: true};
-  const srcRow = src.sh.getRange(rowNo, 1, 1, pnV2ReadWidth_(src)).getValues()[0];
-  if (!pnV2Rec_(src, cfg, srcRow)) return {skipped: true};
-  const id = pnText_(srcRow[src.id]);
-  if (!id) return fallback();
-  const idsOf = L2 => { const last = L2.sh.getLastRow(); return last < 2 ? [] : L2.sh.getRange(2, L2.id + 1, last - 1, 1).getValues().map(r => pnText_(r[0])); };
-  const srcIds = idsOf(src);
-  if (srcIds.filter(x => x === id).length > 1) return fallback();
-  const dstIds = idsOf(dst), hits = [];
-  dstIds.forEach((x, i) => { if (x === id) hits.push(i + 2); });
-  if (hits.length !== 1) {
-    if (!hits.length && side === 'full' && !pnV2NeedsMain_(F, cfg, srcRow, pnCurrentMonth_())) return {ok: true, notInMain: true};
-    return fallback();
-  }
-  const dstRowNo = hits[0], dstRow = dst.sh.getRange(dstRowNo, 1, 1, pnV2ReadWidth_(dst)).getValues()[0];
-  const mRow = side === 'main' ? srcRow : dstRow, fRow = side === 'main' ? dstRow : srcRow;
-  const mNo = side === 'main' ? rowNo : dstRowNo, fNo = side === 'main' ? dstRowNo : rowNo;
-  const sigM = pnV2Sig_(M, mRow, names), sigF = pnV2Sig_(F, fRow, names), hashM = pnHash_(sigM), hashF = pnHash_(sigF);
-  const mUp = new Map(), fUp = new Map(), res = {ok: true, id, changed: false};
-  const month = () => pnV2Month_(M, cfg, mRow) || 'CẦN KIỂM TRA';
-  if (sigM === sigF) {
-    if (pnText_(mRow[M.base]) !== hashM) pnV2Put_(mUp, mNo, M.base, hashM);
-    if (pnText_(fRow[F.base]) !== hashM) pnV2Put_(fUp, fNo, F.base, hashM);
-  } else {
-    const base = pnText_(mRow[M.base]) || pnText_(fRow[F.base]);
-    const natural = base === hashF ? 'push' : base === hashM ? 'pull' : null;
-    const dir = prefer ? (side === 'main' ? 'push' : 'pull') : (natural || 'push');
-    if (dir !== natural) { res.conflict = true; pnV2ConflictLog_(p, dir === 'push' ? p.full : p.main, id, dir === 'push' ? sigF : sigM); }
-    const from = dir === 'push' ? M : F, to = dir === 'push' ? F : M, fromRow = dir === 'push' ? mRow : fRow, toRow = dir === 'push' ? fRow : mRow;
-    const toUp = dir === 'push' ? fUp : mUp, toNo = dir === 'push' ? fNo : mNo, hash = dir === 'push' ? hashM : hashF;
-    names.forEach(n => {
-      const s = from.cols[n], d = to.cols[n];
-      if (d == null) return;
-      const v = s == null ? '' : fromRow[s];
-      if (pnV2Canon_(toRow[d]) !== pnV2Canon_(v)) pnV2Put_(toUp, toNo, d, v);
+  const rows = rowsIn.filter(r => r <= src.sh.getLastRow());
+  if (!rows.length) return res;
+  const colVals = (Lx, i) => { const last = Lx.sh.getLastRow(); return last < 2 || i == null ? [] : Lx.sh.getRange(2, i + 1, last - 1, 1).getValues().map(r => r[0]); };
+  const r1 = rows[0], r2 = rows[rows.length - 1];
+  const block = src.sh.getRange(r1, 1, r2 - r1 + 1, pnV2ReadWidth_(src)).getValues();
+  const srcIds = colVals(src, src.id).map(pnText_);
+  const dstIds = colVals(dst, dst.id).map(pnText_);
+  // Chỉ mục bên kia theo ID; ID xuất hiện 2 lần ở bên kia -> đồng bộ cả cặp (trường hợp hiếm, an toàn).
+  const dstById = new Map();
+  for (let i = 0; i < dstIds.length; i++) if (dstIds[i]) { if (dstById.has(dstIds[i])) return Object.assign(pnV2SyncPair_(p, prefer ? {prefer: {side, rows: new Set(rows)}} : {}), {fallback: true}); dstById.set(dstIds[i], i + 2); }
+  // Dòng cuối có dữ liệu của bên kia (để thêm dòng mới ngay sau). Chỉ đọc khi thật sự cần thêm dòng.
+  const lastDataRow = () => {
+    const identVals = (cfg.ident || []).map(x => pnV2Col_(dst, [x])).filter(c => c != null).map(c => colVals(dst, c));
+    for (let i = Math.max(dstIds.length, ...identVals.map(v => v.length)) - 1; i >= 0; i--)
+      if (dstIds[i] || identVals.some(v => pnV2Canon_(v[i]) !== '')) return i + 2;
+    return 1;
+  };
+  // Nối dòng chính chưa có ID với hồ sơ full cùng mã (không phải File đơn), để không tạo trùng.
+  let keyMap = null;
+  const keyOf = () => {
+    if (keyMap) return keyMap;
+    keyMap = new Map();
+    if (cfg.repeated || side !== 'main') return keyMap;
+    const k = pnV2Col_(dst, cfg.key), gk = cfg.ghtk ? pnV2Col_(dst, cfg.ghtk) : null;
+    const kv = k == null ? [] : colVals(dst, k), gv = gk == null ? [] : colVals(dst, gk);
+    for (let i = 0; i < Math.max(kv.length, gv.length); i++) {
+      const key = pnText_(kv[i]) ? (cfg.docs ? 'ORDER:' : '') + pnText_(kv[i]).toLowerCase() : (pnText_(gv[i]) ? 'GHTK:' + pnText_(gv[i]).toLowerCase() : '');
+      if (key && dstIds[i] && !keyMap.has(key)) keyMap.set(key, dstIds[i]);
+    }
+    return keyMap;
+  };
+  const claimed = new Set(srcIds.filter(Boolean));
+  const srcUp = new Map(), dstUp = new Map();
+  const M_ = side === 'main' ? {L: M, up: srcUp} : {L: M, up: dstUp}, F_ = side === 'main' ? {L: F, up: dstUp} : {L: F, up: srcUp};
+  let next = 0, appendStart = 0;
+  const nextRow = () => { if (!next) { next = lastDataRow() + 1; appendStart = next; } return next++; };
+  const pending = [];
+  rows.forEach(r => {
+    const row = block[r - r1];
+    if (!pnV2Rec_(src, cfg, row)) return;
+    let id = pnText_(row[src.id]);
+    if (id && srcIds.indexOf(id) + 2 !== r) id = ''; // dòng copy/dán kèm ID của dòng khác: hồ sơ mới
+    if (!id && side === 'main' && !cfg.repeated) {
+      const k = pnV2Key_(src, cfg, row), found = k && keyOf().get(k);
+      if (found && !claimed.has(found)) { id = found; claimed.add(found); }
+    }
+    const sigS = pnV2Sig_(src, row, names), hashS = pnHash_(sigS);
+    if (id && dstById.has(id)) { pending.push({r, row, id, dstNo: dstById.get(id), sigS, hashS}); if (pnText_(row[src.id]) !== id) pnV2Put_(srcUp, r, src.id, id); return; }
+    // Chưa có ở bên kia.
+    if (!id) { id = pnV2NewId_(p); pnV2Put_(srcUp, r, src.id, id); }
+    else if (pnText_(row[src.id]) !== id) pnV2Put_(srcUp, r, src.id, id);
+    if (side === 'full' && !pnV2NeedsMain_(F, cfg, row, month)) {
+      // Hồ sơ lịch sử không thuộc tab chính: chỉ bảo đảm ID, base, Tháng ở full.
+      pnV2Put_(srcUp, r, F.base, hashS);
+      if (F.month != null) pnV2Put_(srcUp, r, F.month, pnV2Month_(F, cfg, row) || 'CẦN KIỂM TRA');
+      return;
+    }
+    const t = nextRow();
+    names.forEach(n => { const s = src.cols[n], d = dst.cols[n]; if (d != null) pnV2Put_(dstUp, t, d, s == null ? '' : row[s]); });
+    pnV2Put_(dstUp, t, dst.id, id); pnV2Put_(dstUp, t, dst.base, hashS); pnV2Put_(srcUp, r, src.base, hashS);
+    if (F.month != null) pnV2Put_(F_.up, side === 'main' ? t : r, F.month, pnV2Month_(src, cfg, row) || 'CẦN KIỂM TRA');
+    res.added++; res.otherRows.push(t);
+  });
+  // Hồ sơ đã có ở cả hai bên: đọc các dòng bên kia (ít thì đọc từng dòng, nhiều thì đọc cả tab một lần).
+  if (pending.length) {
+    const dstRows = new Map();
+    if (pending.length > 20) pnV2Read_(dst).forEach((rw, i) => dstRows.set(i + 2, rw));
+    else pending.forEach(x => dstRows.set(x.dstNo, dst.sh.getRange(x.dstNo, 1, 1, pnV2ReadWidth_(dst)).getValues()[0]));
+    pending.forEach(x => {
+      const drow = dstRows.get(x.dstNo), sigD = pnV2Sig_(dst, drow, names), hashD = pnHash_(sigD);
+      const mRow = side === 'main' ? x.row : drow, fRow = side === 'main' ? drow : x.row;
+      const mNo = side === 'main' ? x.r : x.dstNo, fNo = side === 'main' ? x.dstNo : x.r;
+      const hashM = side === 'main' ? x.hashS : hashD, hashF = side === 'main' ? hashD : x.hashS;
+      const mUp = M_.up, fUp = F_.up;
+      let finalRow = x.row;
+      if (x.sigS === sigD) {
+        if (pnText_(mRow[M.base]) !== hashM) pnV2Put_(mUp, mNo, M.base, hashM);
+        if (pnText_(fRow[F.base]) !== hashM) pnV2Put_(fUp, fNo, F.base, hashM);
+      } else {
+        const base = pnText_(mRow[M.base]) || pnText_(fRow[F.base]);
+        const natural = base === hashF ? 'push' : base === hashM ? 'pull' : null;
+        const dir = prefer ? (side === 'main' ? 'push' : 'pull') : (natural || 'push');
+        if (dir !== natural) { res.conflicts++; pnV2ConflictLog_(p, dir === 'push' ? p.full : p.main, x.id, dir === 'push' ? pnV2Sig_(F, fRow, names) : pnV2Sig_(M, mRow, names)); }
+        const from = dir === 'push' ? M : F, to = dir === 'push' ? F : M, fromRow = dir === 'push' ? mRow : fRow, toRow = dir === 'push' ? fRow : mRow;
+        const toUp = dir === 'push' ? fUp : mUp, toNo = dir === 'push' ? fNo : mNo, hash = dir === 'push' ? hashM : hashF;
+        names.forEach(n => {
+          const s = from.cols[n], d = to.cols[n];
+          if (d == null) return;
+          const v = s == null ? '' : fromRow[s];
+          if (pnV2Canon_(toRow[d]) !== pnV2Canon_(v)) pnV2Put_(toUp, toNo, d, v);
+        });
+        pnV2Put_(mUp, mNo, M.base, hash); pnV2Put_(fUp, fNo, F.base, hash);
+        finalRow = fromRow; res.changed++;
+      }
+      // Tháng (tab full) theo nội dung cuối cùng của hồ sơ.
+      if (F.month != null) {
+        const want = pnV2Month_(finalRow === mRow ? M : F, cfg, finalRow) || 'CẦN KIỂM TRA';
+        if (pnText_(fRow[F.month]) !== want) pnV2Put_(fUp, fNo, F.month, want);
+      }
+      res.otherRows.push(x.dstNo);
     });
-    pnV2Put_(mUp, mNo, M.base, hash); pnV2Put_(fUp, fNo, F.base, hash);
-    res.changed = true; res.dir = dir;
   }
-  if (F.month != null) {
-    const m = dir => dir === 'pull' ? (pnV2Month_(F, cfg, fRow) || 'CẦN KIỂM TRA') : month();
-    const want = m(res.dir);
-    if (pnText_(fRow[F.month]) !== want) pnV2Put_(fUp, fNo, F.month, want);
-  }
-  const writes = pnV2Flush_(F.sh, fUp) + pnV2Flush_(M.sh, mUp);
-  if (writes) { SpreadsheetApp.flush(); if (res.changed) pnMarkDirty_(); }
+  const writes = pnV2Flush_(dst.sh, dstUp) + pnV2Flush_(src.sh, srcUp);
+  if (next > appendStart && appendStart) pnV2CopyFormat_(dst, appendStart, next - appendStart, dst.width);
+  if (writes) { SpreadsheetApp.flush(); if (res.changed || res.added) pnMarkDirty_(); }
   return res;
+}
+// Cột tính bằng code cho đúng các dòng vừa đổi (Booking!Check; File đơn!Quản lý/Khu vực/Ngay).
+function pnV2ComputeRows_(name, rowList) {
+  if (PropertiesService.getScriptProperties().getProperty('PN_FORMULAS_CONVERTED') !== '1') return 0;
+  const p = pnPair_(name);
+  if (!p || p.main === 'Chứng từ_FF') return 0;
+  const rows = Array.from(new Set(rowList || [])).filter(r => r >= 2).sort((a, b) => a - b);
+  if (!rows.length) return 0;
+  const sh = pnSheet_(name), L = pnV2Layout_(sh, name === p.full), r1 = rows[0], r2 = rows[rows.length - 1];
+  if (r1 > sh.getLastRow()) return 0;
+  const block = sh.getRange(r1, 1, r2 - r1 + 1, pnV2ReadWidth_(L)).getValues(), up = new Map();
+  if (p.main === 'Booking') {
+    const d = pnV2Col_(L, ['Ngày']), total = pnV2Col_(L, ['Tổng bánh']), out = pnV2Col_(L, ['Check']);
+    if (d == null || total == null || out == null) return 0;
+    const factor = pnSheet_('TT Nhập').getRange('L3').getValue();
+    if (typeof factor !== 'number' || !Number.isFinite(factor)) throw new Error('TT Nhập!L3 không phải số hợp lệ.');
+    rows.forEach(r => { const row = block[r - r1]; const v = row[d] === '' ? '' : pnRoundUp_(Number(row[total] || 0) * factor); if (pnV2Canon_(v) !== pnV2Canon_(row[out])) pnV2Put_(up, r, out, v); });
+  } else {
+    const code = pnV2Col_(L, ['Mã đơn']), created = pnV2Col_(L, ['Thời gian tạo đơn']), depot = pnV2Col_(L, ['Kho đích']);
+    const qm = pnV2Col_(L, ['Quản lý']), kv = pnV2Col_(L, ['Khu vực']), day = pnV2Col_(L, ['Ngay']);
+    if (code == null || created == null || depot == null) return 0;
+    const byDepot = new Map();
+    pnRows_(pnSheet_('DS BC'), 15).forEach(r => { const k = pnLookupKey_(r[6]); if (!byDepot.has(k)) byDepot.set(k, r); });
+    rows.forEach(r => {
+      const row = block[r - r1], empty = row[code] === '', match = byDepot.get(pnLookupKey_(row[depot])), iso = pnIsoDate_(row[created]);
+      [[qm, empty ? '' : (match ? match[4] : '#N/A')], [kv, empty ? '' : (match ? match[14] : '#N/A')],
+       [day, empty ? '' : (iso ? iso.slice(8) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : '#VALUE!')]]
+        .forEach(([c, v]) => { if (c != null && pnV2Canon_(v) !== pnV2Canon_(row[c])) pnV2Put_(up, r, c, v); });
+    });
+  }
+  return pnV2Flush_(sh, up);
+}
+/* Sửa/dán tay trên Booking, File đơn, Chứng từ (chính hoặc full): chỉ xử lý các dòng vừa đổi và những dòng
+ * mà script nghiệp vụ đổi theo (đơn chứng từ mới từ Booking, ngày lên đơn, mã GHTK, khu vực). */
+function pnV2HandleRows_(name, r1, r2) {
+  const p = pnPair_(name), side = name === p.main ? 'main' : 'full', rows = [];
+  for (let r = r1; r <= r2; r++) rows.push(r);
+  const docs = PN_FULL.pairs[2], docsFull = pnSheet_(docs.full);
+  if (p.main === 'Chứng từ_FF') return pnV2SyncRows_(p, side, rows, true);
+  pnV2ComputeRows_(name, rows);
+  const own = pnV2SyncRows_(p, side, rows, true);
+  const docRows = [];
+  if (p.main === 'Booking') {
+    const lastBefore = docsFull.getLastRow(), datesBefore = pnV2ColSnap_(docsFull, true, ['Ngày lên đơn']);
+    if (side === 'main') { syncBookingRowsToChungTuFF_(r1, r2); bookingSyncUpdateTargetDatesFromBookingRows_(r1, r2); }
+    else pnSyncBookingFullRows_(r1, r2);
+    for (let r = lastBefore + 1; r <= docsFull.getLastRow(); r++) docRows.push(r);
+    pnV2ColDiff_(datesBefore, pnV2ColSnap_(docsFull, true, ['Ngày lên đơn'])).forEach(r => docRows.push(r));
+  }
+  // Mã GHTK: File đơn mới hoặc đơn chứng từ mới có thể được điền mã.
+  const ghtkBefore = pnV2ColSnap_(docsFull, true, ['Mã đơn GHTK']);
+  fillMissingGhtkCodesInChungTuFF();
+  pnV2ColDiff_(ghtkBefore, pnV2ColSnap_(docsFull, true, ['Mã đơn GHTK'])).forEach(r => docRows.push(r));
+  const docsRes = pnV2SyncRows_(docs, 'full', docRows, true);
+  // Khu vực Booking phụ thuộc Booking và File đơn: chỉ đẩy các dòng Booking vừa đổi khu vực.
+  const areaRes = [];
+  ['Booking', 'Booking_full'].forEach(bn => {
+    if (p.main === 'Booking' && bn !== name) return;
+    const sh = pnSheet_(bn), before = pnV2ColSnap_(sh, bn === 'Booking_full', ['Khu vực']), prev = KHUVUC_BOOKING_SYNC_CONFIG.bookingSheetName;
+    try { KHUVUC_BOOKING_SYNC_CONFIG.bookingSheetName = bn; syncAllKhuVucBookingToChungTuFF_(); }
+    finally { KHUVUC_BOOKING_SYNC_CONFIG.bookingSheetName = prev; }
+    const changed = pnV2ColDiff_(before, pnV2ColSnap_(sh, bn === 'Booking_full', ['Khu vực']));
+    if (changed.length) areaRes.push(pnV2SyncRows_(PN_FULL.pairs[0], bn === 'Booking' ? 'main' : 'full', changed, true));
+  });
+  return {ok: true, own, docs: docsRes, area: areaRes};
 }
