@@ -619,11 +619,14 @@ function pnV2ColDiff_(before, after) {
 /* Đồng bộ ĐÚNG các dòng rowList (trên tab side) với tab còn lại. Chỉ đọc: khối dòng vừa đổi, cột ID/mã của tab kia
  * và các dòng tương ứng. Dòng mới (chưa có ID) -> thêm vào tab kia; dòng đã có -> cập nhật đúng dòng cùng ID.
  * prefer = true: bên side thắng khi hai bên khác nhau (vừa sửa tay / API / script vừa ghi). */
-function pnV2SyncRows_(p, side, rowList, prefer) {
+function pnV2SyncRows_(p, side, rowList, prefer, mode) {
+  const api = !!(mode && mode.api);
   const res = {ok: true, changed: 0, added: 0, conflicts: 0, otherRows: []};
   const rowsIn = Array.from(new Set((rowList || []).map(Number).filter(r => r >= 2))).sort((a, b) => a - b);
   if (!rowsIn.length) return res;
-  const cfg = pnV2Cfg_(p), month = pnCurrentMonth_(), L = pnV2EnsureColumns_(p), M = L.M, F = L.F, names = pnV2Names_(M);
+  const cfg = pnV2Cfg_(p), month = pnCurrentMonth_();
+  const L = api ? {M: pnV2Layout_(pnSheet_(p.main), false), F: pnV2Layout_(pnSheet_(p.full), true)} : pnV2EnsureColumns_(p), M = L.M, F = L.F, names = pnV2Names_(M);
+  if (api && (M.id == null || M.base == null || F.id == null || F.base == null)) { pnQueueEdit_(side === 'main' ? p.main : p.full, rowsIn[0], rowsIn[rowsIn.length - 1]); return Object.assign(res, {queued: true}); }
   const src = side === 'main' ? M : F, dst = side === 'main' ? F : M;
   const rows = rowsIn.filter(r => r <= src.sh.getLastRow());
   if (!rows.length) return res;
@@ -634,7 +637,13 @@ function pnV2SyncRows_(p, side, rowList, prefer) {
   const dstIds = colVals(dst, dst.id).map(pnText_);
   // Chỉ mục bên kia theo ID; ID xuất hiện 2 lần ở bên kia -> đồng bộ cả cặp (trường hợp hiếm, an toàn).
   const dstById = new Map();
-  for (let i = 0; i < dstIds.length; i++) if (dstIds[i]) { if (dstById.has(dstIds[i])) return Object.assign(pnV2SyncPair_(p, prefer ? {prefer: {side, rows: new Set(rows)}} : {}), {fallback: true}); dstById.set(dstIds[i], i + 2); }
+  for (let i = 0; i < dstIds.length; i++) if (dstIds[i]) {
+    if (dstById.has(dstIds[i])) {
+      if (api) { pnQueueEdit_(side === 'main' ? p.main : p.full, rows[0], rows[rows.length - 1]); return Object.assign(res, {queued: true}); }
+      return Object.assign(pnV2SyncPair_(p, prefer ? {prefer: {side, rows: new Set(rows)}} : {}), {fallback: true});
+    }
+    dstById.set(dstIds[i], i + 2);
+  }
   // Dòng cuối có dữ liệu của bên kia (để thêm dòng mới ngay sau). Chỉ đọc khi thật sự cần thêm dòng.
   const lastDataRow = () => {
     const identVals = (cfg.ident || []).map(x => pnV2Col_(dst, [x])).filter(c => c != null).map(c => colVals(dst, c));
@@ -674,6 +683,7 @@ function pnV2SyncRows_(p, side, rowList, prefer) {
     const sigS = pnV2Sig_(src, row, names), hashS = pnHash_(sigS);
     if (id && dstById.has(id)) { pending.push({r, row, id, dstNo: dstById.get(id), sigS, hashS}); if (pnText_(row[src.id]) !== id) pnV2Put_(srcUp, r, src.id, id); return; }
     // Chưa có ở bên kia.
+    if (api && (side === 'main' || pnV2NeedsMain_(F, cfg, row, month))) { pnQueueEdit_(side === 'main' ? p.main : p.full, r, r); res.queued = true; return; }
     if (!id) { id = pnV2NewId_(p); pnV2Put_(srcUp, r, src.id, id); }
     else if (pnText_(row[src.id]) !== id) pnV2Put_(srcUp, r, src.id, id);
     if (side === 'full' && !pnV2NeedsMain_(F, cfg, row, month)) {
@@ -726,6 +736,12 @@ function pnV2SyncRows_(p, side, rowList, prefer) {
       }
       res.otherRows.push(x.dstNo);
     });
+  }
+  if (api) {
+    for (const r of Array.from(dstUp.keys())) {
+      const want = (pending.find(x => x.dstNo === r) || {}).id;
+      if (!want || pnText_(dst.sh.getRange(r, dst.id + 1).getValue()) !== want) { dstUp.delete(r); pnQueueEdit_(side === 'main' ? p.main : p.full, rows[0], rows[rows.length - 1]); res.queued = true; }
+    }
   }
   const writes = pnV2Flush_(dst.sh, dstUp) + pnV2Flush_(src.sh, srcUp);
   if (next > appendStart && appendStart) pnV2CopyFormat_(dst, appendStart, next - appendStart, dst.width);

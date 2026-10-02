@@ -111,7 +111,7 @@ function pnHandleEdit(e) {
       if(name==='Bàn giao chứng từ'&&e.range.getA1Notation()==='A1'){refreshBanGiaoChungTuDropdown();syncBanGiaoChungTuBySelectedDate();}
       pnAfterActivity_();
       return result;
-    });
+    },120000);
   } catch(err) {
     if(/PN_BUSY/.test(String(err&&err.message||err))){
       // Không bỏ qua: lưu đúng dòng đã sửa để xử lý ngay khi khóa trống.

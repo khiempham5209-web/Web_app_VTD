@@ -46,6 +46,7 @@ class Sheet{
  getMaxRows(){return this.maxRows;}getMaxColumns(){return this.maxCols;}
  insertRowsAfter(x,n){this.maxRows+=n;}insertColumnsAfter(x,n){this.maxCols+=n;}
  getRange(r,c,n,w){if(typeof r==='string'){const m=r.match(/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/);return new Range(this,+m[2],colNo(m[1]),m[4]?+m[4]-m[2]+1:1,m[3]?colNo(m[3])-colNo(m[1])+1:1);}return new Range(this,r,c,n,w);}
+ appendRow(row){const n=this.getLastRow()+1;this.rows[n-1]=row.slice();return this;}
  hideColumns(){}hideSheet(){}setFrozenRows(){}autoResizeRows(){}getSheetId(){return ({'File đơn_full':872196600,'Sự vụ':529840243,'Sự vụ bánh xẹp':318091884})[this.name]||1;}
 }
 function fmt(d,pattern){
@@ -224,11 +225,15 @@ test('API save touches only its own order; a two-sided edit elsewhere is resolve
  assert.match(JSON.stringify(e.sheets.get('_PN_CONFLICTS').rows),/full edit/);
  assert.equal(full.getRange(rowOf(full,'G2'),7).getValue(),'Đã nhận chứng từ');
 });
-test('Shared lock busy returns retryable PN_BUSY instead of a raw exception',()=>{
- const e=environment();seed(e);e.c.pnMigrateFull();
- e.run("LockService={getScriptLock:()=>({tryLock(){return false;},waitLock(){},releaseLock(){}})};");
- const res=e.c.apiSave_({clientId:'busy',maDon:'G1',returnType:'Chứng từ',files:[{base64:'AA=='}]});
- assert.equal(res.ok,false);assert.equal(res.code,'PN_BUSY');assert.equal(res.retryable,true);
+test('App save is independent of the Sheet lane: succeeds while the Sheet lock is held, writes only its order, both tabs',()=>{
+ const e=environment();seed(e);e.c.pnMigrateFull();e.c.pnMirrorAll();
+ e.run("uploadFiles_=()=>({linkAnh:'https://example.invalid/p',files:[{id:'1'}],folderUrl:''});");
+ e.run("LockService={getScriptLock:()=>({tryLock(){return false;},waitLock(){throw new Error('locked');},releaseLock(){}})};");
+ const res=e.c.apiSave_({clientId:'lane',maDon:'G1',returnType:'Chứng từ',xacThuc:'Đã nhận chứng từ',files:[{base64:'AA=='}]});
+ assert.equal(res.ok,true,'API does not wait for the Sheet lock');
+ const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
+ assert.equal(full.getRange(rowOf(full,4,'1'),7).getValue(),'Đã nhận chứng từ');
+ assert.equal(main.getRange(rowOf(main,4,'1'),7).getValue(),'Đã nhận chứng từ');
 });
 test('Photos upload outside the shared lock',()=>{
  const e=environment();seed(e);e.c.pnMigrateFull();
@@ -680,7 +685,7 @@ test('Pasting 20 Booking rows into 3000 existing: only those rows go to Booking_
  assert.ok(writes<=25,'batched writes, not per row of the whole tab: '+writes);
  auditOk(e);
 });
-test('Edit made while the lock is busy is not lost: the edited rows sync at the next app save',()=>{
+test('Edit made while the lock is busy is not lost: the edited rows sync at the next Sheet activity, app save does not touch it',()=>{
  const e=v2env();e.c.pnMirrorAll();
  e.run("uploadFiles_=()=>({linkAnh:'https://example.invalid/p',files:[{id:'1'}],folderUrl:''});");
  const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
@@ -691,8 +696,20 @@ test('Edit made while the lock is busy is not lost: the edited rows sync at the 
  assert.notEqual(full.getRange(rowOf(full,4,'1'),12).getValue(),'EC-TAY','not yet synced while busy');
  e.run("LockService=__lock;");
  assert.equal(e.c.apiSave_({clientId:'q1',maDon:'G2',returnType:'Chứng từ',files:[{base64:'AA=='}]}).ok,true);
- assert.equal(full.getRange(rowOf(full,4,'1'),12).getValue(),'EC-TAY','queued edit synced by the next save');
+ assert.notEqual(full.getRange(rowOf(full,4,'1'),12).getValue(),'EC-TAY','app save does not process Sheet edits');
+ const g=rowOf(main,4,'2');e.c.pnHandleEdit({range:main.getRange(g,13)});
+ assert.equal(full.getRange(rowOf(full,4,'1'),12).getValue(),'EC-TAY','queued edit synced by the next Sheet activity');
  assert.ok(!Object.keys(e.props).some(k=>k.indexOf('PN_EDITQ_')===0),'queue drained');
  auditOk(e);
+});
+test('Journal is append-only: latest state wins, interleaved requests do not overwrite each other',()=>{
+ const e=environment();seed(e);e.c.pnMigrateFull();
+ e.c.pnJournalWrite_('request:aa','PENDING',{n:1});
+ e.c.pnJournalWrite_('request:bb','PENDING',{n:2});
+ e.c.pnJournalWrite_('request:aa','DONE',{n:3});
+ assert.equal(e.c.pnJournalRead_('request:aa').state,'DONE');
+ assert.equal(e.c.pnJournalRead_('request:aa').data.n,3);
+ assert.equal(e.c.pnJournalRead_('request:bb').data.n,2);
+ assert.deepEqual(Array.from(e.c.pnPendingRequests_()),['request:bb']);
 });
 console.log('RESULT '+passed+' tests passed.');
