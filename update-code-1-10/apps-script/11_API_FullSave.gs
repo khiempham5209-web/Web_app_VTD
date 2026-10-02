@@ -17,7 +17,7 @@ function pnJournalRead_(key) {
   const r=sh.getRange(found[0].getRow(),1,1,4).getValues()[0];
   return {row:found[0].getRow(),state:r[1],data:JSON.parse(r[2]||'{}')};
 }
-function pnJournalWrite_(key,state,data) {
+function pnJournalWrite_(key,state,data,waitMs) {
   const text=JSON.stringify(data);
   if(text.length>45000)throw new Error('Nhật ký vượt kích thước an toàn; chia nhỏ thao tác.');
   // Ghi nhật ký luôn trong khóa: upload ảnh chạy ngoài khóa chung, hai request không được cấp trùng dòng.
@@ -26,7 +26,7 @@ function pnJournalWrite_(key,state,data) {
     pnSize_(sh,row,4);
     sh.getRange(row,1,1,4).setValues([[key,state,text,new Date()]]);
     SpreadsheetApp.flush();
-  });
+  },waitMs);
 }
 function pnRequestKey_(id) { return 'request:'+pnHash_(pnText_(id)); }
 // Chỉ băm nội dung nghiệp vụ. Bỏ: token phiên, các khóa bắt đầu bằng "_" (app gắn _diagRequestId
@@ -51,7 +51,7 @@ function pnPendingRequests_() {
   return pnRows_(pnJournal_(),4).filter(r=>/^request:[a-f0-9]+$/.test(String(r[0]))&&r[1]==='PENDING').map(r=>r[0]);
 }
 // Một lần tải ảnh treo quá lâu chắc chắn đã chết (Apps Script dừng sau 6 phút): cho phép tải lại.
-const PN_UPLOAD_STALE_MS_=10*60*1000;
+const PN_UPLOAD_STALE_MS_=7*60*1000; // Apps Script dừng mọi lần chạy sau 6 phút
 function pnUploadOnce_(stage,fn) {
   if(!pnRequest_)throw new Error('Upload phải qua apiSave_.');
   const key=pnRequest_.key+':'+stage;
@@ -64,15 +64,16 @@ function pnUploadOnce_(stage,fn) {
     return null;
   });
   if(entry&&entry.state==='DONE')return entry.data;
-  if(entry)throw new Error('Ảnh của đơn này đang được tải ở một lần gửi khác. App sẽ thử lại sau.');
+  // Lần gửi trước còn đang tải ảnh: báo bận (app giữ đơn ở hàng chờ và gửi lại), không báo lỗi.
+  if(entry)throw new Error('PN_BUSY: Ảnh của đơn này đang được tải ở lần gửi trước, app sẽ gửi lại sau.');
   let result;
   try { result=fn(); }
   catch(err) {
     // Lỗi đã biết (Drive báo lỗi): cho gửi lại ngay. Có thể trùng 1 file ảnh trên Drive, nhưng đơn không bị kẹt.
-    pnJournalWrite_(key,'FAILED',{clientId:pnRequest_.clientId,stage,error:String(err&&err.message||err)});
+    pnJournalWrite_(key,'FAILED',{clientId:pnRequest_.clientId,stage,error:String(err&&err.message||err)},120000);
     throw err;
   }
-  pnJournalWrite_(key,'DONE',result);
+  pnJournalWrite_(key,'DONE',result,120000);
   return result;
 }
 // Tải ảnh TRƯỚC khi vào khóa chung. Khi vào khóa, pnApiSaveCore_ chỉ đọc lại kết quả đã có
@@ -166,12 +167,14 @@ function pnResolveSave_(sh,col,params) {
 }
 
 // Đồng bộ cặp Chứng từ. fullRow: dòng API vừa ghi ở full -> bản API thắng và được đẩy sang Chứng từ_FF.
-function pnMirrorDocs_(fullRow) {
-  return pnV2SyncPair_(PN_FULL.pairs[2], fullRow?{prefer:{side:'full',rows:new Set([fullRow])}}:{});
+// Đồng bộ đúng dòng fullRow của Chứng từ_full với Chứng từ_FF. prefer=true: bản API vừa ghi thắng.
+function pnMirrorDocs_(fullRow,prefer) {
+  if(!fullRow)return pnV2SyncPair_(PN_FULL.pairs[2],{});
+  return pnV2SyncOne_(PN_FULL.pairs[2],'full',fullRow,prefer!==false);
 }
 
-function pnMirrorDocsSafe_(fullRow) {
-  try { pnMirrorDocs_(fullRow); return ''; }
+function pnMirrorDocsSafe_(fullRow,prefer) {
+  try { pnMirrorDocs_(fullRow,prefer); return ''; }
   catch(err) {
     const message=String(err&&err.message||err);
     PropertiesService.getScriptProperties().setProperty('PN_MIRROR_ERROR',new Date().toISOString()+' '+message.slice(0,4000));
@@ -210,7 +213,8 @@ function apiSave_(params) {
       try { pnPreUpload_(params); } finally { pnRequest_=null; }
     }
     // Bước 3 (khóa): ghi Sheet; ảnh đã có trong nhật ký nên core không tải lại.
-    return pnWithLock_(()=>pnSaveLocked_(params,key,signature));
+    // App chờ phản hồi tới 120 giây: chờ khóa tới 90 giây trước khi báo bận.
+    return pnWithLock_(()=>pnSaveLocked_(params,key,signature),90000);
   } catch(err) { return pnBusyResponse_(err); }
 }
 function pnSaveLocked_(params,key,signature) {
@@ -218,7 +222,9 @@ function pnSaveLocked_(params,key,signature) {
     const clientId=pnText_(params.clientId),saved=pnJournalRead_(key);
     if(saved&&saved.data.signature!==signature)return fail_('clientId đã dùng cho nội dung khác.');
     if(saved&&saved.state==='DONE')return saved.data.response;
-    const mirrorWarning=pnMirrorDocsSafe_();
+    let fullRow=0;
+    try { fullRow=pnResolveSave_(sheet_(),null,params).rowNumber; } catch(err) {}
+    const mirrorWarning=fullRow?pnMirrorDocsSafe_(fullRow,false):'';
     const state=saved?saved.data:{signature,clientId,startedAt:new Date().toISOString()};
     pnJournalWrite_(key,'PENDING',state);
     pnRequest_=Object.assign({},state,{key});
@@ -232,7 +238,7 @@ function pnSaveLocked_(params,key,signature) {
         }
         state.coreResponse=response;pnJournalWrite_(key,'PENDING',state);
       }
-      const mirrorAfter=pnMirrorDocsSafe_(state.coreResponse&&state.coreResponse.rowNumber||response.rowNumber);
+      const mirrorAfter=pnMirrorDocsSafe_(state.coreResponse&&state.coreResponse.rowNumber||response.rowNumber,true);
       pnMarkDirty_();
       const record=pnResolveSave_(sheet_(),headerMap_(headers_(sheet_())),params).record;
       const type=norm_(params.returnType||params.loaiHoan||'Chung tu');

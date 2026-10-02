@@ -26,14 +26,15 @@ function pnHash_(v) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, JSON.stringify(v), Utilities.Charset.UTF_8)
     .map(x => ('0' + ((x + 256) % 256).toString(16)).slice(-2)).join('');
 }
-function pnWithLock_(fn) {
+function pnWithLock_(fn, waitMs) {
   if (pnLockDepth_) return fn();
   const lock = LockService.getScriptLock();
   // Lỗi có mã PN_BUSY để apiSave_ trả về "đang bận, gửi lại" thay vì lỗi khó hiểu.
-  if (!lock.tryLock(30000)) throw new Error('PN_BUSY: Hệ thống PN đang bận (khóa), thử lại sau.');
+  if (!lock.tryLock(waitMs || 30000)) throw new Error('PN_BUSY: Hệ thống PN đang bận (khóa), thử lại sau.');
   pnLockDepth_++;
   try { return fn(); } finally { pnLockDepth_--; lock.releaseLock(); }
 }
+
 function pnRequireReady_() {
   if(PropertiesService.getScriptProperties().getProperty('PN_CLEANUP_PENDING'))
     throw new Error('Lượt dọn trước bị gián đoạn. Chạy pnResumeCleanup trước khi nhận thao tác mới.');

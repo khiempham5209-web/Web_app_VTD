@@ -177,7 +177,7 @@ test('Duplicate API clientId returns same result, uploads once, mirrors full and
  assert.equal(e.sheets.get('Chứng từ_FF').getRange(2,7).getValue(),'Đã nhận chứng từ');
  assert.equal(e.c.apiSave_({...p,note:'changed'}).ok,false);
 });
-test('Drive upload error can be resent; an upload that died is retried after 10 minutes',()=>{
+test('Drive upload error can be resent; upload in progress returns PN_BUSY; a dead upload is retried after 7 minutes',()=>{
  const e=environment();seed(e);e.c.pnMigrateFull();
  e.run("var uploadCount=0; uploadFiles_=()=>{uploadCount++;if(uploadCount===1)throw new Error('lost response');return {linkAnh:'https://example.invalid/p',files:[{id:'1'}],folderUrl:''};};");
  const p={clientId:'u1',maDon:'G1',returnType:'Chứng từ',files:[{base64:'AA=='}]};
@@ -187,7 +187,7 @@ test('Drive upload error can be resent; an upload that died is retried after 10 
  const q={clientId:'u2',maDon:'G1',returnType:'Chứng từ',files:[{base64:'AA=='}]};
  const stageKey=e.c.pnRequestKey_('u2')+':docs';
  e.c.pnJournalWrite_(stageKey,'RUNNING',{startedAtMs:Date.now()});
- assert.throws(()=>e.c.apiSave_(q),/đang được tải/);
+ const busy=e.c.apiSave_(q);assert.equal(busy.code,'PN_BUSY','upload in progress -> retryable busy, app keeps the order pending');
  e.c.pnJournalWrite_(stageKey,'RUNNING',{startedAtMs:Date.now()-11*60*1000});
  assert.equal(e.c.apiSave_(q).ok,true,'dead upload older than 10 minutes is retried');
 });
@@ -202,7 +202,7 @@ test('Resend with new _diagRequestId, appVersion and re-encoded image returns th
  assert.equal(e.run('uploadCount'),1);
  assert.equal(e.c.apiSave_({...a,note:'changed'}).ok,false,'different business content is still rejected');
 });
-test('Two-sided edit on another order is resolved (main wins, losing copy logged) and never blocks saving',()=>{
+test('API save touches only its own order; a two-sided edit elsewhere is resolved by the next sync (main wins, losing copy logged)',()=>{
  const e=environment();seed(e);e.c.pnMigrateFull();
  e.run("uploadFiles_=()=>({linkAnh:'https://example.invalid/p',files:[{id:'1'}],folderUrl:''});");
  const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
@@ -215,7 +215,10 @@ test('Two-sided edit on another order is resolved (main wins, losing copy logged
  const res=e.c.apiSave_({clientId:'c1',maDon:'G2',returnType:'Chứng từ',xacThuc:'Đã nhận chứng từ',files:[{base64:'AA=='}]});
  assert.equal(res.ok,true,'save of another order succeeds');
  assert.equal(res.mirrorWarning,'');
- // Hai bên cùng sửa G1: tab chính thắng, hai tab khớp lại, bản full bị thay được lưu ở _PN_CONFLICTS.
+ // API chỉ đồng bộ đúng đơn vừa lưu (G2): đơn G1 đang lệch không bị API đụng tới.
+ assert.equal(full.getRange(rowOf(full,'G1'),10).getValue(),'full edit','API does not touch other orders');
+ // Lần đồng bộ sau xử lý G1: hai bên cùng sửa -> tab chính thắng, bản full bị thay lưu ở _PN_CONFLICTS.
+ e.c.pnScheduledReconcile();
  assert.equal(full.getRange(rowOf(full,'G1'),10).getValue(),'main edit');
  assert.equal(main.getRange(rowOf(main,'G1'),10).getValue(),'main edit');
  assert.match(JSON.stringify(e.sheets.get('_PN_CONFLICTS').rows),/full edit/);
@@ -635,6 +638,27 @@ test('Cleanup moves each row together with its colours/dropdowns; vacated rows a
  const r56=rowOf(main,4,'56');
  assert.equal(main.getRange(r56,1).getBackgrounds()[0][0],null,'new row from full takes no colour of another order');
  assert.equal(main.getRange(r56,1).getDataValidations()[0][0],'dropdown','new row takes the template dropdown');
+ auditOk(e);
+});
+test('API save and a manual edit on Chứng từ read only the ID column + the one row of the main tab (3000 rows)',()=>{
+ const e=environment();seed(e);const docs=e.sheets.get('Chứng từ_FF');
+ for(let i=100;i<3100;i++)docs.rows.push(doc(i,'01/10/2026','Chưa nhận chứng từ'));
+ e.c.pnMigrateFull();e.c.pnMirrorAll();
+ e.run("uploadFiles_=()=>({linkAnh:'https://example.invalid/p',files:[{id:'1'}],folderUrl:''});");
+ let cells=0;const gv=Range.prototype.getValues,gd=Range.prototype.getDisplayValues;
+ Range.prototype.getValues=function(){if(this.sh.name==='Chứng từ_FF')cells+=this.n*this.w;return gv.call(this);};
+ Range.prototype.getDisplayValues=function(){if(this.sh.name==='Chứng từ_FF')cells+=this.n*this.w;return gd.call(this);};
+ try {
+  const res=e.c.apiSave_({clientId:'scale-api',maDon:'G2500',returnType:'Chứng từ',xacThuc:'Đã nhận chứng từ',files:[{base64:'AA=='}]});
+  assert.equal(res.ok,true);
+  assert.ok(cells<3*3100,'API read of main tab is ~ID column only, not whole tab: '+cells);
+  cells=0;
+  const m=rowOf(docs,4,'2600');docs.getRange(m,10).setValue('sửa tay');e.c.pnHandleEdit({range:docs.getRange(m,10)});
+  assert.ok(cells<3*3100,'manual edit read of main tab is ~ID column only: '+cells);
+ } finally { Range.prototype.getValues=gv;Range.prototype.getDisplayValues=gd; }
+ const full=e.sheets.get('Chứng từ_full');
+ assert.equal(docs.getRange(rowOf(docs,4,'2500'),7).getValue(),'Đã nhận chứng từ','main updated from API write');
+ assert.equal(full.getRange(rowOf(full,4,'2600'),10).getValue(),'sửa tay','manual edit reached full');
  auditOk(e);
 });
 console.log('RESULT '+passed+' tests passed.');

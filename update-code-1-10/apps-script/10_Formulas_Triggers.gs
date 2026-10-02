@@ -100,7 +100,10 @@ function pnHandleEdit(e) {
       if(name==='TT Nhập'||name==='DS SKU')onEditSyncTTNhapDSSKU(e);
       if(name==='Hàng lỗi'||name==='DS SKU')onEditSyncHangLoiGHTK(e);
       let result=null;
-      if(p||name==='DS BC'||name==='TT Nhập'){
+      if(p&&p.main==='Chứng từ_FF'&&r2-r1<200){
+        // Tab Chứng từ: chỉ các dòng vừa sửa, không đồng bộ lại cả 3 cặp tab.
+        for(let r=r1;r<=r2;r++)pnV2SyncOne_(p,name===p.main?'main':'full',r,true);
+      } else if(p||name==='DS BC'||name==='TT Nhập'){
         const rows=new Set();if(p)for(let r=r1;r<=r2;r++)rows.add(r);
         result=pnV2SyncAll_(p?{pair:p.main,prefer:{side:name===p.main?'main':'full',rows}}:{});
         if(name==='Booking_full')pnSyncBookingFullRows_(r1,r2);

@@ -600,3 +600,59 @@ function pnListNonRecordRows() {
   console.log(JSON.stringify(out));
   return out;
 }
+
+/* Đồng bộ đúng MỘT hồ sơ (dòng rowNo trên tab side) giữa tab chính và full. Chỉ đọc cột ID của tab kia và đúng
+ * 2 dòng liên quan, nên giữ khóa rất ngắn. prefer = true: bên side thắng khi khác nhau (vừa sửa tay / API vừa ghi).
+ * Trường hợp hiếm (chưa có ID, ID trùng, hồ sơ chưa có ở tab kia) thì chuyển sang đồng bộ cả cặp như cũ. */
+function pnV2SyncOne_(p, side, rowNo, prefer) {
+  const cfg = pnV2Cfg_(p), L = pnV2EnsureColumns_(p), M = L.M, F = L.F, names = pnV2Names_(M);
+  const src = side === 'main' ? M : F, dst = side === 'main' ? F : M;
+  const fallback = () => pnV2SyncPair_(p, prefer ? {prefer: {side, rows: new Set([rowNo])}} : {});
+  if (rowNo < 2 || rowNo > src.sh.getLastRow()) return {skipped: true};
+  const srcRow = src.sh.getRange(rowNo, 1, 1, pnV2ReadWidth_(src)).getValues()[0];
+  if (!pnV2Rec_(src, cfg, srcRow)) return {skipped: true};
+  const id = pnText_(srcRow[src.id]);
+  if (!id) return fallback();
+  const idsOf = L2 => { const last = L2.sh.getLastRow(); return last < 2 ? [] : L2.sh.getRange(2, L2.id + 1, last - 1, 1).getValues().map(r => pnText_(r[0])); };
+  const srcIds = idsOf(src);
+  if (srcIds.filter(x => x === id).length > 1) return fallback();
+  const dstIds = idsOf(dst), hits = [];
+  dstIds.forEach((x, i) => { if (x === id) hits.push(i + 2); });
+  if (hits.length !== 1) {
+    if (!hits.length && side === 'full' && !pnV2NeedsMain_(F, cfg, srcRow, pnCurrentMonth_())) return {ok: true, notInMain: true};
+    return fallback();
+  }
+  const dstRowNo = hits[0], dstRow = dst.sh.getRange(dstRowNo, 1, 1, pnV2ReadWidth_(dst)).getValues()[0];
+  const mRow = side === 'main' ? srcRow : dstRow, fRow = side === 'main' ? dstRow : srcRow;
+  const mNo = side === 'main' ? rowNo : dstRowNo, fNo = side === 'main' ? dstRowNo : rowNo;
+  const sigM = pnV2Sig_(M, mRow, names), sigF = pnV2Sig_(F, fRow, names), hashM = pnHash_(sigM), hashF = pnHash_(sigF);
+  const mUp = new Map(), fUp = new Map(), res = {ok: true, id, changed: false};
+  const month = () => pnV2Month_(M, cfg, mRow) || 'CẦN KIỂM TRA';
+  if (sigM === sigF) {
+    if (pnText_(mRow[M.base]) !== hashM) pnV2Put_(mUp, mNo, M.base, hashM);
+    if (pnText_(fRow[F.base]) !== hashM) pnV2Put_(fUp, fNo, F.base, hashM);
+  } else {
+    const base = pnText_(mRow[M.base]) || pnText_(fRow[F.base]);
+    const natural = base === hashF ? 'push' : base === hashM ? 'pull' : null;
+    const dir = prefer ? (side === 'main' ? 'push' : 'pull') : (natural || 'push');
+    if (dir !== natural) { res.conflict = true; pnV2ConflictLog_(p, dir === 'push' ? p.full : p.main, id, dir === 'push' ? sigF : sigM); }
+    const from = dir === 'push' ? M : F, to = dir === 'push' ? F : M, fromRow = dir === 'push' ? mRow : fRow, toRow = dir === 'push' ? fRow : mRow;
+    const toUp = dir === 'push' ? fUp : mUp, toNo = dir === 'push' ? fNo : mNo, hash = dir === 'push' ? hashM : hashF;
+    names.forEach(n => {
+      const s = from.cols[n], d = to.cols[n];
+      if (d == null) return;
+      const v = s == null ? '' : fromRow[s];
+      if (pnV2Canon_(toRow[d]) !== pnV2Canon_(v)) pnV2Put_(toUp, toNo, d, v);
+    });
+    pnV2Put_(mUp, mNo, M.base, hash); pnV2Put_(fUp, fNo, F.base, hash);
+    res.changed = true; res.dir = dir;
+  }
+  if (F.month != null) {
+    const m = dir => dir === 'pull' ? (pnV2Month_(F, cfg, fRow) || 'CẦN KIỂM TRA') : month();
+    const want = m(res.dir);
+    if (pnText_(fRow[F.month]) !== want) pnV2Put_(fUp, fNo, F.month, want);
+  }
+  const writes = pnV2Flush_(F.sh, fUp) + pnV2Flush_(M.sh, mUp);
+  if (writes) { SpreadsheetApp.flush(); if (res.changed) pnMarkDirty_(); }
+  return res;
+}
