@@ -157,7 +157,8 @@ function pnAfterActivity_() {
   const today=Utilities.formatDate(new Date(),PN_FULL.timezone,'yyyy-MM-dd');
   if(props.getProperty('PN_DAILY_DONE')!==today&&!pnV2OverBudget_()){
     if(props.getProperty('PN_FULL_CLEANUP')==='enabled'){
-      const sync=pnV2SyncAll_({fullSweep:true,areaSweep:true});
+      // Nhẹ: chỉ đồng bộ dòng thay đổi rồi dọn (vài giây). Không quét lại toàn bộ Booking để app không phải chờ.
+      const sync=pnV2SyncAll_({});
       if(sync.partial)return;
       pnV2Cleanup_();
     }
