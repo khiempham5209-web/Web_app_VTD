@@ -115,7 +115,7 @@ function pnWriteDocumentOnce_(sh,row,col,params,upload,timeText,user) {
     ];
     if(upload.linkAnh)values.push([['link anh'],upload.linkAnh]);
     // Mã ecom CT: chỉ ghi khi app gửi giá trị, để app cũ không xóa mã đã nhập tay trên Sheet.
-    const maEcomCt=clean_(params.maEcomCt);
+    const maEcomCt=pnEcomCt_(params.maEcomCt);
     if(maEcomCt)values.push([['ma ecom ct'],maEcomCt]);
     values.forEach(([aliases,value])=>{ const i=pnV2Col_(L,aliases); if(i!=null)next[i]=value; });
     const data={before:sig(current),after:sig(next),values:pnEncodeRow_(next)};
@@ -248,4 +248,9 @@ function pnSaveLocked_(params,key,signature) {
       rememberSavedRequest_(clientId,response);
       return response;
     } finally { pnRequest_=null; }
+}
+// Mã ecom CT: scan ra link (vd https://i.ghtk.vn/...) hoặc nhập tay -> chỉ giữ 10 chữ số cuối. Ít hơn 10 chữ số thì giữ nguyên.
+function pnEcomCt_(v) {
+  const s=clean_(v),d=s.replace(/D/g,'');
+  return d.length>=10?d.slice(-10):s;
 }

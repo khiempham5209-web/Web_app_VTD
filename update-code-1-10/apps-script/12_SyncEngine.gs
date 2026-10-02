@@ -174,6 +174,8 @@ function pnV2Flush_(sh, updates) {
     cols.forEach(c => { const last = runs[runs.length - 1]; if (last && last.end === c - 1) last.end = c; else runs.push({start: c, end: c}); });
     return {r, vals, runs, sig: JSON.stringify(runs)};
   });
+  // Mã số bắt đầu bằng 0 (vd Mã ecom CT 0123456789): đặt ô thành dạng chữ trước khi ghi để Sheets không cắt số 0.
+  items.forEach(it => Object.keys(it.vals).forEach(c => { const v = it.vals[c]; if (typeof v === 'string' && /^0d+$/.test(v.trim())) sh.getRange(it.r, Number(c) + 1).setNumberFormat('@'); }));
   let writes = 0;
   for (let i = 0; i < items.length;) {
     let j = i + 1;

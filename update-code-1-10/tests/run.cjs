@@ -712,4 +712,10 @@ test('Journal is append-only: latest state wins, interleaved requests do not ove
  assert.equal(e.c.pnJournalRead_('request:bb').data.n,2);
  assert.deepEqual(Array.from(e.c.pnPendingRequests_()),['request:bb']);
 });
+test('Mã ecom CT keeps only the last 10 digits',()=>{
+ const e=environment();
+ assert.equal(e.c.pnEcomCt_('https://i.ghtk.vn/S22843210.MB1.A12.1234567890'),'1234567890');
+ assert.equal(e.c.pnEcomCt_(' 0987654321 '),'0987654321');
+ assert.equal(e.c.pnEcomCt_('AB123'),'AB123');
+});
 console.log('RESULT '+passed+' tests passed.');
