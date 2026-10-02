@@ -256,6 +256,8 @@ function pnSaveLocked_(params,key,signature) {
       state.response=response;
       pnJournalWrite_(key,'DONE',state);
       rememberSavedRequest_(clientId,response);
+      // Đang giữ khóa: xử lý luôn các lần sửa tay bị bỏ lỡ (tối đa 10 giây để app không phải chờ lâu).
+      try { pnDrainEditQueue_(10000); } catch(err) { console.error('Edit queue: '+String(err&&err.message||err)); }
       return response;
     } finally { pnRequest_=null; }
 }

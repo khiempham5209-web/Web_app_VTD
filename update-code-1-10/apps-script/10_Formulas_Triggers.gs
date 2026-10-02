@@ -113,7 +113,12 @@ function pnHandleEdit(e) {
       return result;
     });
   } catch(err) {
-    if(/PN_BUSY/.test(String(err&&err.message||err))){PropertiesService.getScriptProperties().setProperty('PN_SYNC_REQUESTED',String(Date.now()));return {ok:false,busy:true};}
+    if(/PN_BUSY/.test(String(err&&err.message||err))){
+      // Không bỏ qua: lưu đúng dòng đã sửa để xử lý ngay khi khóa trống.
+      if(pnPair_(name))pnQueueEdit_(name,Math.max(2,e.range.getRow()),Math.max(2,e.range.getLastRow()));
+      else PropertiesService.getScriptProperties().setProperty('PN_SYNC_REQUESTED',String(Date.now()));
+      return {ok:false,busy:true,queued:true};
+    }
     throw err;
   } finally { pnV2Start_=0; }
 }
@@ -167,6 +172,8 @@ function pnAfterActivity_() {
     }
     props.setProperty('PN_DAILY_DONE',today);
   }
+  // Các lần sửa tay bị bỏ lỡ vì khóa bận: xử lý đúng các dòng đó.
+  if(!pnV2OverBudget_())pnDrainEditQueue_();
   if(props.getProperty('PN_SYNC_REQUESTED')&&!pnV2OverBudget_()){
     const sync=pnV2SyncAll_({});
     if(!sync.partial)props.deleteProperty('PN_SYNC_REQUESTED');

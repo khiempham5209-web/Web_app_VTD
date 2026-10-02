@@ -797,3 +797,25 @@ function pnV2HandleRows_(name, r1, r2) {
   });
   return {ok: true, own, docs: docsRes, area: areaRes};
 }
+
+/* Sửa tay đúng lúc khóa bận: lưu lại đúng tab + dòng đã sửa (mỗi lần một khóa riêng, không ghi đè nhau),
+ * và xử lý ngay khi có ai giữ được khóa: lần sửa tiếp theo, lần mở Sheet, hoặc lần app lưu đơn kế tiếp. */
+function pnQueueEdit_(name, r1, r2) {
+  const key = 'PN_EDITQ_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  PropertiesService.getScriptProperties().setProperty(key, JSON.stringify({name, r1, r2}));
+}
+function pnDrainEditQueue_(maxMs) {
+  const props = PropertiesService.getScriptProperties(), all = props.getProperties(), started = Date.now();
+  const keys = Object.keys(all).filter(k => k.indexOf('PN_EDITQ_') === 0).sort();
+  let done = 0;
+  for (const k of keys) {
+    if (maxMs && Date.now() - started > maxMs) break;
+    if (pnV2OverBudget_()) break;
+    let job = null;
+    try { job = JSON.parse(all[k]); } catch (err) {}
+    if (job && job.name && pnPair_(job.name)) pnV2HandleRows_(job.name, Math.max(2, Number(job.r1) || 2), Math.max(Number(job.r1) || 2, Number(job.r2) || 2));
+    props.deleteProperty(k);
+    done++;
+  }
+  return {done, left: keys.length - done};
+}

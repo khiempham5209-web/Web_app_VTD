@@ -533,13 +533,13 @@ test('V2 API save writes only the right order, identical in full and main, even 
  assert.equal(full.getRange(fr,12).getValue(),'EC-9');assert.equal(main.getRange(mr,12).getValue(),'EC-9');
  auditOk(e);
 });
-test('V2 busy lock: scheduled run and edit return quietly; edit leaves a sync request',()=>{
+test('V2 busy lock: scheduled run and edit return quietly; edit queues the exact rows',()=>{
  const e=v2env();
  e.run("LockService={getScriptLock:()=>({tryLock(){return false;},waitLock(){},releaseLock(){}})};");
  assert.equal(e.c.pnScheduledReconcile().busy,true);
  const sh=e.sheets.get('Chứng từ_FF');
  assert.equal(e.c.pnHandleEdit({range:sh.getRange(2,10)}).busy,true);
- assert.ok(e.props.PN_SYNC_REQUESTED);
+ assert.ok(Object.keys(e.props).some(k=>k.indexOf('PN_EDITQ_')===0),'edited rows queued, not dropped');
 });
 test('V2 pipeline: new Booking row creates the order in Chứng từ_full and Chứng từ_FF; new File đơn fills GHTK in both',()=>{
  const e=v2env();e.c.pnMirrorAll();
@@ -678,6 +678,21 @@ test('Pasting 20 Booking rows into 3000 existing: only those rows go to Booking_
   assert.ok(rowOf(docs,4,String(9000+i))>1,'order in Chứng từ_FF');
  }
  assert.ok(writes<=25,'batched writes, not per row of the whole tab: '+writes);
+ auditOk(e);
+});
+test('Edit made while the lock is busy is not lost: the edited rows sync at the next app save',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ e.run("uploadFiles_=()=>({linkAnh:'https://example.invalid/p',files:[{id:'1'}],folderUrl:''});");
+ const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
+ e.run("var __lock=LockService;LockService={getScriptLock:()=>({tryLock(){return false;},waitLock(){},releaseLock(){}})};");
+ const m=rowOf(main,4,'1');main.getRange(m,12).setValue('EC-TAY');
+ const r=e.c.pnHandleEdit({range:main.getRange(m,12)});
+ assert.equal(r.queued,true);
+ assert.notEqual(full.getRange(rowOf(full,4,'1'),12).getValue(),'EC-TAY','not yet synced while busy');
+ e.run("LockService=__lock;");
+ assert.equal(e.c.apiSave_({clientId:'q1',maDon:'G2',returnType:'Chứng từ',files:[{base64:'AA=='}]}).ok,true);
+ assert.equal(full.getRange(rowOf(full,4,'1'),12).getValue(),'EC-TAY','queued edit synced by the next save');
+ assert.ok(!Object.keys(e.props).some(k=>k.indexOf('PN_EDITQ_')===0),'queue drained');
  auditOk(e);
 });
 console.log('RESULT '+passed+' tests passed.');
