@@ -179,7 +179,7 @@ function handoverSyncClearOutput_(target) {
   const lastRow = target.getLastRow();
   if (lastRow >= 3) {
     const oldRange = target.getRange(3, 1, lastRow - 2, 8);
-    oldRange.breakApart();
+    pnBreakApartSafe_(oldRange);
     oldRange.clearContent();
     oldRange.clearFormat();
     oldRange.clearDataValidations();
@@ -238,7 +238,7 @@ function handoverSyncClearSummary_(target) {
   const maxRows = target.getMaxRows();
   const maxCols = Math.max(target.getMaxColumns() - 9, 1);
   const range = target.getRange(2, 10, maxRows - 1, maxCols);
-  range.breakApart();
+  pnBreakApartSafe_(range);
   range.clearContent();
   range.clearFormat();
   range.setBorder(false, false, false, false, false, false);
@@ -333,13 +333,13 @@ function handoverSyncApplySignature_(target, dataCount) {
   if (!dataCount) return;
 
   const signatureRow = Number(dataCount) + 4;
-  const dateRange = target.getRange(signatureRow, 1, 1, 3);
-  const leftTop = target.getRange(signatureRow + 1, 1, 1, 3);
-  const leftBottom = target.getRange(signatureRow + 2, 1, 1, 3);
-  const rightTop = target.getRange(signatureRow + 1, 6, 1, 3);
-  const rightBottom = target.getRange(signatureRow + 2, 6, 1, 3);
-
-  [dateRange, leftTop, leftBottom, rightTop, rightBottom].forEach(range => range.merge());
+  // Không gộp ô (Google cấm gộp ô trên dòng đang bị bộ lọc ẩn): ghi chữ vào ô GIỮA của 3 cột và căn giữa,
+  // chữ tự tràn sang 2 ô trống hai bên -> in ra giống ô gộp, chạy được cả khi người dùng đang lọc.
+  const dateRange = target.getRange(signatureRow, 2);
+  const leftTop = target.getRange(signatureRow + 1, 2);
+  const leftBottom = target.getRange(signatureRow + 2, 2);
+  const rightTop = target.getRange(signatureRow + 1, 7);
+  const rightBottom = target.getRange(signatureRow + 2, 7);
   dateRange.setValue(handoverSyncTodayHanoiText_());
   leftTop.setValue("Nhân sự bàn giao");
   leftBottom.setValue("(Ký, ghi rõ họ tên)");
@@ -353,6 +353,11 @@ function handoverSyncApplySignature_(target, dataCount) {
     .setFontSize(15)
     .setFontWeight("bold");
   dateRange.setHorizontalAlignment("center");
+}
+
+// Bỏ gộp ô cũ; dòng đang bị lọc mà Google không cho thì bỏ qua, không làm hỏng cả lượt.
+function pnBreakApartSafe_(range) {
+  try { range.breakApart(); } catch (err) { console.warn('breakApart: ' + String(err && err.message || err)); }
 }
 
 function handoverSyncSourceSheet_() {

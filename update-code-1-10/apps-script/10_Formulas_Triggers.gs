@@ -108,7 +108,11 @@ function pnHandleEdit(e) {
         result=pnV2SyncAll_(p?{pair:p.main,prefer:{side:name===p.main?'main':'full',rows}}:{});
         if(name==='Booking_full')pnSyncBookingFullRows_(r1,r2);
       }
-      if(name==='Bàn giao chứng từ'&&e.range.getA1Notation()==='A1'){refreshBanGiaoChungTuDropdown();syncBanGiaoChungTuBySelectedDate();}
+      if(name==='Bàn giao chứng từ'&&e.range.getA1Notation()==='A1'){
+        // Lỗi dựng biên bản không được làm hỏng các việc đồng bộ khác trong cùng lần sửa.
+        try { refreshBanGiaoChungTuDropdown();syncBanGiaoChungTuBySelectedDate(); }
+        catch(err) { console.error('Biên bản bàn giao: '+String(err&&err.message||err)); }
+      }
       pnAfterActivity_();
       return result;
     },120000);
