@@ -47,6 +47,8 @@ class Sheet{
  getMaxRows(){return this.maxRows;}getMaxColumns(){return this.maxCols;}
  insertRowsAfter(x,n){this.maxRows+=n;}insertColumnsAfter(x,n){this.maxCols+=n;}
  getRange(r,c,n,w){if(typeof r==='string'){const m=r.match(/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/);return new Range(this,+m[2],colNo(m[1]),m[4]?+m[4]-m[2]+1:1,m[3]?colNo(m[3])-colNo(m[1])+1:1);}return new Range(this,r,c,n,w);}
+ deleteRows(r,n){this.rows.splice(r-1,n);for(const m of Object.values(this.fmt||{})){const moved=new Map();for(const [k,v] of m){const [rr,cc]=k.split(':').map(Number);if(rr<r)moved.set(k,v);else if(rr>=r+n)moved.set((rr-n)+':'+cc,v);}m.clear();for(const [k,v] of moved)m.set(k,v);}this.deletedRows=(this.deletedRows||0)+n;return this;}
+ getConditionalFormatRules(){return [];}
  appendRow(row){const n=this.getLastRow()+1;this.rows[n-1]=row.slice();return this;}
  hideColumns(){}hideSheet(){}setFrozenRows(){}autoResizeRows(){}getSheetId(){return ({'File đơn_full':872196600,'Sự vụ':529840243,'Sự vụ bánh xẹp':318091884})[this.name]||1;}
 }
@@ -756,5 +758,32 @@ test('Cleanup removes rows with deleteCells only inside the table, keeps the piv
  assert.equal(sh.getRange(2,21).getValue(),'PIVOT','columns right of the table untouched');
  e.c.pnMirrorAll();auditOk(e);
  assert.equal(e.props.PN_CLEANUP_PENDING,undefined);
+});
+test('Cleanup deletes only whole rows of eligible orders; blank template rows and other rows keep dropdowns',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const sh=e.sheets.get('Chứng từ_FF');
+ const last=sh.getLastRow();
+ const tpl=Array(17).fill('');tpl[8]=false;sh.getRange(last+1,1,1,17).setValues([tpl]);
+ const dv=(sh.fmt??={}).dv??=new Map();for(let r=2;r<=last+1;r++)dv.set(r+':7','DROPDOWN');
+ e.run("pnCurrentMonth_=()=> '2099-01';");
+ const keepOrders=sh.rows.slice(1,last).filter(r=>r&&r[6]!=='Đã nhận chứng từ'&&r[6]!=='Shop hủy OD').map(r=>String(r[4]));
+ const res=e.c.pnV2Cleanup_();
+ const docs=res.results.find(x=>x.sheet==='Chứng từ_FF');
+ assert.equal(docs.mode,'rows');assert.ok(docs.removed>0,JSON.stringify(res));
+ assert.equal(sh.deletedRows,docs.removed);
+ const now=sh.rows.slice(1).filter(r=>r&&r[4]).map(r=>String(r[4]));
+ assert.deepEqual(now,keepOrders,'only received orders removed');
+ assert.equal(sh.getRange(sh.getLastRow(),9).getValue(),false,'template row kept');
+ for(let r=2;r<=last+1-docs.removed;r++)assert.equal(dv.get(r+':7'),'DROPDOWN','dropdown kept at row '+r);
+ e.c.pnMirrorAll();auditOk(e);
+});
+test('pnRepairMainFormats restores lost dropdowns down the column without touching values',()=>{
+ const e=v2env();e.c.pnMirrorAll();const sh=e.sheets.get('Chứng từ_FF');sh.maxRows=12;
+ const dv=(sh.fmt??={}).dv??=new Map();dv.set('2:7','DROPDOWN');dv.set('5:7','OTHER');
+ const vals=JSON.stringify(sh.rows);
+ const r=e.c.pnRepairMainFormats('Chứng từ_FF');
+ assert.equal(JSON.stringify(sh.rows),vals,'values unchanged');
+ for(let i=2;i<=12;i++)assert.equal(dv.get(i+':7'),i===5?'OTHER':'DROPDOWN');
+ assert.equal(r.validation[0].fixed,9);
 });
 console.log('RESULT '+passed+' tests passed.');

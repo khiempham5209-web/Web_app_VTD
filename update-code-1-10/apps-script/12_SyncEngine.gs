@@ -450,7 +450,7 @@ function pnV2Blocks_(rows) {
 
 /* Dọn mỗi ngày: xóa khỏi tab chính dòng tháng cũ đã khớp 100% với full (cùng ID, cùng nội dung).
  * Chứng từ_FF: chỉ dòng Đã nhận chứng từ / Shop hủy OD. Dòng chưa xác định ngày, chưa khớp: giữ lại.
- * Ghi lại phần còn lại liền nhau từ dòng 2 (không deleteRows để không lệch pivot/công thức). */
+ */
 // Định dạng được dời theo dòng khi dọn (màu, chữ, số, dropdown/checkbox).
 const PN_V2_FORMATS_ = [['getBackgrounds', 'setBackgrounds'], ['getFontColors', 'setFontColors'], ['getFontWeights', 'setFontWeights'],
   ['getFontLines', 'setFontLines'], ['getNumberFormats', 'setNumberFormats'], ['getDataValidations', 'setDataValidations']];
@@ -467,9 +467,10 @@ function pnV2Meaningful_(L, row) {
  * không deleteRows để không lệch pivot/công thức bên phải (File đơn T:W). */
 /* Dọn mỗi ngày: xóa khỏi tab chính dòng tháng cũ đã khớp 100% với full (cùng ID, cùng nội dung).
  * Chứng từ_FF: chỉ dòng Đã nhận chứng từ / Shop hủy OD. Dòng chưa xác định ngày, chưa khớp: giữ lại.
- * Dòng đang gõ dở (chưa có mã nhưng có nội dung) được giữ. Dòng mẫu trống (chỉ dropdown/checkbox chưa tích) bị xóa.
- * Cách xóa: xóa Ô (dồn lên) theo từng nhóm dòng liền nhau, từ dưới lên, chỉ trong vùng bảng (A..cột cuối) và cột
- * __PN_ID/__PN_BASE. Định dạng/dropdown đi theo dòng; pivot/công thức bên phải (File đơn T:W) không bị đụng.
+ * Chỉ xóa dòng của đơn đủ điều kiện. Dòng không phải hồ sơ (dòng mẫu trống, dòng gõ dở) không bị đụng.
+ * Cách xóa: xóa NGUYÊN DÒNG (deleteRows) theo từng nhóm dòng liền nhau, từ dưới lên -> dropdown, màu, định dạng có
+ * điều kiện của các dòng khác giữ nguyên. Tab có dữ liệu bên phải bảng (File đơn: pivot T:W) thì chỉ xóa ô trong
+ * vùng bảng (A..cột cuối) và cột __PN_ID/__PN_BASE, để không cắt vào pivot.
  * Mỗi nhóm xóa xong là bảng nhất quán ngay -> bị ngắt giữa chừng không để lại trạng thái dở, không chặn app.
  * Trước khi xóa một nhóm, đọc lại nhóm đó: ai vừa sửa (người hoặc API) thì bỏ qua nhóm, để lần sau. */
 function pnV2Cleanup_() {
@@ -484,10 +485,8 @@ function pnV2Cleanup_() {
     const before = pnV2Read_(M), drop = [];
     let removed = 0, blank = 0;
     before.forEach((r, i) => {
-      if (!pnV2Rec_(M, cfg, r)) {
-        if (!pnV2Meaningful_(M, r) && (pnV2Has_(M, r, names) || (M.id != null && pnText_(r[M.id])))) { drop.push(i); blank++; }
-        return;
-      }
+      // Dòng không phải hồ sơ (dòng mẫu trống có checkbox/dropdown, dòng gõ dở): KHÔNG đụng tới.
+      if (!pnV2Rec_(M, cfg, r)) return;
       const f = fById.get(pnText_(r[M.id]));
       if (pnV2Eligible_(M, cfg, r, month) && f && pnV2Sig_(M, r, names) === pnV2Sig_(F, f, names)) { drop.push(i); removed++; }
     });
@@ -501,11 +500,14 @@ function pnV2Cleanup_() {
       const pad = r => Array.from({length: width}, (_, j) => pnV2Canon_(r[j] === undefined ? '' : r[j]));
       return now.every((r, k) => pnHash_(pad(r)) === pnHash_(pad(before[g.start + k])));
     };
+    // Có nội dung bên phải bảng (ngoài cột ID ẩn) -> chỉ xóa ô trong bảng; còn lại xóa NGUYÊN DÒNG.
+    const side = pnV2HasSideContent_(M);
     let done = 0, skipped = 0;
     for (let k = groups.length - 1; k >= 0; k--) {
       if (pnV2OverBudget_()) { partial = true; break; }
       const g = groups[k], n = g.end - g.start + 1, row = g.start + 2;
       if (!sameRows(g)) { skipped += n; continue; }
+      if (!side) { M.sh.deleteRows(row, n); done += n; continue; }
       if (M.width) M.sh.getRange(row, 1, n, M.width).deleteCells(SpreadsheetApp.Dimension.ROWS);
       // Cột ID/BASE (ẩn, AD:AE): xóa ngay sau, cùng nhóm dòng -> ID luôn đi cùng dữ liệu.
       if (techCols.length === 2 && techCols[1] === techCols[0] + 1) M.sh.getRange(row, techCols[0] + 1, n, 2).deleteCells(SpreadsheetApp.Dimension.ROWS);
@@ -513,7 +515,7 @@ function pnV2Cleanup_() {
       done += n;
     }
     SpreadsheetApp.flush();
-    results.push({sheet: p.main, removed: done, skippedEdited: skipped, blankCleared: blank});
+    results.push({sheet: p.main, removed: done, skippedEdited: skipped, mode: side ? 'cells' : 'rows'});
     if (partial) break;
   }
   return {ok: true, partial, results};
@@ -545,6 +547,50 @@ function pnV2Backup_(p, M, before, cols, wanted) {
 
 // Lượt dọn bị ngắt giữa chừng: mỗi dòng phải đang là bản "trước" hoặc "sau dự kiến". Có dòng khác (đã sửa tay sau đó)
 // hoặc có dòng mới phía dưới thì DỪNG, không ghi đè. Hợp lệ thì hoàn tất lượt dọn.
+// Bên phải bảng có dữ liệu (pivot, ghi chú...) ngoài cột kỹ thuật? (đọc tối đa 2000 dòng)
+function pnV2HasSideContent_(M) {
+  const lastCol = M.sh.getLastColumn(), rows = Math.min(Math.max(1, M.sh.getLastRow()), 2000);
+  if (lastCol <= M.width) return false;
+  const tech = new Set([M.id, M.base].filter(c => c != null));
+  const vals = M.sh.getRange(1, M.width + 1, rows, lastCol - M.width).getValues();
+  return vals.some(r => r.some((v, j) => !tech.has(M.width + j) && v !== '' && v != null));
+}
+
+/* Sửa lại dropdown/checkbox và định dạng có điều kiện của tab chính sau lượt dọn cũ:
+ * - Mỗi cột trong bảng: lấy dropdown/checkbox đang có ở các dòng đầu, gán cho các ô cùng cột bị mất (không đổi ô đang có).
+ * - Mỗi quy tắc định dạng có điều kiện: nối các mảnh vùng cùng cột và kéo tới dòng cuối của sheet.
+ * Không đổi giá trị ô nào. Trả về danh sách quy tắc để kiểm tra; quy tắc đã bị xóa hẳn thì phải tạo lại tay. */
+function pnRepairMainFormats(name) {
+  return pnWithLock_(() => {
+    const sh = pnSheet_(name || 'Chứng từ_FF'), L = pnV2Layout_(sh, false), max = sh.getMaxRows(), out = {sheet: sh.getName(), validation: [], rules: []};
+    if (max < 2 || !L.width) return out;
+    const top = sh.getRange(2, 1, Math.min(50, max - 1), L.width).getDataValidations();
+    for (let c = 0; c < L.width; c++) {
+      let dv = null;
+      for (const r of top) if (r[c]) { dv = r[c]; break; }
+      if (!dv) continue;
+      const col = sh.getRange(2, c + 1, max - 1, 1), cur = col.getDataValidations();
+      let fixed = 0;
+      const next = cur.map(r => { if (r[0]) return [r[0]]; fixed++; return [dv]; });
+      if (fixed) { col.setDataValidations(next); out.validation.push({column: L.headers[c], fixed}); }
+    }
+    const rules = sh.getConditionalFormatRules();
+    const rebuilt = rules.map(rule => {
+      const spans = new Map();
+      rule.getRanges().forEach(r => {
+        const k = r.getColumn() + ':' + r.getNumColumns(), s = spans.get(k);
+        spans.set(k, {c: r.getColumn(), w: r.getNumColumns(), r1: Math.min(s ? s.r1 : r.getRow(), r.getRow())});
+      });
+      const ranges = Array.from(spans.values()).map(s => sh.getRange(s.r1, s.c, max - s.r1 + 1, s.w));
+      out.rules.push({before: rule.getRanges().map(r => r.getA1Notation()), after: ranges.map(r => r.getA1Notation())});
+      return rule.copy().setRanges(ranges).build();
+    });
+    if (rules.length) sh.setConditionalFormatRules(rebuilt);
+    SpreadsheetApp.flush();
+    return out;
+  });
+}
+
 /* Lượt dọn kiểu cũ (ghi đè cả bảng) bị ngắt: dữ liệu nghiệp vụ được ghi trước, cột ID ghi sau.
  * Không ghi đè dữ liệu nào: chỉ gắn lại đúng ID/BASE cho từng dòng theo nội dung đang có, rồi bỏ cờ dọn dở.
  * Dòng ai đó đã sửa/nhập sau đó vẫn giữ nguyên nội dung; lần đồng bộ tiếp theo đẩy sang full như sửa tay. */
