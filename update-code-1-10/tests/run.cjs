@@ -36,6 +36,7 @@ for(const [name,k] of Object.entries(FMT_KINDS)){
  Range.prototype['set'+name]=function(rows){assert.equal(rows.length,this.n);const fm=(this.sh.fmt??={});const m=(fm[k]??=new Map());rows.forEach((row,i)=>{assert.equal(row.length,this.w);row.forEach((v,j)=>{if(v==null)m.delete((this.r+i)+':'+(this.c+j));else m.set((this.r+i)+':'+(this.c+j),v);});});return this;};
 }
 Range.prototype.clearFormat=function(){for(const k of ['bg','fc','fw','fl','nf']){const m=this.sh.fmt?.[k];if(!m)continue;for(let i=0;i<this.n;i++)for(let j=0;j<this.w;j++)m.delete((this.r+i)+':'+(this.c+j));}return this;};
+Range.prototype.deleteCells=function(dim){assert.equal(dim,'ROWS');const sh=this.sh,end=Math.max(sh.rows.length,this.r+this.n);for(let j=this.c;j<this.c+this.w;j++){for(let r=this.r;r<=end;r++){const from=r+this.n;const v=sh.rows[from-1]?.[j-1]??'';(sh.rows[r-1]??=[])[j-1]=v;for(const m of Object.values(sh.fmt||{})){const fv=m.get(from+':'+j);if(fv==null)m.delete(r+':'+j);else m.set(r+':'+j,fv);}}}sh.calls=(sh.calls||0)+1;return this;};
 Range.prototype.clearDataValidations=function(){const m=this.sh.fmt?.dv;if(m)for(let i=0;i<this.n;i++)for(let j=0;j<this.w;j++)m.delete((this.r+i)+':'+(this.c+j));return this;};
 for(const method of ['setNumberFormat','setDataValidation','setBorder','setFontFamily','setFontSize','setVerticalAlignment','setFontWeight','setHorizontalAlignment','setWrap','merge','breakApart'])Range.prototype[method]=function(){return this;};
 class Sheet{
@@ -64,7 +65,7 @@ function environment(){
  const depot=Array(15).fill('');depot[4]='Manager';depot[6]='Depot';depot[14]='Nội thành';
  sheets.get('DS BC').rows=[Array(15).fill('Header'),depot];
  const context=vm.createContext({console,Date,Map,Set,Math,JSON,Number,String,Boolean,Array,Object,Error,
-  SpreadsheetApp:{openById:id=>id==='1ZLqeo_djwMJofqBCD3Ilk6lIkUmVsEfK7T5Oj9D6wmI'?targetSS:ss,flush(){},CopyPasteType:{PASTE_FORMAT:1,PASTE_DATA_VALIDATION:2},
+  SpreadsheetApp:{openById:id=>id==='1ZLqeo_djwMJofqBCD3Ilk6lIkUmVsEfK7T5Oj9D6wmI'?targetSS:ss,flush(){},CopyPasteType:{PASTE_FORMAT:1,PASTE_DATA_VALIDATION:2},Dimension:{ROWS:'ROWS',COLUMNS:'COLUMNS'},
    newDataValidation:()=>({requireValueInList(){return this;},requireValueInRange(){return this;},setAllowInvalid(){return this;},build(){return {};}})},
   Utilities:{getUuid:()=>crypto.randomUUID(),DigestAlgorithm:{SHA_256:'sha256',MD5:'md5'},Charset:{UTF_8:'utf8'},
    computeDigest:(a,s)=>[...crypto.createHash(a).update(s).digest()],formatDate:(d,t,p)=>fmt(d,p)},
@@ -225,7 +226,7 @@ test('API save touches only its own order; a two-sided edit elsewhere is resolve
  assert.match(JSON.stringify(e.sheets.get('_PN_CONFLICTS').rows),/full edit/);
  assert.equal(full.getRange(rowOf(full,'G2'),7).getValue(),'Đã nhận chứng từ');
 });
-test('App save is independent of the Sheet lane: succeeds while the Sheet lock is held, writes only its order, both tabs',()=>{
+test('App save is independent of the Sheet lane: succeeds while the Sheet lock is held; main row follows at next Sheet activity',()=>{
  const e=environment();seed(e);e.c.pnMigrateFull();e.c.pnMirrorAll();
  e.run("uploadFiles_=()=>({linkAnh:'https://example.invalid/p',files:[{id:'1'}],folderUrl:''});");
  e.run("LockService={getScriptLock:()=>({tryLock(){return false;},waitLock(){throw new Error('locked');},releaseLock(){}})};");
@@ -233,7 +234,10 @@ test('App save is independent of the Sheet lane: succeeds while the Sheet lock i
  assert.equal(res.ok,true,'API does not wait for the Sheet lock');
  const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
  assert.equal(full.getRange(rowOf(full,4,'1'),7).getValue(),'Đã nhận chứng từ');
- assert.equal(main.getRange(rowOf(main,4,'1'),7).getValue(),'Đã nhận chứng từ');
+ assert.notEqual(main.getRange(rowOf(main,4,'1'),7).getValue(),'Đã nhận chứng từ','Sheet lane busy: main row queued, not written');
+ e.run("LockService={getScriptLock:()=>({tryLock(){return true;},waitLock(){},releaseLock(){}})};");
+ e.c.pnHandleEdit({range:main.getRange(rowOf(main,4,'2'),13)});
+ assert.equal(main.getRange(rowOf(main,4,'1'),7).getValue(),'Đã nhận chứng từ','next Sheet activity pushes it to main');
 });
 test('Photos upload outside the shared lock',()=>{
  const e=environment();seed(e);e.c.pnMigrateFull();
@@ -312,14 +316,14 @@ test('VHFF worker acknowledges all destinations and notices later archive-only e
  e.sheets.get('Chứng từ_full').getRange(4,10).setValue('late change');
  assert.equal(e.c.pnSyncVHFF().ok,true);assert.notEqual(e.props.PN_VHFF_SOURCE_ACK,before);
 });
-test('Interrupted cleanup blocks API and resumes without detaching identities',()=>{
+test('Interrupted cleanup does not block API and resumes without detaching identities',()=>{
  const e=environment();seed(e);e.c.pnMigrateFull();const p=e.run('PN_FULL.pairs[2]'),sh=e.sheets.get('Chứng từ_FF');
  const before=e.c.pnRows_(sh,31);e.c.pnBackupCleanup_(p,before);
  e.props.PN_CLEANUP_PENDING=JSON.stringify({main:p.main,month:'2026-10'});
  // Simulate successful business compaction and crash before identity write.
  const kept=[before[0],before[1]];
  sh.getRange(2,1,2,17).setValues(kept.map(r=>r.slice(0,17)));sh.getRange(4,1,2,17).clearContent();
- assert.throws(()=>e.c.apiInit_(),/gián đoạn/);
+ assert.equal(e.c.apiInit_().ok,true,'main-tab cleanup state never blocks the app');
  assert.equal(e.c.pnResumeCleanup().ok,true);assert.equal(e.props.PN_CLEANUP_PENDING,undefined);
  assert.equal(e.c.pnAuditFull().ok,true);
 });
@@ -717,5 +721,40 @@ test('Mã ecom CT keeps only the last 10 digits',()=>{
  assert.equal(e.c.pnEcomCt_('https://i.ghtk.vn/S22843210.MB1.A12.1234567890'),'1234567890');
  assert.equal(e.c.pnEcomCt_(' 0987654321 '),'0987654321');
  assert.equal(e.c.pnEcomCt_('AB123'),'AB123');
+});
+test('V2 cleanup interrupted after data write, before ID write: app keeps working, next Sheet edit re-attaches IDs, no data lost',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const p=e.run('PN_FULL.pairs[2]'),sh=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
+ const M=e.run('pnV2Layout_(pnSheet_("Chứng từ_FF"),false)'),cols=Array.from(e.c.pnV2CleanupCols_(M));
+ const pick=r=>cols.map(c=>r[c]===undefined?'':r[c]);
+ const before=Array.from(e.c.pnV2Read_(M)).map(pick);
+ const wanted=before.slice(1).concat([cols.map(()=>'')]);
+ e.c.pnV2Backup_(p,M,before,cols,wanted);
+ e.props.PN_CLEANUP_PENDING=JSON.stringify({main:p.main,month:'2026-10',engine:'v2'});
+ const bizN=M.width;
+ sh.getRange(2,1,wanted.length,bizN).setValues(wanted.map(r=>r.slice(0,bizN)));
+ const fullCount=full.getLastRow();
+ assert.equal(e.c.apiInit_().ok,true,'app reads not blocked');
+ const order=sh.getRange(2,5).getValue();
+ sh.getRange(2,10).setValue('ghi chú sau sự cố');
+ e.c.pnHandleEdit({range:sh.getRange(2,10)});
+ assert.equal(e.props.PN_CLEANUP_PENDING,undefined,'auto-repaired by the Sheet lane');
+ assert.equal(full.getRange(rowOf(full,4,order),10).getValue(),'ghi chú sau sự cố','edit reached the right record in full');
+ e.c.pnMirrorAll();
+ assert.equal(full.getLastRow(),fullCount,'no record lost or duplicated in full');
+ auditOk(e);
+});
+test('Cleanup removes rows with deleteCells only inside the table, keeps the pivot area, and skips rows edited meanwhile',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ e.run("pnCurrentMonth_=()=> '2099-01';");
+ const sh=e.sheets.get('File đơn');
+ sh.getRange(2,21).setValue('PIVOT');
+ const r=e.c.pnV2Cleanup_();
+ assert.equal(r.ok,true);assert.equal(r.partial,false);
+ assert.ok(r.results.find(x=>x.sheet==='File đơn').removed>0,JSON.stringify(r));
+ assert.ok(r.results.find(x=>x.sheet==='Booking').removed>0,JSON.stringify(r));
+ assert.equal(sh.getRange(2,21).getValue(),'PIVOT','columns right of the table untouched');
+ e.c.pnMirrorAll();auditOk(e);
+ assert.equal(e.props.PN_CLEANUP_PENDING,undefined);
 });
 console.log('RESULT '+passed+' tests passed.');

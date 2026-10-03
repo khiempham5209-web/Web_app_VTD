@@ -168,7 +168,7 @@ function pnAfterActivity_() {
       // Nhẹ: chỉ đồng bộ dòng thay đổi rồi dọn (vài giây). Không quét lại toàn bộ Booking để app không phải chờ.
       const sync=pnV2SyncAll_({});
       if(sync.partial)return;
-      pnV2Cleanup_();
+      if(pnV2Cleanup_().partial)return;
     }
     props.setProperty('PN_DAILY_DONE',today);
   }

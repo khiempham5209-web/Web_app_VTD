@@ -215,6 +215,7 @@ function pnV2LastDataRow_(L, cfg, rows) {
  * dòng nằm trong vùng vừa sửa thì bên đó thắng khi hai bên cùng đổi. */
 function pnV2SyncPair_(p, opts) {
   opts = opts || {};
+  pnMainReady_();
   const cfg = pnV2Cfg_(p), month = pnCurrentMonth_();
   const layouts = pnV2EnsureColumns_(p), M = layouts.M, F = layouts.F, names = pnV2Names_(M);
   const legacy = PropertiesService.getScriptProperties().getProperty('PN_ENGINE') !== PN_V2.engine;
@@ -464,52 +465,58 @@ function pnV2Meaningful_(L, row) {
  * Dồn phần còn lại lên từ dòng 2 KÈM định dạng của chính dòng đó; các dòng trống phía dưới được xóa sạch
  * giá trị, màu, định dạng, dropdown/checkbox. Chỉ trong vùng bảng (cột A tới cột cuối của bảng) + cột ID ẩn;
  * không deleteRows để không lệch pivot/công thức bên phải (File đơn T:W). */
+/* Dọn mỗi ngày: xóa khỏi tab chính dòng tháng cũ đã khớp 100% với full (cùng ID, cùng nội dung).
+ * Chứng từ_FF: chỉ dòng Đã nhận chứng từ / Shop hủy OD. Dòng chưa xác định ngày, chưa khớp: giữ lại.
+ * Dòng đang gõ dở (chưa có mã nhưng có nội dung) được giữ. Dòng mẫu trống (chỉ dropdown/checkbox chưa tích) bị xóa.
+ * Cách xóa: xóa Ô (dồn lên) theo từng nhóm dòng liền nhau, từ dưới lên, chỉ trong vùng bảng (A..cột cuối) và cột
+ * __PN_ID/__PN_BASE. Định dạng/dropdown đi theo dòng; pivot/công thức bên phải (File đơn T:W) không bị đụng.
+ * Mỗi nhóm xóa xong là bảng nhất quán ngay -> bị ngắt giữa chừng không để lại trạng thái dở, không chặn app.
+ * Trước khi xóa một nhóm, đọc lại nhóm đó: ai vừa sửa (người hoặc API) thì bỏ qua nhóm, để lần sau. */
 function pnV2Cleanup_() {
   const month = pnCurrentMonth_(), results = [];
+  let partial = false;
   for (const p of PN_FULL.pairs) {
+    if (pnV2OverBudget_()) { partial = true; break; }
+    pnMainReady_();
     const cfg = pnV2Cfg_(p), L = pnV2EnsureColumns_(p), M = L.M, F = L.F, names = pnV2Names_(M);
     const fById = new Map();
     pnV2Read_(F).forEach(r => { const id = pnText_(r[F.id]); if (id) fById.set(id, r); });
-    const before = pnV2Read_(M), cols = pnV2CleanupCols_(M);
+    const before = pnV2Read_(M), drop = [];
     let removed = 0, blank = 0;
-    const keptIdx = [];
     before.forEach((r, i) => {
-      if (!pnV2Rec_(M, cfg, r)) { if (pnV2Meaningful_(M, r)) keptIdx.push(i); else if (pnV2Has_(M, r, names) || (M.id != null && pnText_(r[M.id]))) blank++; return; }
+      if (!pnV2Rec_(M, cfg, r)) {
+        if (!pnV2Meaningful_(M, r) && (pnV2Has_(M, r, names) || (M.id != null && pnText_(r[M.id])))) { drop.push(i); blank++; }
+        return;
+      }
       const f = fById.get(pnText_(r[M.id]));
-      const ok = pnV2Eligible_(M, cfg, r, month) && f && pnV2Sig_(M, r, names) === pnV2Sig_(F, f, names);
-      if (ok) removed++; else keptIdx.push(i);
+      if (pnV2Eligible_(M, cfg, r, month) && f && pnV2Sig_(M, r, names) === pnV2Sig_(F, f, names)) { drop.push(i); removed++; }
     });
     if (!removed) { results.push({sheet: p.main, removed: 0}); continue; }
-    const pick = r => cols.map(c => r[c] === undefined ? '' : r[c]);
-    const total = before.length, wanted = [];
-    for (let i = 0; i < total; i++) wanted.push(i < keptIdx.length ? pick(before[keptIdx[i]]) : cols.map(() => ''));
-    // Định dạng của vùng bảng, đọc một lần.
-    const block = M.width ? M.sh.getRange(2, 1, total, M.width) : null;
-    const formats = block ? PN_V2_FORMATS_.map(([get]) => block[get]()) : [];
-    pnV2Backup_(p, M, before.map(pick), cols, wanted);
-    PropertiesService.getScriptProperties().setProperty('PN_CLEANUP_PENDING', JSON.stringify({main: p.main, month, engine: PN_V2.engine}));
-    pnV2WriteCols_(M, cols, wanted);
-    if (block) {
-      if (keptIdx.length) {
-        const keptRange = M.sh.getRange(2, 1, keptIdx.length, M.width);
-        PN_V2_FORMATS_.forEach(([, set], k) => keptRange[set](keptIdx.map(i => formats[k][i])));
-      }
-      const vacated = total - keptIdx.length;
-      if (vacated > 0) {
-        const start = keptIdx.length + 2, range = M.sh.getRange(start, 1, vacated, M.width);
-        range.clearFormat();
-        // Hết dòng giữ lại: giữ dropdown/checkbox ở dòng 2 làm mẫu cho dòng mới.
-        if (keptIdx.length) range.clearDataValidations();
-        else if (vacated > 1) M.sh.getRange(3, 1, vacated - 1, M.width).clearDataValidations();
-      }
+    // Nhóm dòng liền nhau (số dòng trên sheet), xử lý từ dưới lên để số dòng phía trên không đổi.
+    const groups = [];
+    drop.forEach(i => { const g = groups[groups.length - 1]; if (g && g.end === i - 1) g.end = i; else groups.push({start: i, end: i}); });
+    const width = pnV2ReadWidth_(M), techCols = [M.id, M.base].filter(c => c != null).sort((a, b) => a - b);
+    const sameRows = (g) => {
+      const now = M.sh.getRange(g.start + 2, 1, g.end - g.start + 1, width).getValues();
+      const pad = r => Array.from({length: width}, (_, j) => pnV2Canon_(r[j] === undefined ? '' : r[j]));
+      return now.every((r, k) => pnHash_(pad(r)) === pnHash_(pad(before[g.start + k])));
+    };
+    let done = 0, skipped = 0;
+    for (let k = groups.length - 1; k >= 0; k--) {
+      if (pnV2OverBudget_()) { partial = true; break; }
+      const g = groups[k], n = g.end - g.start + 1, row = g.start + 2;
+      if (!sameRows(g)) { skipped += n; continue; }
+      if (M.width) M.sh.getRange(row, 1, n, M.width).deleteCells(SpreadsheetApp.Dimension.ROWS);
+      // Cột ID/BASE (ẩn, AD:AE): xóa ngay sau, cùng nhóm dòng -> ID luôn đi cùng dữ liệu.
+      if (techCols.length === 2 && techCols[1] === techCols[0] + 1) M.sh.getRange(row, techCols[0] + 1, n, 2).deleteCells(SpreadsheetApp.Dimension.ROWS);
+      else techCols.forEach(c => M.sh.getRange(row, c + 1, n, 1).deleteCells(SpreadsheetApp.Dimension.ROWS));
+      done += n;
     }
-    // Đọc lại đúng số dòng đã ghi (kể cả các dòng cuối vừa xóa trống) để đối chiếu.
-    const check = M.sh.getRange(2, 1, total, pnV2ReadWidth_(M)).getValues().map(pick);
-    if (pnHash_(check) !== pnHash_(wanted)) throw new Error('Đối soát sau dọn không khớp ở ' + p.main + '; giữ khóa phục hồi.');
-    PropertiesService.getScriptProperties().deleteProperty('PN_CLEANUP_PENDING');
-    results.push({sheet: p.main, removed, blankCleared: blank});
+    SpreadsheetApp.flush();
+    results.push({sheet: p.main, removed: done, skippedEdited: skipped, blankCleared: blank});
+    if (partial) break;
   }
-  return {ok: true, results};
+  return {ok: true, partial, results};
 }
 
 function pnV2CleanupCols_(M) {
@@ -538,28 +545,52 @@ function pnV2Backup_(p, M, before, cols, wanted) {
 
 // Lượt dọn bị ngắt giữa chừng: mỗi dòng phải đang là bản "trước" hoặc "sau dự kiến". Có dòng khác (đã sửa tay sau đó)
 // hoặc có dòng mới phía dưới thì DỪNG, không ghi đè. Hợp lệ thì hoàn tất lượt dọn.
+/* Lượt dọn kiểu cũ (ghi đè cả bảng) bị ngắt: dữ liệu nghiệp vụ được ghi trước, cột ID ghi sau.
+ * Không ghi đè dữ liệu nào: chỉ gắn lại đúng ID/BASE cho từng dòng theo nội dung đang có, rồi bỏ cờ dọn dở.
+ * Dòng ai đó đã sửa/nhập sau đó vẫn giữ nguyên nội dung; lần đồng bộ tiếp theo đẩy sang full như sửa tay. */
 function pnV2ResumeCleanup_() {
   const props = PropertiesService.getScriptProperties(), raw = props.getProperty('PN_CLEANUP_PENDING');
   if (!raw) return {ok: true, skipped: true};
   const state = JSON.parse(raw), p = pnPair_(state.main), info = JSON.parse(props.getProperty('PN_BACKUP_' + p.main) || 'null');
   if (!info || !info.cols) throw new Error('Thiếu thông tin backup bản mới.');
-  const w = info.cols.length;
-  const backup = info.rows ? pnSheet_('_PN_BACKUP_' + p.main).getRange(2, 1, info.rows, w * 2).getValues() : [];
+  const w = info.cols.length, bk = pnSheet_('_PN_BACKUP_' + p.main);
+  const backup = info.rows ? bk.getRange(2, 1, info.rows, w * 2).getValues() : [];
   if (pnHash_(backup) !== info.hash) throw new Error('Backup không khớp; không tự phục hồi.');
-  const M = pnV2Layout_(pnSheet_(p.main), false), cfg = pnV2Cfg_(p);
+  const head = bk.getRange(1, 1, 1, w).getValues()[0].map(pnText_);
+  const kId = head.indexOf('__PN_ID'), kBase = head.indexOf('__PN_BASE');
+  const M = pnV2Layout_(pnSheet_(p.main), false);
+  if (kId < 0 || M.id == null || info.cols[kId] !== M.id || (kBase >= 0 && info.cols[kBase] !== M.base))
+    throw new Error('Cột ID của ' + p.main + ' đã đổi vị trí sau lượt dọn; cần đối chiếu tay.');
+  const bizK = info.cols.map((c, k) => k).filter(k => k !== kId && k !== kBase);
   const width = pnV2ReadWidth_(M);
   const current = info.rows ? M.sh.getRange(2, 1, info.rows, width).getValues() : [];
-  const pick = r => info.cols.map(c => r[c] === undefined ? '' : r[c]);
+  const biz = (arr, off) => pnHash_(bizK.map(k => pnV2Canon_(arr[off + k])));
+  const curBiz = r => pnHash_(bizK.map(k => pnV2Canon_(r[info.cols[k]])));
+  let matchAfter = 0, matchBefore = 0;
   for (let i = 0; i < info.rows; i++) {
-    const h = pnHash_(pick(current[i]).map(pnV2Canon_));
-    if (h !== pnHash_(backup[i].slice(0, w).map(pnV2Canon_)) && h !== pnHash_(backup[i].slice(w).map(pnV2Canon_)))
-      throw new Error('Có sửa tay sau khi dọn lỗi ở dòng ' + (i + 2) + '; cần đối chiếu, không ghi đè.');
+    const b = biz(backup[i], 0), a = biz(backup[i], w);
+    if (a === b) continue;
+    const c = curBiz(current[i]);
+    if (c === a) matchAfter++; else if (c === b) matchBefore++;
   }
-  if (pnV2Read_(M).slice(info.rows).some(r => pnV2Rec_(M, cfg, r))) throw new Error('Có dòng mới sau lượt dọn; cần đối chiếu trước.');
-  const wanted = backup.map(r => r.slice(w));
-  pnV2WriteCols_(M, info.cols, wanted);
+  let fixed = 0;
+  if (matchAfter >= matchBefore) {
+    // Dữ liệu nghiệp vụ đã là bản sau dọn: ID ô nào còn là ID cũ thì gắn ID mới tương ứng.
+    const ids = [], bases = [];
+    for (let i = 0; i < info.rows; i++) {
+      const cur = current[i], oldId = pnText_(backup[i][kId]), newId = pnText_(backup[i][w + kId]);
+      let id = cur[M.id], base = M.base != null ? cur[M.base] : '';
+      if (pnText_(id) === oldId && oldId !== newId) { id = backup[i][w + kId]; if (kBase >= 0) base = backup[i][w + kBase]; fixed++; }
+      ids.push([id]); bases.push([base]);
+    }
+    if (fixed) {
+      M.sh.getRange(2, M.id + 1, info.rows, 1).setValues(ids);
+      if (M.base != null && kBase >= 0) M.sh.getRange(2, M.base + 1, info.rows, 1).setValues(bases);
+    }
+  }
   props.deleteProperty('PN_CLEANUP_PENDING');
-  return {ok: true, sheet: p.main, completed: true};
+  SpreadsheetApp.flush();
+  return {ok: true, sheet: p.main, completed: true, idsFixed: fixed, dataWasWritten: matchAfter >= matchBefore};
 }
 
 const PN_VHFF_JOBS_ = ['reject', 'documents', 'products', 'incidents', 'defects'];
@@ -623,6 +654,7 @@ function pnV2ColDiff_(before, after) {
  * prefer = true: bên side thắng khi hai bên khác nhau (vừa sửa tay / API / script vừa ghi). */
 function pnV2SyncRows_(p, side, rowList, prefer, mode) {
   const api = !!(mode && mode.api);
+  pnMainReady_();
   const res = {ok: true, changed: 0, added: 0, conflicts: 0, otherRows: []};
   const rowsIn = Array.from(new Set((rowList || []).map(Number).filter(r => r >= 2))).sort((a, b) => a - b);
   if (!rowsIn.length) return res;

@@ -35,12 +35,19 @@ function pnWithLock_(fn, waitMs) {
   try { return fn(); } finally { pnLockDepth_--; lock.releaseLock(); }
 }
 
+// API, đọc dữ liệu, VHFF chỉ dùng tab full -> KHÔNG bị chặn bởi việc dọn tab chính.
 function pnRequireReady_() {
-  if(PropertiesService.getScriptProperties().getProperty('PN_CLEANUP_PENDING'))
-    throw new Error('Lượt dọn trước bị gián đoạn. Chạy pnResumeCleanup trước khi nhận thao tác mới.');
   if (PropertiesService.getScriptProperties().getProperty('PN_FULL_READY') !== PN_FULL.epoch)
     throw new Error('Nguồn full chưa đối soát xong. Chạy pnMigrateFull trước khi chuyển API.');
 }
+// Trước khi đụng tab chính: nếu còn lượt dọn dở (bản cũ), tự sửa khi đang giữ khóa của Sheet.
+function pnMainReady_() {
+  const raw = PropertiesService.getScriptProperties().getProperty('PN_CLEANUP_PENDING');
+  if (!raw) return;
+  if (pnLockDepth_ && JSON.parse(raw).engine === PN_V2.engine) { pnV2ResumeCleanup_(); return; }
+  throw new Error('PN_BUSY: Lượt dọn tab chính trước bị gián đoạn; mở/sửa Sheet để tự hoàn tất hoặc chạy pnResumeCleanup.');
+}
+
 function pnSize_(sh, rows, cols) {
   if (sh.getMaxRows() < rows) sh.insertRowsAfter(sh.getMaxRows(), rows - sh.getMaxRows());
   if (sh.getMaxColumns() < cols) sh.insertColumnsAfter(sh.getMaxColumns(), cols - sh.getMaxColumns());

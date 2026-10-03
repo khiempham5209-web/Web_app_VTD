@@ -162,9 +162,21 @@ function pnResolveSave_(sh,col,params) {
 
 // Đồng bộ cặp Chứng từ. fullRow: dòng API vừa ghi ở full -> bản API thắng và được đẩy sang Chứng từ_FF.
 // Đồng bộ đúng dòng fullRow của Chứng từ_full với Chứng từ_FF. prefer=true: bản API vừa ghi thắng.
+// Đồng bộ đúng dòng fullRow của Chứng từ_full với Chứng từ_FF. prefer=true: bản API vừa ghi thắng.
+// API KHÔNG chờ luồng Sheet: Sheet đang bận (dán/dọn) thì xếp dòng này cho luồng Sheet tự đẩy sang tab chính.
 function pnMirrorDocs_(fullRow,prefer) {
-  if(!fullRow)return pnV2SyncPair_(PN_FULL.pairs[2],{});
-  return pnV2SyncRows_(PN_FULL.pairs[2],'full',[fullRow],prefer!==false,{api:true});
+  const p=PN_FULL.pairs[2];
+  if(!fullRow)return pnV2SyncPair_(p,{});
+  if(pnLockDepth_)return pnV2SyncRows_(p,'full',[fullRow],prefer!==false,{api:true});
+  const lock=LockService.getScriptLock();
+  if(!lock.tryLock(1)||PropertiesService.getScriptProperties().getProperty('PN_CLEANUP_PENDING')){
+    try { lock.releaseLock(); } catch(err) {}
+    pnQueueEdit_(p.full,fullRow,fullRow);
+    return {ok:true,queued:true};
+  }
+  pnLockDepth_++;
+  try { return pnV2SyncRows_(p,'full',[fullRow],prefer!==false,{api:true}); }
+  finally { pnLockDepth_--; lock.releaseLock(); }
 }
 
 function pnMirrorDocsSafe_(fullRow,prefer) {
