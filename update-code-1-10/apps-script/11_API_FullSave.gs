@@ -10,21 +10,38 @@ function pnJournal_() {
 }
 function pnJournalRead_(key) {
   const sh=pnJournal_();
-  if(sh.getLastRow()<2)return null;
-  const found=sh.getRange(2,1,sh.getLastRow()-1,1).createTextFinder(key).matchEntireCell(true).useRegularExpression(false).findAll();
-  if(!found.length)return null;
-  // Nhật ký chỉ thêm dòng: dòng cuối cùng của khóa là trạng thái mới nhất.
-  const last=found.reduce((m,c)=>c.getRow()>m.getRow()?c:m,found[0]);
-  const r=sh.getRange(last.getRow(),1,1,4).getValues()[0];
-  return {row:last.getRow(),state:r[1],data:JSON.parse(r[2]||'{}')};
+  for(let attempt=0;attempt<2;attempt++){
+    if(sh.getLastRow()<2)return null;
+    const found=sh.getRange(2,1,sh.getLastRow()-1,1).createTextFinder(key).matchEntireCell(true).useRegularExpression(false).findAll();
+    if(!found.length)return null;
+    // Nhật ký chỉ thêm dòng: dòng cuối cùng của khóa là trạng thái mới nhất.
+    const last=found.reduce((m,c)=>c.getRow()>m.getRow()?c:m,found[0]);
+    const r=sh.getRange(last.getRow(),1,1,4).getValues()[0];
+    // Dòng vừa bị dời (dọn nhật ký cũ chạy cùng lúc): tìm lại.
+    if(String(r[0])!==key)continue;
+    return {row:last.getRow(),state:r[1],data:JSON.parse(r[2]||'{}')};
+  }
+  return null;
 }
 
 // Nhật ký chỉ THÊM dòng (appendRow nguyên tử): nhiều đơn ghi cùng lúc không đè nhau, không cần khóa của Sheet.
-function pnJournalWrite_(key,state,data) {
+// Nhật ký chỉ THÊM dòng (appendRow nguyên tử): nhiều đơn ghi cùng lúc không đè nhau, không cần khóa của Sheet.
+// flush=false: không ép lưu ngay (Apps Script tự lưu khi lần chạy kết thúc) -> nhanh hơn.
+function pnJournalWrite_(key,state,data,flush) {
   const text=JSON.stringify(data);
   if(text.length>45000)throw new Error('Nhật ký vượt kích thước an toàn; chia nhỏ thao tác.');
   pnJournal_().appendRow([key,state,text,new Date()]);
-  SpreadsheetApp.flush();
+  if(flush!==false)SpreadsheetApp.flush();
+}
+// Dọn nhật ký: bỏ các dòng cũ hơn 7 ngày ở đầu sheet (nhật ký ghi theo thời gian). Chạy trong lượt dọn đầu ngày.
+function pnJournalPrune_() {
+  const sh=pnJournal_(),last=sh.getLastRow();
+  if(last<2)return 0;
+  const limit=Date.now()-7*24*3600*1000,dates=sh.getRange(2,4,Math.min(last-1,20000),1).getValues();
+  let n=0;
+  while(n<dates.length&&dates[n][0] instanceof Date&&dates[n][0].getTime()<limit)n++;
+  if(n)sh.deleteRows(2,n);
+  return n;
 }
 
 function pnRequestKey_(id) { return 'request:'+pnHash_(pnText_(id)); }
@@ -49,30 +66,23 @@ function pnRequestNow_() { return pnRequest_?new Date(pnRequest_.startedAt):new 
 function pnPendingRequests_() {
   const latest=new Map();
   pnRows_(pnJournal_(),4).forEach(r=>{ if(/^request:[a-f0-9]+$/.test(String(r[0])))latest.set(String(r[0]),r[1]); });
-  return Array.from(latest.entries()).filter(([,s])=>s==='PENDING').map(([k])=>k);
+  return Array.from(latest.entries()).filter(([,s])=>s==='PENDING'||s==='WRITTEN').map(([k])=>k);
 }
 
 const PN_UPLOAD_STALE_MS_=7*60*1000; // Apps Script dừng mọi lần chạy sau 6 phút
+// Ảnh đã tải trong lượt này hoặc lượt gửi trước (lưu trong nhật ký của đơn) thì dùng lại, không tải lại.
 function pnUploadOnce_(stage,fn) {
   if(!pnRequest_)throw new Error('Upload phải qua apiSave_.');
-  const key=pnRequest_.key+':'+stage;
-  // Kiểm tra và đánh dấu RUNNING trong cùng một khóa ngắn, để hai lần gửi trùng không cùng tải ảnh.
-  let entry=pnJournalRead_(key);
-  if(entry&&entry.state!=='DONE'&&!(entry.state==='RUNNING'&&Date.now()-Number(entry.data&&entry.data.startedAtMs||0)<PN_UPLOAD_STALE_MS_))entry=null;
-  if(!entry)pnJournalWrite_(key,'RUNNING',{clientId:pnRequest_.clientId,stage,startedAtMs:Date.now()});
-  if(entry&&entry.state==='DONE')return entry.data;
-  // Lần gửi trước còn đang tải ảnh: báo bận (app giữ đơn ở hàng chờ và gửi lại), không báo lỗi.
-  if(entry)throw new Error('PN_BUSY: Ảnh của đơn này đang được tải ở lần gửi trước, app sẽ gửi lại sau.');
-  let result;
-  try { result=fn(); }
-  catch(err) {
-    // Lỗi đã biết (Drive báo lỗi): cho gửi lại ngay. Có thể trùng 1 file ảnh trên Drive, nhưng đơn không bị kẹt.
-    pnJournalWrite_(key,'FAILED',{clientId:pnRequest_.clientId,stage,error:String(err&&err.message||err)});
-    throw err;
+  const uploads=pnRequest_.uploads||(pnRequest_.uploads={});
+  if(uploads[stage])return uploads[stage];
+  // Đơn gửi bởi bản code cũ: kết quả tải ảnh nằm ở dòng nhật ký riêng.
+  if(pnRequest_.legacy){
+    const old=pnJournalRead_(pnRequest_.key+':'+stage);
+    if(old&&old.state==='DONE')return uploads[stage]=old.data;
   }
-  pnJournalWrite_(key,'DONE',result);
-  return result;
+  return uploads[stage]=fn();
 }
+
 // Tải ảnh TRƯỚC khi vào khóa chung. Khi vào khóa, pnApiSaveCore_ chỉ đọc lại kết quả đã có
 // trong nhật ký. Dữ liệu không hợp lệ thì bỏ qua để core báo lỗi như cũ.
 function pnPreUpload_(params) {
@@ -97,40 +107,24 @@ function pnEncodeRow_(row) { return row.map(v=>v instanceof Date?{date:v.toISOSt
 function pnDecodeRow_(row) { return row.map(v=>v&&typeof v==='object'&&v.date?new Date(v.date):v); }
 // Ghi chứng từ vào đúng dòng của đơn ở Chứng từ_full, theo TÊN cột. Chỉ ghi các ô thay đổi; không đụng cột kỹ thuật.
 function pnWriteDocumentOnce_(sh,row,col,params,upload,timeText,user) {
-  const key=pnRequest_.key+':document-write';
-  let stage=pnJournalRead_(key);
-  if(stage&&stage.state==='DONE')return;
+  // Lượt gửi trước đã ghi chứng từ (đã lưu trong nhật ký): không ghi lại, để không đè sửa tay sau đó.
+  if(pnRequest_.docWritten)return;
   const L=pnV2Layout_(sh,true),width=pnV2ReadWidth_(L),names=Object.keys(L.cols);
   const current=sh.getRange(row,1,1,width).getValues()[0];
-  const sig=r=>pnHash_(pnV2Sig_(L,r,names));
-  // Dòng vừa bị sửa tay sau lần chuẩn bị trước: chuẩn bị lại trên nội dung hiện tại (chỉ đè các cột chứng từ).
-  if(stage&&sig(current)!==stage.data.before&&sig(current)!==stage.data.after)stage=null;
-  if(!stage) {
-    const next=current.slice();
-    const values=[
-      [['xac thuc hoa don'],clean_(params.xacThuc||params.xacThucHoaDon)],
-      [['ghi chu chung tu'],String(params.note||params.ghiChu||'')],
-      [['trang thai'],clean_(params.status||params.trangThai)],
-      [['thoi gian'],timeText],[['user thao tac'],user]
-    ];
-    if(upload.linkAnh)values.push([['link anh'],upload.linkAnh]);
-    // Mã ecom CT: chỉ ghi khi app gửi giá trị, để app cũ không xóa mã đã nhập tay trên Sheet.
-    const maEcomCt=pnEcomCt_(params.maEcomCt);
-    if(maEcomCt)values.push([['ma ecom ct'],maEcomCt]);
-    values.forEach(([aliases,value])=>{ const i=pnV2Col_(L,aliases); if(i!=null)next[i]=value; });
-    const data={before:sig(current),after:sig(next),values:pnEncodeRow_(next)};
-    pnJournalWrite_(key,'PREPARED',data);stage={state:'PREPARED',data};
-  }
-  const fingerprint=sig(current);
-  if(fingerprint!==stage.data.before&&fingerprint!==stage.data.after)
-    throw new Error('Hồ sơ đã thay đổi trong lúc khôi phục thao tác; không ghi đè bản mới.');
-  if(fingerprint!==stage.data.after){
-    const next=pnDecodeRow_(stage.data.values),up=new Map();
-    names.forEach(n=>{const i=L.cols[n];if(pnV2Canon_(next[i])!==pnV2Canon_(current[i]))pnV2Put_(up,row,i,next[i]);});
-    pnV2Flush_(sh,up);
-  }
-  SpreadsheetApp.flush();
-  pnJournalWrite_(key,'DONE',stage.data);
+  const values=[
+    [['xac thuc hoa don'],clean_(params.xacThuc||params.xacThucHoaDon)],
+    [['ghi chu chung tu'],String(params.note||params.ghiChu||'')],
+    [['trang thai'],clean_(params.status||params.trangThai)],
+    [['thoi gian'],timeText],[['user thao tac'],user]
+  ];
+  if(upload.linkAnh)values.push([['link anh'],upload.linkAnh]);
+  // Mã ecom CT: chỉ ghi khi app gửi giá trị, để app cũ không xóa mã đã nhập tay trên Sheet.
+  const maEcomCt=pnEcomCt_(params.maEcomCt);
+  if(maEcomCt)values.push([['ma ecom ct'],maEcomCt]);
+  const up=new Map();
+  values.forEach(([aliases,value])=>{ const i=pnV2Col_(L,aliases); if(i!=null&&pnV2Canon_(current[i])!==pnV2Canon_(value))pnV2Put_(up,row,i,value); });
+  pnV2Flush_(sh,up);
+  pnRequest_.docWritten=true;
 }
 
 function pnProductIdColumn_(sh) {
@@ -148,16 +142,37 @@ function pnAppendProductsOnce_(sh,rows,width) {
   rows.filter(r=>!existing.has(String(r[c-1]))).forEach(r=>sh.appendRow(r.slice(0,Math.max(width,c))));
 }
 
+/* Tìm dòng của đơn trong Chứng từ_full: chỉ đọc các cột mã (Mã đơn GHTK, Mã PO, Số đơn hàng), không đọc cả bảng.
+ * Trong cùng một lượt lưu, lần tìm sau dùng lại số dòng và chỉ đọc lại đúng dòng đó (kiểm tra vẫn đúng đơn). */
+let pnResolveMemo_=null;
 function pnResolveSave_(sh,col,params) {
   const expected=pnText_(params.syncKey),query=pnText_(params.orderNo||params.maDonGhtk||params.maDon||params.query||params.po);
   if(!expected&&!query)throw new Error('Cần khóa đơn; không lưu chỉ bằng số dòng.');
-  const L=pnV2Layout_(sh,true),cfg=pnV2Cfg_(PN_FULL.pairs[2]);
-  const map=headerMap_(L.headers);
-  const values=sh.getLastRow()>1?sh.getRange(2,1,sh.getLastRow()-1,pnV2ReadWidth_(L)).getDisplayValues():[];
-  const records=values.map((r,i)=>pnV2Rec_(L,cfg,r)?{rowNumber:i+2,record:recordFromRow_(r,map,i+2)}:null).filter(Boolean);
-  const matches=records.filter(x=>expected?x.record.syncKey===expected:recordMatchesQuery_(x.record,query));
-  if(matches.length!==1)throw new Error(matches.length?'Mã khớp nhiều đơn; dùng Số đơn hàng duy nhất.':'Không tìm thấy đơn trong Chứng từ_full.');
-  return matches[0];
+  const L=pnV2Layout_(sh,true),map=headerMap_(L.headers),width=pnV2ReadWidth_(L);
+  const cGhtk=firstCol_(map,['ma don ghtk','ma don']),cPo=firstCol_(map,['ma po','po']),cOrder=firstCol_(map,['so don hang','od']);
+  const q=norm_(query);
+  const hit=(ghtk,po,order)=>{
+    ghtk=clean_(ghtk);po=clean_(po);order=clean_(order);
+    if(!ghtk&&!order)return false; // không phải hồ sơ
+    if(expected)return (order?'ORDER:'+ks_key(order):'GHTK:'+ks_key(ghtk))===expected;
+    return [ghtk,po,order].some(v=>norm_(v)===q);
+  };
+  const result=r=>{ const row=sh.getRange(r,1,1,width).getDisplayValues()[0];
+    return {row,rec:recordFromRow_(row,map,r)}; };
+  if(pnResolveMemo_&&pnResolveMemo_.params===params&&pnResolveMemo_.sheet===sh.getName()){
+    const x=result(pnResolveMemo_.rowNumber);
+    if(hit(x.rec.maDonGhtk,x.rec.po,x.rec.orderNo))return {rowNumber:pnResolveMemo_.rowNumber,record:x.rec};
+  }
+  const last=sh.getLastRow(),rows=[];
+  if(last>=2){
+    const cols=[cGhtk,cPo,cOrder].filter(Boolean),c1=Math.min.apply(null,cols),c2=Math.max.apply(null,cols);
+    const block=sh.getRange(2,c1,last-1,c2-c1+1).getDisplayValues();
+    const at=(r,c)=>c?r[c-c1]:'';
+    block.forEach((r,i)=>{ if(hit(at(r,cGhtk),at(r,cPo),at(r,cOrder)))rows.push(i+2); });
+  }
+  if(rows.length!==1)throw new Error(rows.length?'Mã khớp nhiều đơn; dùng Số đơn hàng duy nhất.':'Không tìm thấy đơn trong Chứng từ_full.');
+  pnResolveMemo_={params,sheet:sh.getName(),rowNumber:rows[0]};
+  return {rowNumber:rows[0],record:result(rows[0]).rec};
 }
 
 // Đồng bộ cặp Chứng từ. fullRow: dòng API vừa ghi ở full -> bản API thắng và được đẩy sang Chứng từ_FF.
@@ -194,14 +209,16 @@ function pnBusyResponse_(err) {
   return {ok:false,code:'PN_BUSY',retryable:true,message:'Hệ thống PN đang bận, app sẽ gửi lại sau ít giây.'};
 }
 /* Luồng API (app lưu đơn): độc lập với thao tác trên Sheet, KHÔNG dùng khóa của Sheet.
- * - Chống trùng theo clientId qua nhật ký (chỉ thêm dòng).
- * - Chỉ ghi vào đúng dòng của đơn (tìm theo mã, kiểm tra lại dòng ngay trước khi ghi).
- * - Đẩy đúng dòng đó sang Chứng từ_FF. Không bao giờ chèn/xóa/dồn dòng. */
+ * Nhật ký mỗi đơn 3 lần ghi: PENDING (bắt đầu) -> WRITTEN (ảnh + chứng từ đã ghi) -> DONE (kết quả trả app).
+ * - Gửi trùng khi lượt trước đang chạy (< 7 phút): trả PN_BUSY, app gửi lại sau và nhận đúng kết quả.
+ * - Gửi lại sau lỗi: dùng lại ảnh đã tải, không ghi lại chứng từ đã ghi.
+ * - Chỉ ghi vào đúng dòng của đơn; đẩy đúng dòng đó sang Chứng từ_FF. Không chèn/xóa/dồn dòng. */
 function apiSave_(params) {
   params=params||{};
   const clientId=pnText_(params.clientId);
   if(!clientId)return fail_('Thiếu clientId; cập nhật app trước khi lưu.');
   const key=pnRequestKey_(clientId),signature=pnRequestSignature_(params);
+  let state=null;
   try {
     pnRequireReady_();
     const saved=pnJournalRead_(key);
@@ -209,60 +226,60 @@ function apiSave_(params) {
     if(saved&&saved.state==='DONE')return saved.data.response;
     const legacy=!saved&&readSavedRequest_(clientId);
     if(legacy)return legacy;
-    const state=saved?saved.data:{signature,clientId,startedAt:new Date().toISOString()};
-    if(!saved)pnJournalWrite_(key,'PENDING',state);
-    if(!state.coreResponse){
-      pnRequest_=Object.assign({},state,{key});
-      try { pnPreUpload_(params); } finally { pnRequest_=null; }
+    const now=Date.now();
+    if(saved&&(saved.state==='PENDING'||saved.state==='WRITTEN')&&now-Number(saved.data.touchedAtMs||0)<PN_UPLOAD_STALE_MS_)
+      throw new Error('PN_BUSY: Đơn này đang được lưu ở lần gửi trước, app sẽ gửi lại sau.');
+    state=saved?saved.data:{signature,clientId,startedAt:new Date().toISOString()};
+    if(!state.startedAt)state.startedAt=new Date().toISOString();
+    state.touchedAtMs=now;
+    pnJournalWrite_(key,'PENDING',state);
+    pnRequest_=Object.assign({},state,{key,uploads:Object.assign({},state.uploads||{}),legacy:!!saved&&!saved.data.touchedAtMs});
+    if(!state.coreResponse)pnPreUpload_(params);
+    return pnSaveLocked_(params,key,state);
+  } catch(err) {
+    // Lỗi (không phải bận): ghi lại ảnh đã tải để lần gửi lại không tải trùng.
+    if(state&&!/PN_BUSY/.test(String(err&&err.message||err))){
+      try { state.uploads=pnRequest_&&pnRequest_.uploads||state.uploads;state.error=String(err&&err.message||err).slice(0,500);pnJournalWrite_(key,'FAILED',state,false); } catch(e) {}
     }
-    return pnSaveLocked_(params,key,signature);
-  } catch(err) { return pnBusyResponse_(err); }
+    return pnBusyResponse_(err);
+  } finally { pnRequest_=null;pnResolveMemo_=null; }
 }
 
-function pnSaveLocked_(params,key,signature) {
-    pnRequireReady_();
-    const clientId=pnText_(params.clientId),saved=pnJournalRead_(key);
-    if(saved&&saved.data.signature!==signature)return fail_('clientId đã dùng cho nội dung khác.');
-    if(saved&&saved.state==='DONE')return saved.data.response;
-    let fullRow=0;
-    try { fullRow=pnResolveSave_(sheet_(),null,params).rowNumber; } catch(err) {}
-    const mirrorWarning=fullRow?pnMirrorDocsSafe_(fullRow,false):'';
-    const state=saved?saved.data:{signature,clientId,startedAt:new Date().toISOString()};
-    pnJournalWrite_(key,'PENDING',state);
-    pnRequest_=Object.assign({},state,{key});
-    try {
-      let response=state.coreResponse;
-      if(!response){
-        response=pnApiSaveCore_(params);
-        if(!response||!response.ok){
-          pnJournalWrite_(key,'REJECTED',state);
-          return response;
-        }
-        state.coreResponse=response;pnJournalWrite_(key,'PENDING',state);
-      }
-      const mirrorAfter=pnMirrorDocsSafe_(state.coreResponse&&state.coreResponse.rowNumber||response.rowNumber,true);
-      pnMarkDirty_();
-      const record=pnResolveSave_(sheet_(),headerMap_(headers_(sheet_())),params).record;
-      const type=norm_(params.returnType||params.loaiHoan||'Chung tu');
-      if(['chung tu','docs','san pham + chung tu','product-docs'].includes(type)){
-        try { syncOneChungTuKhongDatYCBySourceRow_(record.rowNumber); }
-        catch(err){PropertiesService.getScriptProperties().setProperty('PN_VHFF_ERROR','reject: '+String(err.message||err));}
-      }
-      // VHFF runs in the worker; app success means the request is durably stored, not VHFF acknowledgement.
-      response=Object.assign({},response,{
-        sourceEpoch:PN_FULL.epoch,syncStatus:'stored',vhffStatus:'pending',
-        rowNumber:record.rowNumber,record,
-        // Đơn đã lưu vào full; tab chính sẽ được trigger đối soát bù khi admin xử lý xong lỗi này.
-        mirrorWarning:mirrorAfter||mirrorWarning||''
-      });
-      state.response=response;
-      pnJournalWrite_(key,'DONE',state);
-      rememberSavedRequest_(clientId,response);
-      return response;
-    } finally { pnRequest_=null; }
+function pnSaveLocked_(params,key,state) {
+  const clientId=pnText_(params.clientId);
+  let fullRow=0;
+  try { fullRow=pnResolveSave_(sheet_(),null,params).rowNumber; } catch(err) {}
+  // Lấy sửa tay ở Chứng từ_FF (nếu luồng Sheet rảnh) trước khi ghi.
+  const mirrorWarning=fullRow&&!state.coreResponse?pnMirrorDocsSafe_(fullRow,false):'';
+  let response=state.coreResponse;
+  if(!response){
+    response=pnApiSaveCore_(params);
+    if(!response||!response.ok){ pnJournalWrite_(key,'REJECTED',state,false); return response; }
+    state.coreResponse=response;state.uploads=pnRequest_.uploads;state.docWritten=!!pnRequest_.docWritten;state.touchedAtMs=Date.now();
+    pnJournalWrite_(key,'WRITTEN',state,false);
+  }
+  const mirrorAfter=pnMirrorDocsSafe_(response.rowNumber||fullRow,true);
+  pnMarkDirty_();
+  const record=pnResolveSave_(sheet_(),null,params).record;
+  const type=norm_(params.returnType||params.loaiHoan||'Chung tu');
+  if(['chung tu','docs','san pham + chung tu','product-docs'].includes(type)){
+    // Chỉ chạy sang VHFF khi dòng đã tích "Đã tạo sv" (hàm tự kiểm tra, chưa tích thì thoát ngay).
+    try { syncOneChungTuKhongDatYCBySourceRow_(record.rowNumber); }
+    catch(err){PropertiesService.getScriptProperties().setProperty('PN_VHFF_ERROR','reject: '+String(err.message||err));}
+  }
+  response=Object.assign({},response,{
+    sourceEpoch:PN_FULL.epoch,syncStatus:'stored',vhffStatus:'pending',
+    rowNumber:record.rowNumber,record,
+    mirrorWarning:mirrorAfter||mirrorWarning||''
+  });
+  state.response=response;
+  pnJournalWrite_(key,'DONE',state,false);
+  rememberSavedRequest_(clientId,response);
+  return response;
 }
+
 // Mã ecom CT: scan ra link (vd https://i.ghtk.vn/...) hoặc nhập tay -> chỉ giữ 10 chữ số cuối. Ít hơn 10 chữ số thì giữ nguyên.
 function pnEcomCt_(v) {
-  const s=clean_(v),d=s.replace(/D/g,'');
+  const s=clean_(v),d=s.replace(/[^0-9]/g,'');
   return d.length>=10?d.slice(-10):s;
 }

@@ -170,6 +170,7 @@ function pnAfterActivity_() {
       if(sync.partial)return;
       if(pnV2Cleanup_().partial)return;
     }
+    try { pnJournalPrune_(); } catch(err) { console.error('Journal prune: '+String(err&&err.message||err)); }
     props.setProperty('PN_DAILY_DONE',today);
   }
   // Các lần sửa tay bị bỏ lỡ vì khóa bận: xử lý đúng các dòng đó.

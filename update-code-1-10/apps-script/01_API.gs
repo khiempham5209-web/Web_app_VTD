@@ -633,7 +633,7 @@ function uploadFiles_(maDon, files) {
     const fileName = pnImageFileName_(maDon, file.fileName || file.name, index);
     const blob = Utilities.newBlob(Utilities.base64Decode(base64), mimeType, fileName);
     const driveFile = folder.createFile(blob);
-    driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    pnShareFile_(root, driveFile);
     uploaded.push({
       id: driveFile.getId(),
       name: driveFile.getName(),
@@ -641,7 +641,7 @@ function uploadFiles_(maDon, files) {
       directUrl: "https://drive.google.com/uc?id=" + driveFile.getId()
     });
   });
-  if (useFolder) folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  if (useFolder) pnShareFile_(root, folder);
   return {
     linkAnh: useFolder ? folder.getUrl() : uploaded[0].directUrl,
     folderUrl: useFolder ? folder.getUrl() : "",
@@ -663,7 +663,7 @@ function uploadProductFiles_(orderNo, item) {
     const ext = extMatch ? extMatch[1] : ".jpg";
     const fileName = "PN_" + safeName_(orderNo || "don") + "_" + safeName_(item.material || item.barcode || "sku") + "_" + (index + 1) + ext;
     const driveFile = folder.createFile(Utilities.newBlob(Utilities.base64Decode(base64), mimeType, fileName));
-    driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    pnShareFile_(root, driveFile);
     uploaded.push({
       id: driveFile.getId(),
       name: driveFile.getName(),
@@ -671,7 +671,7 @@ function uploadProductFiles_(orderNo, item) {
       directUrl: "https://drive.google.com/uc?id=" + driveFile.getId()
     });
   });
-  if (useFolder) folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  if (useFolder) pnShareFile_(root, folder);
   return {
     linkAnh: useFolder ? folder.getUrl() : uploaded[0].directUrl,
     folderUrl: useFolder ? folder.getUrl() : "",
@@ -687,6 +687,21 @@ function pnImageFileName_(maDon, name, index) {
     fileName = "PN_" + safeName_(maDon || "chung-tu") + "_" + (index + 1) + ext;
   }
   return fileName;
+}
+
+/* Ảnh: thư mục gốc được chia sẻ "ai có link đều xem" MỘT lần; file/thư mục con tự thừa hưởng quyền đó.
+ * Kiểm tra thừa hưởng trên file đầu tiên; nếu Drive không cho thừa hưởng thì quay về chia sẻ từng file như cũ. */
+function pnShareFile_(root, item) {
+  const props = PropertiesService.getScriptProperties(), id = root.getId();
+  if (props.getProperty('PN_ROOT_SHARED') === id) return;
+  if (props.getProperty('PN_ROOT_SHARE_TRIED') !== id) {
+    props.setProperty('PN_ROOT_SHARE_TRIED', id);
+    try { root.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (err) { console.error('Share root: ' + err); }
+  }
+  let inherited = false;
+  try { inherited = item.getSharingAccess() === DriveApp.Access.ANYONE_WITH_LINK; } catch (err) {}
+  if (inherited) { props.setProperty('PN_ROOT_SHARED', id); return; }
+  item.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 }
 
 function rootFolder_() {

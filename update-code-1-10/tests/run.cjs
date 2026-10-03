@@ -189,11 +189,21 @@ test('Drive upload error can be resent; upload in progress returns PN_BUSY; a de
  assert.equal(e.c.apiSave_(p).ok,true,'resend after a Drive error is not stuck');
  assert.equal(e.run('uploadCount'),2);
  const q={clientId:'u2',maDon:'G1',returnType:'Chứng từ',files:[{base64:'AA=='}]};
- const stageKey=e.c.pnRequestKey_('u2')+':docs';
- e.c.pnJournalWrite_(stageKey,'RUNNING',{startedAtMs:Date.now()});
- const busy=e.c.apiSave_(q);assert.equal(busy.code,'PN_BUSY','upload in progress -> retryable busy, app keeps the order pending');
- e.c.pnJournalWrite_(stageKey,'RUNNING',{startedAtMs:Date.now()-11*60*1000});
- assert.equal(e.c.apiSave_(q).ok,true,'dead upload older than 10 minutes is retried');
+ const key=e.c.pnRequestKey_('u2'),sig=e.c.pnRequestSignature_(q);
+ e.c.pnJournalWrite_(key,'PENDING',{signature:sig,clientId:'u2',touchedAtMs:Date.now()});
+ const busy=e.c.apiSave_(q);assert.equal(busy.code,'PN_BUSY','same order still being saved -> retryable busy, app keeps the order pending');
+ e.c.pnJournalWrite_(key,'PENDING',{signature:sig,clientId:'u2',touchedAtMs:Date.now()-11*60*1000});
+ assert.equal(e.c.apiSave_(q).ok,true,'dead attempt older than 7 minutes is retried');
+ // Lượt trước lỗi sau khi đã tải ảnh: gửi lại dùng lại ảnh, không tải lại.
+ const n=e.run('uploadCount'),r={clientId:'u3',maDon:'G1',returnType:'Chứng từ',files:[{base64:'AA=='}]};
+ e.run("var __core=pnApiSaveCore_;var coreFail=true;pnApiSaveCore_=p=>{if(coreFail){coreFail=false;throw new Error('sheet error');}return __core(p);};");
+ assert.throws(()=>e.c.apiSave_(r),/sheet error/);
+ assert.equal(e.c.apiSave_(r).ok,true);
+ assert.equal(e.run('uploadCount'),n+1,'images uploaded once');
+ // Journal: at most 3 rows per successful order.
+ const j=e.sheets.get('_PN_REQUESTS'),k=e.c.pnRequestKey_('u9');
+ assert.equal(e.c.apiSave_({clientId:'u9',maDon:'G1',returnType:'Chứng từ',files:[{base64:'AA=='}]}).ok,true);
+ assert.equal(j.rows.filter(x=>x&&String(x[0]).indexOf(k)===0).length,3);
 });
 test('Resend with new _diagRequestId, appVersion and re-encoded image returns the saved result',()=>{
  const e=environment();seed(e);e.c.pnMigrateFull();
@@ -723,6 +733,8 @@ test('Mã ecom CT keeps only the last 10 digits',()=>{
  assert.equal(e.c.pnEcomCt_('https://i.ghtk.vn/S22843210.MB1.A12.1234567890'),'1234567890');
  assert.equal(e.c.pnEcomCt_(' 0987654321 '),'0987654321');
  assert.equal(e.c.pnEcomCt_('AB123'),'AB123');
+ assert.equal(e.c.pnEcomCt_("https://i.ghtk.vn/S1.BDX12345678901XYZ"),"2345678901");
+ assert.equal(e.c.pnEcomCt_('https://i.ghtk.vn/ABC1972031652DEF'),''+'1972031652');
 });
 test('V2 cleanup interrupted after data write, before ID write: app keeps working, next Sheet edit re-attaches IDs, no data lost',()=>{
  const e=v2env();e.c.pnMirrorAll();
@@ -785,5 +797,25 @@ test('pnRepairMainFormats restores lost dropdowns down the column without touchi
  assert.equal(JSON.stringify(sh.rows),vals,'values unchanged');
  for(let i=2;i<=12;i++)assert.equal(dv.get(i+':7'),i===5?'OTHER':'DROPDOWN');
  assert.equal(r.validation[0].fixed,9);
+});
+test('New rows added to a main tab get borders; full tab rows do not',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const calls=[];const orig=Range.prototype.setBorder;Range.prototype.setBorder=function(){calls.push(this.sh.name+':'+this.r+'x'+this.n);return this;};
+ try {
+  const full=e.sheets.get('Chứng từ_full'),last=full.getLastRow();
+  const row=doc(777001,'02/10/2026','Chưa nhận chứng từ');full.getRange(last+1,1,1,row.length).setValues([row]);
+  e.c.pnMirrorAll();
+ } finally { Range.prototype.setBorder=orig; }
+ assert.ok(calls.some(c=>c.indexOf('Chứng từ_FF:')===0),JSON.stringify(calls));
+ assert.ok(!calls.some(c=>c.indexOf('_full:')>0),JSON.stringify(calls));
+});
+test('Journal prune drops only rows older than 7 days',()=>{
+ const e=environment();seed(e);e.c.pnMigrateFull();
+ e.c.pnJournalWrite_('request:old','DONE',{});e.c.pnJournalWrite_('request:new','DONE',{});
+ const j=e.sheets.get('_PN_REQUESTS');const r=rowOf(j,0,'request:old');j.rows[r-1][3]=new Date(Date.now()-8*24*3600*1000);
+ for(let i=1;i<r-1;i++)j.rows[i][3]=new Date(Date.now()-9*24*3600*1000);
+ j.deleteRows=function(a,n){this.rows.splice(a-1,n);};
+ const n=e.c.pnJournalPrune_();assert.ok(n>=1);
+ assert.equal(e.c.pnJournalRead_('request:old'),null);assert.equal(e.c.pnJournalRead_('request:new').state,'DONE');
 });
 console.log('RESULT '+passed+' tests passed.');
