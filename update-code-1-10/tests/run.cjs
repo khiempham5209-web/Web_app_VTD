@@ -818,4 +818,21 @@ test('Journal prune drops only rows older than 7 days',()=>{
  const n=e.c.pnJournalPrune_();assert.ok(n>=1);
  assert.equal(e.c.pnJournalRead_('request:old'),null);assert.equal(e.c.pnJournalRead_('request:new').state,'DONE');
 });
+test('Ticked doc edited by hand on Sheet goes to VHFF immediately; unticked rows never touch VHFF',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const sh=e.sheets.get('Chứng từ_FF'),dest=e.targets.get('Chứng từ không đạt YC');
+ const before=dest.rows.length;
+ const m=rowOf(sh,4,'1');sh.getRange(m,10).setValue('chưa tích');e.c.pnHandleEdit({range:sh.getRange(m,10)});
+ assert.equal(dest.rows.length,before,'unticked: nothing sent');
+ sh.getRange(m,9).setValue(true);e.c.pnHandleEdit({range:sh.getRange(m,9)});
+ const g=String(sh.getRange(m,2).getValue());
+ const h=dest.getRange(1,1,1,dest.getLastColumn()).getValues()[0],cG=h.indexOf('Mã đơn GHTK'),cS=h.indexOf('Tình trạng chứng từ');
+ const find=()=>dest.rows.findIndex((r,i)=>i>0&&r&&String(r[cG])===g)+1;
+ assert.ok(find()>1,'tick sends the order');
+ sh.getRange(m,10).setValue('sửa sau khi tích');e.c.pnHandleEdit({range:sh.getRange(m,10)});
+ assert.equal(dest.getRange(find(),cS+1).getValue(),'sửa sau khi tích','edit of a ticked order updates VHFF at once');
+ const full=e.sheets.get('Chứng từ_full'),f=rowOf(full,4,'1');
+ full.getRange(f,10).setValue('sửa ở full');e.c.pnHandleEdit({range:full.getRange(f,10)});
+ assert.equal(dest.getRange(find(),cS+1).getValue(),'sửa ở full','edit on full also updates VHFF');
+});
 console.log('RESULT '+passed+' tests passed.');

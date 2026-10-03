@@ -868,7 +868,12 @@ function pnV2HandleRows_(name, r1, r2) {
   const p = pnPair_(name), side = name === p.main ? 'main' : 'full', rows = [];
   for (let r = r1; r <= r2; r++) rows.push(r);
   const docs = PN_FULL.pairs[2], docsFull = pnSheet_(docs.full);
-  if (p.main === 'Chứng từ_FF') return pnV2SyncRows_(p, side, rows, true);
+  if (p.main === 'Chứng từ_FF') {
+    const res = pnV2SyncRows_(p, side, rows, true);
+    // Dòng đã tích "Đã tạo sv" vừa sửa: đẩy ngay đúng các dòng đó sang VHFF (Chứng từ không đạt YC).
+    res.vhff = pnV2PushVhffRows_(side === 'full' ? rows : (res.otherRows || []));
+    return res;
+  }
   pnV2ComputeRows_(name, rows);
   const own = pnV2SyncRows_(p, side, rows, true);
   const docRows = [];
@@ -884,6 +889,8 @@ function pnV2HandleRows_(name, r1, r2) {
   fillMissingGhtkCodesInChungTuFF();
   pnV2ColDiff_(ghtkBefore, pnV2ColSnap_(docsFull, true, ['Mã đơn GHTK'])).forEach(r => docRows.push(r));
   const docsRes = pnV2SyncRows_(docs, 'full', docRows, true);
+  // Đơn chứng từ đã tích bị đổi theo Booking/File đơn (ngày, mã GHTK...): đẩy ngay sang VHFF.
+  docsRes.vhff = pnV2PushVhffRows_(docRows);
   // Khu vực Booking phụ thuộc Booking và File đơn: chỉ đẩy các dòng Booking vừa đổi khu vực.
   const areaRes = [];
   ['Booking', 'Booking_full'].forEach(bn => {
@@ -895,6 +902,25 @@ function pnV2HandleRows_(name, r1, r2) {
     if (changed.length) areaRes.push(pnV2SyncRows_(PN_FULL.pairs[0], bn === 'Booking' ? 'main' : 'full', changed, true));
   });
   return {ok: true, own, docs: docsRes, area: areaRes};
+}
+
+/* Đẩy ngay sang VHFF (Chứng từ không đạt YC) đúng các dòng Chứng từ_full vừa đổi, CHỈ dòng đã tích "Đã tạo sv"
+ * và có Mã đơn GHTK. Không có dòng nào đã tích thì không làm gì (không mở file đích). Lỗi thì để lượt VHFF sau làm bù. */
+function pnV2PushVhffRows_(fullRows) {
+  const rows = Array.from(new Set((fullRows || []).map(Number).filter(r => r >= 2))).sort((a, b) => a - b);
+  if (!rows.length) return {ok: true, count: 0};
+  const sh = pnSheet_(PN_FULL.pairs[2].full), L = pnV2Layout_(sh, true);
+  const cTick = pnV2Col_(L, ['Đã tạo sv']), cGhtk = pnV2Col_(L, ['Mã đơn GHTK']);
+  if (cTick == null || cGhtk == null) return {ok: true, count: 0};
+  const cell = (r, c) => sh.getRange(r, c + 1).getValue();
+  const ticked = rows.filter(r => rejectSyncIsTrue_(cell(r, cTick)) && pnText_(cell(r, cGhtk)));
+  if (!ticked.length) return {ok: true, count: 0};
+  try { return syncChungTuKhongDatYCRows_(ticked); }
+  catch (err) {
+    PropertiesService.getScriptProperties().setProperty('PN_VHFF_ERROR', 'reject: ' + String(err && err.message || err));
+    pnMarkDirty_();
+    return {ok: false, error: String(err && err.message || err)};
+  }
 }
 
 /* Sửa tay đúng lúc khóa bận: lưu lại đúng tab + dòng đã sửa (mỗi lần một khóa riêng, không ghi đè nhau),
