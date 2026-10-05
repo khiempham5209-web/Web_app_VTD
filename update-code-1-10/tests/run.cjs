@@ -859,4 +859,20 @@ test('Long PO codes broken into numbers on the main tab are repaired from full, 
  assert.equal(e.c.pnV2IsCode_('0123456789'),true);assert.equal(e.c.pnV2IsCode_('2959467'),false);assert.equal(e.c.pnV2IsCode_('209003302610000022'),true);
  auditOk(e);
 });
+test('Pasting Booking / File đơn touches only the pasted orders (no full-history scans) and fills GHTK + area',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ e.run("fillMissingGhtkCodesInChungTuFF=()=>{throw new Error('full GHTK scan called');};syncAllKhuVucBookingToChungTuFF_=()=>{throw new Error('full area scan called');};");
+ const B=e.sheets.get('Booking'),FD=e.sheets.get('File đơn'),M=e.sheets.get('Chứng từ_FF'),F=e.sheets.get('Chứng từ_full');
+ const bk=Array(16).fill('');bk[0]='05/10/2026';bk[1]='9500';bk[3]='KH';bk[4]='PO9500';bk[5]='Addr';bk[6]='Ba Đình';bk[8]='Circle K';
+ const br=B.getLastRow()+1;B.getRange(br,1,1,16).setValues([bk]);e.c.pnHandleEdit({range:B.getRange(br,1,1,16)});
+ assert.ok(rowOf(M,4,'9500')>0,'doc created on main');
+ assert.equal(String(M.getRange(rowOf(M,4,'9500'),2).getValue()),'','no GHTK yet');
+ const hb=B.rows[0],kv=hb.indexOf('Khu vực');
+ assert.equal(B.getRange(br,kv+1).getValue(),'Nội thành','area from district for the pasted Booking row');
+ const fd=Array(18).fill('');fd[0]='G9500';fd[1]='2026-10-05 08:00:00';fd[6]='Depot';fd[10]='9500';
+ const fr=FD.getLastRow()+1;FD.getRange(fr,1,1,18).setValues([fd]);e.c.pnHandleEdit({range:FD.getRange(fr,1,1,18)});
+ assert.equal(F.getRange(rowOf(F,4,'9500'),2).getValue(),'G9500','GHTK filled in full');
+ assert.equal(M.getRange(rowOf(M,4,'9500'),2).getValue(),'G9500','GHTK reached main');
+ auditOk(e);
+});
 console.log('RESULT '+passed+' tests passed.');

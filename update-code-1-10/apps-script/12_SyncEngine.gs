@@ -884,6 +884,7 @@ function pnV2HandleRows_(name, r1, r2) {
   pnV2ComputeRows_(name, rows);
   const own = pnV2SyncRows_(p, side, rows, true);
   const docRows = [];
+  let orders = null;
   if (p.main === 'Booking') {
     const lastBefore = docsFull.getLastRow(), datesBefore = pnV2ColSnap_(docsFull, true, ['Ngày lên đơn']);
     if (side === 'main') { syncBookingRowsToChungTuFF_(r1, r2); bookingSyncUpdateTargetDatesFromBookingRows_(r1, r2); }
@@ -891,24 +892,112 @@ function pnV2HandleRows_(name, r1, r2) {
     for (let r = lastBefore + 1; r <= docsFull.getLastRow(); r++) docRows.push(r);
     pnV2ColDiff_(datesBefore, pnV2ColSnap_(docsFull, true, ['Ngày lên đơn'])).forEach(r => docRows.push(r));
   }
-  // Mã GHTK: File đơn mới hoặc đơn chứng từ mới có thể được điền mã.
-  const ghtkBefore = pnV2ColSnap_(docsFull, true, ['Mã đơn GHTK']);
-  fillMissingGhtkCodesInChungTuFF();
-  pnV2ColDiff_(ghtkBefore, pnV2ColSnap_(docsFull, true, ['Mã đơn GHTK'])).forEach(r => docRows.push(r));
+  else {
+    // File đơn: chỉ các đơn (Mã đơn hàng KH) trong các dòng vừa dán/sửa -> điền Mã GHTK cho đúng các chứng từ đó.
+    // (Đơn chứng từ mới từ Booking đã được điền Mã GHTK ngay lúc tạo.)
+    orders = pnV2FileDonOrders_(name, rows);
+    pnV2FillGhtkForOrders_(orders).forEach(r => docRows.push(r));
+  }
   const docsRes = pnV2SyncRows_(docs, 'full', docRows, true);
   // Đơn chứng từ đã tích bị đổi theo Booking/File đơn (ngày, mã GHTK...): đẩy ngay sang VHFF.
   docsRes.vhff = pnV2PushVhffRows_(docRows);
   // Khu vực Booking phụ thuộc Booking và File đơn: chỉ đẩy các dòng Booking vừa đổi khu vực.
   const areaRes = [];
-  ['Booking', 'Booking_full'].forEach(bn => {
-    if (p.main === 'Booking' && bn !== name) return;
-    const sh = pnSheet_(bn), before = pnV2ColSnap_(sh, bn === 'Booking_full', ['Khu vực']), prev = KHUVUC_BOOKING_SYNC_CONFIG.bookingSheetName;
-    try { KHUVUC_BOOKING_SYNC_CONFIG.bookingSheetName = bn; syncAllKhuVucBookingToChungTuFF_(); }
-    finally { KHUVUC_BOOKING_SYNC_CONFIG.bookingSheetName = prev; }
-    const changed = pnV2ColDiff_(before, pnV2ColSnap_(sh, bn === 'Booking_full', ['Khu vực']));
-    if (changed.length) areaRes.push(pnV2SyncRows_(PN_FULL.pairs[0], bn === 'Booking' ? 'main' : 'full', changed, true));
-  });
+  if (p.main === 'Booking') {
+    // Dán Booking: tính Khu vực cho đúng các dòng vừa dán.
+    const changed = pnV2AreaForBookingRows_(name, rows);
+    if (changed.length) areaRes.push(pnV2SyncRows_(PN_FULL.pairs[0], side, changed, true));
+  } else {
+    // Dán File đơn: cập nhật Khu vực cho đúng các dòng Booking có Số đơn hàng trong các đơn vừa dán.
+    ['Booking', 'Booking_full'].forEach(bn => {
+      const changed = pnV2AreaForOrders_(bn, orders);
+      if (changed.length) areaRes.push(pnV2SyncRows_(PN_FULL.pairs[0], bn === 'Booking' ? 'main' : 'full', changed, true));
+    });
+  }
   return {ok: true, own, docs: docsRes, area: areaRes};
+}
+
+/* ---- Xử lý theo đơn (không quét cả lịch sử): chỉ đọc các cột mã cần thiết, chỉ ghi các ô thay đổi. ---- */
+function pnV2Col1_(sh, col, last) { return col && last >= 2 ? sh.getRange(2, col, last - 1, 1).getDisplayValues().map(r => r[0]) : []; }
+// Các Mã đơn hàng KH (= Số đơn hàng) trong các dòng File đơn vừa sửa.
+function pnV2FileDonOrders_(name, rows) {
+  const sh = pnSheet_(name), col = bookingSyncHeaderMap_(bookingSyncHeaders_(sh));
+  const c = bookingSyncFirstCol_(col, ['ma don hang kh', 'so don hang', 'row labels']), out = new Set();
+  if (!c || !rows.length) return out;
+  const r1 = rows[0], r2 = Math.min(rows[rows.length - 1], sh.getLastRow());
+  if (r2 < r1) return out;
+  sh.getRange(r1, c, r2 - r1 + 1, 1).getDisplayValues().forEach(r => { const v = bookingSyncClean_(r[0]); if (v) out.add(v); });
+  return out;
+}
+// Tra File đơn_full cho đúng các đơn cần (dòng sau cùng thắng, như bản cũ): Mã GHTK và Khu vực.
+function pnV2FileDonLookup_(orders) {
+  const out = {ghtk: new Map(), area: new Map()};
+  if (!orders || !orders.size) return out;
+  const sh = pnSheet_(BOOKING_SYNC_CONFIG.orderSheetName), last = sh.getLastRow();
+  const bcol = bookingSyncHeaderMap_(bookingSyncHeaders_(sh)), kcol = khuVucBookingHeaderMap_(khuVucBookingHeaders_(sh));
+  const bKeys = new Set(Array.from(orders).map(bookingSyncNorm_)), kKeys = new Set(Array.from(orders).map(khuVucBookingNorm_));
+  const ord = pnV2Col1_(sh, bookingSyncFirstCol_(bcol, ['ma don hang kh', 'so don hang', 'row labels']), last);
+  const ma = pnV2Col1_(sh, bookingSyncFirstCol_(bcol, ['ma don', 'ma don ghtk']), last);
+  const kOrd = pnV2Col1_(sh, khuVucBookingFirstCol_(kcol, ['ma don hang kh', 'so don hang', 'row labels', 'od']), last);
+  const kArea = pnV2Col1_(sh, khuVucBookingFirstCol_(kcol, ['khu vuc']), last);
+  ord.forEach((o, i) => { const k = bookingSyncNorm_(o), m = bookingSyncClean_(ma[i]); if (bookingSyncClean_(o) && m && bKeys.has(k)) out.ghtk.set(k, m); });
+  kOrd.forEach((o, i) => { const k = khuVucBookingNorm_(o), a = khuVucBookingNormalizeArea_(kArea[i]); if (khuVucBookingClean_(o) && a && kKeys.has(k)) out.area.set(k, a); });
+  return out;
+}
+// Điền Mã đơn GHTK còn trống ở Chứng từ_full cho đúng các đơn đã cho. Trả về các dòng đã điền.
+function pnV2FillGhtkForOrders_(orders) {
+  if (!orders || !orders.size) return [];
+  const map = pnV2FileDonLookup_(orders).ghtk;
+  if (!map.size) return [];
+  const sh = pnSheet_(BOOKING_SYNC_CONFIG.targetSheetName), last = sh.getLastRow(), col = bookingSyncHeaderMap_(bookingSyncHeaders_(sh));
+  const gc = bookingSyncFirstCol_(col, ['ma don ghtk', 'ma don']), oc = bookingSyncFirstCol_(col, ['so don hang', 'row labels', 'od']);
+  if (!gc || !oc) return [];
+  const g = pnV2Col1_(sh, gc, last), o = pnV2Col1_(sh, oc, last), up = new Map(), rows = [];
+  o.forEach((v, i) => {
+    if (bookingSyncClean_(g[i]) || !bookingSyncClean_(v)) return;
+    const m = map.get(bookingSyncNorm_(v));
+    if (m) { pnV2Put_(up, i + 2, gc - 1, m); rows.push(i + 2); }
+  });
+  pnV2Flush_(sh, up);
+  return rows;
+}
+// Khu vực cho đúng các dòng Booking vừa dán: theo File đơn nếu có, không thì theo Quận/Địa chỉ (như bản cũ).
+function pnV2AreaForBookingRows_(bn, rows) {
+  const sh = pnSheet_(bn), col = khuVucBookingEnsureBookingAreaColumn_(sh);
+  const oc = khuVucBookingFirstCol_(col, ['row labels', 'so don hang', 'od']), dc = khuVucBookingFirstCol_(col, ['quan', 'quận', 'huyen', 'huyện']);
+  const ac = khuVucBookingFirstCol_(col, ['ship to address1', 'dia chi nhan hang', 'dia chi']), kc = khuVucBookingFirstCol_(col, ['khu vuc']);
+  if (!oc || !kc || !rows.length) return [];
+  const r1 = rows[0], r2 = Math.min(rows[rows.length - 1], sh.getLastRow());
+  if (r2 < r1) return [];
+  const block = sh.getRange(r1, 1, r2 - r1 + 1, sh.getLastColumn()).getDisplayValues();
+  const orders = new Set(block.map(r => khuVucBookingClean_(r[oc - 1])).filter(Boolean));
+  const area = pnV2FileDonLookup_(orders).area, up = new Map(), changed = [];
+  block.forEach((r, i) => {
+    const o = khuVucBookingClean_(r[oc - 1]);
+    if (!o) return;
+    const next = area.get(khuVucBookingNorm_(o)) || khuVucBookingClassifyArea_(dc ? r[dc - 1] : '', ac ? r[ac - 1] : '');
+    if (!next || khuVucBookingClean_(r[kc - 1]) === next) return;
+    pnV2Put_(up, r1 + i, kc - 1, next); changed.push(r1 + i);
+  });
+  pnV2Flush_(sh, up);
+  return changed;
+}
+// Khu vực cho các dòng Booking có Số đơn hàng thuộc các đơn File đơn vừa dán (chỉ đọc 2 cột: Số đơn hàng, Khu vực).
+function pnV2AreaForOrders_(bn, orders) {
+  if (!orders || !orders.size) return [];
+  const area = pnV2FileDonLookup_(orders).area;
+  if (!area.size) return [];
+  const sh = pnSheet_(bn), col = khuVucBookingEnsureBookingAreaColumn_(sh), last = sh.getLastRow();
+  const oc = khuVucBookingFirstCol_(col, ['row labels', 'so don hang', 'od']), kc = khuVucBookingFirstCol_(col, ['khu vuc']);
+  if (!oc || !kc) return [];
+  const o = pnV2Col1_(sh, oc, last), k = pnV2Col1_(sh, kc, last), up = new Map(), changed = [];
+  o.forEach((v, i) => {
+    const next = khuVucBookingClean_(v) ? area.get(khuVucBookingNorm_(v)) : '';
+    if (!next || khuVucBookingClean_(k[i]) === next) return;
+    pnV2Put_(up, i + 2, kc - 1, next); changed.push(i + 2);
+  });
+  pnV2Flush_(sh, up);
+  return changed;
 }
 
 /* Đẩy ngay sang VHFF (Chứng từ không đạt YC) đúng các dòng Chứng từ_full vừa đổi, CHỈ dòng đã tích "Đã tạo sv"

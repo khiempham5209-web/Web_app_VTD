@@ -136,14 +136,16 @@ function fillMissingGhtkCodesInChungTuFF() {
   if (!orderNoCol) throw new Error("Khong thay cot So don hang trong " + BOOKING_SYNC_CONFIG.targetSheetName);
 
   const orderMap = bookingSyncGhtkMap_();
-  const values = target.getRange(2, 1, lastRow - 1, target.getLastColumn()).getDisplayValues();
+  // Chỉ đọc 2 cột (Mã đơn GHTK, Số đơn hàng); chỉ ghi các ô vừa điền.
   const ghtkValues = target.getRange(2, ghtkCol, lastRow - 1, 1).getDisplayValues();
+  const orderValues = target.getRange(2, orderNoCol, lastRow - 1, 1).getDisplayValues();
+  const up = new Map();
   let updated = 0;
   let missing = 0;
 
-  values.forEach((row, i) => {
-    const currentGhtk = bookingSyncClean_(row[ghtkCol - 1]);
-    const orderNo = bookingSyncClean_(row[orderNoCol - 1]);
+  ghtkValues.forEach((row, i) => {
+    const currentGhtk = bookingSyncClean_(row[0]);
+    const orderNo = bookingSyncClean_(orderValues[i][0]);
     if (currentGhtk || !orderNo) return;
 
     const maDonGhtk = orderMap[bookingSyncNorm_(orderNo)] || "";
@@ -152,11 +154,11 @@ function fillMissingGhtkCodesInChungTuFF() {
       return;
     }
 
-    ghtkValues[i][0] = maDonGhtk;
+    pnV2Put_(up, i + 2, ghtkCol - 1, maDonGhtk);
     updated++;
   });
 
-  if (updated) target.getRange(2, ghtkCol, ghtkValues.length, 1).setValues(ghtkValues);
+  if (updated) pnV2Flush_(target, up);
   return {ok: true, updated, missing};
 }
 
@@ -272,11 +274,13 @@ function bookingSyncGhtkMap_() {
   if (!maDonCol) throw new Error("Khong thay cot Ma don trong " + BOOKING_SYNC_CONFIG.orderSheetName);
   if (!orderNoCol) throw new Error("Khong thay cot Ma don hang KH trong " + BOOKING_SYNC_CONFIG.orderSheetName);
 
-  const values = sh.getRange(2, 1, lastRow - 1, sh.getLastColumn()).getDisplayValues();
+  // Chỉ đọc 2 cột (Mã đơn, Mã đơn hàng KH), không đọc cả bảng.
+  const orders = sh.getRange(2, orderNoCol, lastRow - 1, 1).getDisplayValues();
+  const codes = sh.getRange(2, maDonCol, lastRow - 1, 1).getDisplayValues();
   const out = {};
-  values.forEach(row => {
-    const orderNo = bookingSyncClean_(row[orderNoCol - 1]);
-    const maDon = bookingSyncClean_(row[maDonCol - 1]);
+  orders.forEach((row, i) => {
+    const orderNo = bookingSyncClean_(row[0]);
+    const maDon = bookingSyncClean_(codes[i][0]);
     if (orderNo && maDon) out[bookingSyncNorm_(orderNo)] = maDon;
   });
   return out;
