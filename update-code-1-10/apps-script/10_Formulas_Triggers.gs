@@ -179,6 +179,8 @@ function pnAfterActivity_() {
   }
   // Các lần sửa tay bị bỏ lỡ vì khóa bận: xử lý đúng các dòng đó.
   if(!pnV2OverBudget_())pnDrainEditQueue_();
+  // Chứng từ ở full chưa từng được đồng bộ (lượt trước bị dừng giữa chừng): đẩy sang tab chính.
+  if(!pnV2OverBudget_()){ try { pnV2HealOrphans_(); } catch(err) { console.error('Heal: '+String(err&&err.message||err)); } }
   if(props.getProperty('PN_SYNC_REQUESTED')&&!pnV2OverBudget_()){
     const sync=pnV2SyncAll_({});
     if(!sync.partial)props.deleteProperty('PN_SYNC_REQUESTED');

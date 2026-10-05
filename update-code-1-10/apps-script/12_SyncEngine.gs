@@ -65,7 +65,9 @@ function pnV2Read_(L) {
   return last < 2 ? [] : sh.getRange(2, 1, last - 1, pnV2ReadWidth_(L)).getValues();
 }
 // Giá trị chuẩn hóa để so sánh: ngày dạng text và dạng ngày của Sheets được coi là một.
-function pnV2IsCode_(v) { return typeof v === 'string' && /^(0\d+|\d{12,})$/.test(v.trim()); }
+function pnV2IsCode_(v) { return typeof v === 'string' && /^(0\d+|\d{12,}|\d{4}-\d{2})$/.test(v.trim()); }
+// Ô "Tháng" của tab full: Sheets có thể đã đổi "2026-10" thành ngày 01/10/2026 -> đọc lại thành "2026-10".
+function pnV2MonthCell_(v) { return v instanceof Date && !isNaN(v) ? Utilities.formatDate(v, PN_FULL.timezone, 'yyyy-MM') : pnText_(v); }
 // Mã số > 15 chữ số: Sheets chỉ giữ 15 chữ số đầu khi ô bị đổi thành số. So sánh theo 15 chữ số đầu + độ dài,
 // để bản bị hỏng ở một bên không bị coi là "sửa mới" và đè sang bên kia.
 function pnV2LongKey_(digits) { return digits.length > 15 ? '#' + digits.slice(0, 15) + ':' + digits.length : digits; }
@@ -305,7 +307,7 @@ function pnV2SyncPair_(p, opts) {
     if (sigM === sigF) {
       if (baseM !== hashM) pnV2Put_(mUp, rowNo, M.base, hashM);
       if (baseF !== hashM) pnV2Put_(fUp, f.rowNo, F.base, hashM);
-      if (F.month != null && pnText_(f.r[F.month]) !== (pnV2Month_(F, cfg, f.r) || 'CẦN KIỂM TRA')) setMonth(f.rowNo, r);
+      if (F.month != null && pnV2MonthCell_(f.r[F.month]) !== (pnV2Month_(F, cfg, f.r) || 'CẦN KIỂM TRA')) setMonth(f.rowNo, r);
       return;
     }
     // Hai bên khác nhau: xác định bên vừa đổi.
@@ -349,7 +351,7 @@ function pnV2SyncPair_(p, opts) {
     copy(F, f.r, M, mUp, target, null);
     pnV2Put_(mUp, target, M.id, id); pnV2Put_(mUp, target, M.base, hashF);
     if (pnText_(f.r[F.base]) !== hashF) pnV2Put_(fUp, f.rowNo, F.base, hashF);
-    if (F.month != null && pnText_(f.r[F.month]) !== (pnV2Month_(F, cfg, f.r) || 'CẦN KIỂM TRA')) pnV2Put_(fUp, f.rowNo, F.month, pnV2Month_(F, cfg, f.r) || 'CẦN KIỂM TRA');
+    if (F.month != null && pnV2MonthCell_(f.r[F.month]) !== (pnV2Month_(F, cfg, f.r) || 'CẦN KIỂM TRA')) pnV2Put_(fUp, f.rowNo, F.month, pnV2Month_(F, cfg, f.r) || 'CẦN KIỂM TRA');
     mIds.add(id); res.toMain++; res.mainRows.push(target); res.fullRows.push(f.rowNo);
   });
   // Dòng full chỉ được cấp ID (không thuộc tab chính) cũng cần base và Tháng.
@@ -822,7 +824,7 @@ function pnV2SyncRows_(p, side, rowList, prefer, mode) {
       // Tháng (tab full) theo nội dung cuối cùng của hồ sơ.
       if (F.month != null) {
         const want = pnV2Month_(finalRow === mRow ? M : F, cfg, finalRow) || 'CẦN KIỂM TRA';
-        if (pnText_(fRow[F.month]) !== want) pnV2Put_(fUp, fNo, F.month, want);
+        if (pnV2MonthCell_(fRow[F.month]) !== want) pnV2Put_(fUp, fNo, F.month, want);
       }
       res.otherRows.push(x.dstNo);
     });
@@ -1052,6 +1054,20 @@ function pnV2RepairLongCodes_() {
 }
 // Chạy tay: sửa mã số dài bị hỏng ở các tab chính.
 function pnRepairLongCodes() { return pnWithLock_(() => pnV2RepairLongCodes_()); }
+
+/* Dòng ở Chứng từ_full có mã đơn nhưng chưa có __PN_ID = chưa từng được đồng bộ (lượt xử lý trước bị dừng giữa chừng,
+ * ví dụ quá 6 phút sau khi đã tạo đơn từ Booking). Mỗi lần thao tác Sheet: tìm các dòng đó (chỉ đọc 3 cột) và đồng bộ ngay,
+ * để đơn không bao giờ nằm ở full mà thiếu ở tab chính. */
+function pnV2HealOrphans_() {
+  const p = PN_FULL.pairs[2], cfg = pnV2Cfg_(p), sh = pnSheet_(p.full), F = pnV2Layout_(sh, true), last = sh.getLastRow();
+  if (F.id == null || last < 2) return [];
+  const col = i => i == null ? [] : sh.getRange(2, i + 1, last - 1, 1).getValues().map(r => pnText_(r[0]));
+  const ids = col(F.id), idents = (cfg.ident || []).map(a => col(pnV2Col_(F, [a])));
+  const rows = [];
+  for (let i = 0; i < ids.length && rows.length < 300; i++) if (!ids[i] && idents.some(v => v[i])) rows.push(i + 2);
+  if (rows.length) pnV2SyncRows_(p, 'full', rows, false);
+  return rows;
+}
 
 /* Sửa tay đúng lúc khóa bận: lưu lại đúng tab + dòng đã sửa (mỗi lần một khóa riêng, không ghi đè nhau),
  * và xử lý ngay khi có ai giữ được khóa: lần sửa tiếp theo, lần mở Sheet, hoặc lần app lưu đơn kế tiếp. */

@@ -881,4 +881,22 @@ test('pnTraceOrder reports where an order is, read-only',()=>{
  assert.ok(r.rows.some(x=>x.sheet==='Chứng từ_full'&&x.mainRowWithSameId>1));
  assert.equal(JSON.stringify([...e.sheets.values()].map(s=>s.rows)),snap,'no writes');
 });
+test('Docs created in full by an interrupted run (no __PN_ID) reach the main tab at the next Sheet activity',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const M=e.sheets.get('Chứng từ_FF'),F=e.sheets.get('Chứng từ_full');
+ const last=F.getLastRow();
+ F.getRange(last+1,1,2,17).setValues([doc(2959467,'05/10/2026','Chưa nhận chứng từ'),doc(2960639,'05/10/2026','Chưa nhận chứng từ')].map(r=>{r[1]='';return r;}));
+ assert.ok(!(rowOf(M,4,'2959467')>0));
+ const B=e.sheets.get('Booking');e.c.pnHandleEdit({range:B.getRange(2,14)});
+ assert.ok(rowOf(M,4,'2959467')>0&&rowOf(M,4,'2960639')>0,'healed into main');
+ const L=e.run('pnV2Layout_(pnSheet_("Chứng từ_full"),true)');
+ assert.ok(F.getRange(last+1,L.id+1).getValue(),'got an ID');
+ auditOk(e);
+});
+test('Tháng cells turned into dates by Sheets are read as months and not rewritten on every sync',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const F=e.sheets.get('Booking_full'),L=e.run('pnV2Layout_(pnSheet_("Booking_full"),true)');
+ for(let r=2;r<=F.getLastRow();r++){const v=F.getRange(r,L.month+1).getValue();if(/^d{4}-d{2}$/.test(String(v))){const [y,m]=String(v).split('-');F.getRange(r,L.month+1).setValue(new Date(+y,+m-1,1));}}
+ assert.equal(countWrites(()=>e.c.pnMirrorAll()),0,'no rewrites of Tháng');
+});
 console.log('RESULT '+passed+' tests passed.');
