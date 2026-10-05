@@ -12,38 +12,27 @@ function syncAllBanGiao() {
   syncBanGiaoSanPham();
 }
 
+/* Cột đích ghi theo TÊN tiêu đề trên tab đích: muốn đổi thứ tự cột thì kéo cột ngay trên Sheet đích,
+ * dữ liệu tự đi theo. columns: [tên cột đích, tên cột nguồn]. Cột đích chưa có thì được thêm vào cuối. */
 function syncBanGiaoChungTu() {
   syncSheetByDate_({
     sourceSheetName: DOC_SOURCE_SHEET,
     targetSheetName: DOC_TARGET_SHEET,
-    targetHeaders: [
-      'Ngày lên đơn',
-      'Mã đơn GHTK',
-      'Khách Hàng',
-      'Mã PO',
-      'Số đơn hàng',
-      'Địa chỉ nhận hàng',
-      'Xác thực hóa đơn',
-      'Ngày bàn giao CT',
-      'Note',
-      'Link ảnh',
-      'Loại siêu thị',
-    ],
-    sourceHeaders: [
-      'Ngày lên đơn',
-      'Mã đơn GHTK',
-      'Khách Hàng',
-      'Mã PO',
-      'Số đơn hàng',
-      'Địa chỉ nhận hàng',
-      'Xác thực hóa đơn',
-      'Ngày bàn giao CT',
-      'Note',
-      'Link ảnh',
-      'Loại siêu thị',
+    columns: [
+      ['Ngày lên đơn', 'Ngày lên đơn'],
+      ['Mã đơn GHTK', 'Mã đơn GHTK'],
+      ['Khách Hàng', 'Khách Hàng'],
+      ['Mã PO', 'Mã PO'],
+      ['Số đơn hàng', 'Số đơn hàng'],
+      ['Địa chỉ nhận hàng', 'Địa chỉ nhận hàng'],
+      ['Xác thực hóa đơn', 'Xác thực hóa đơn'],
+      ['Ngày bàn giao CT', 'Ngày bàn giao CT'],
+      ['Note', 'Note'],
+      ['Link ảnh', 'Link ảnh'],
+      ['Loại siêu thị', 'Loại siêu thị'],
     ],
     handoverHeader: 'Ngày bàn giao CT',
-    dateFormatColumns: [1, 8],
+    dateHeaders: ['Ngày lên đơn', 'Ngày bàn giao CT'],
   });
 }
 
@@ -51,48 +40,28 @@ function syncBanGiaoSanPham() {
   syncSheetWhenHasProduct_({
     sourceSheetName: PRODUCT_SOURCE_SHEET,
     targetSheetName: PRODUCT_TARGET_SHEET,
-    targetHeaders: [
-      'Ngày nhận trả',
-      'Mã đơn',
-      'Tên khách hàng',
-      'Số đơn hàng',
-      'Mã PO',
-      'Mã vật tư',
-      'Barcode',
-      'Tên sản phẩm',
-      'Số lượng',
-      'Phân loại',
-      'Tình trạng FF',
-      'Ghi chú',
-      'Hạn sử dụng',
-      'Kích thước',
-      'Khối lượng',
-      'Loại siêu thị',
-      'Hình ảnh',
-      'CBM',
-      'Ngày bàn giao',
-      'Ngày booking',
-    ],
-    sourceHeaders: [
-      'Ngày hoàn trả',
-      'Mã đơn',
-      'Tên khách hàng',
-      'Số đơn hàng',
-      'Mã PO',
-      'Mã vật tư',
-      'Barcode',
-      'Tên sản phẩm',
-      'Số lượng',
-      'Phân loại',
-      'Tình trạng FF',
-      'Ghi chú',
-      'Hạn sử dụng',
-      'Kích thước',
-      'Khối lượng',
-      'Loại siêu thị',
-      'Hình ảnh',
-      'CBM',
-      'Ngày bàn giao',
+    // [tên cột đích, tên cột nguồn]. LOOKUP = lấy từ Booking_full theo Số đơn hàng.
+    columns: [
+      ['Ngày nhận trả', 'Ngày hoàn trả'],
+      ['Mã đơn', 'Mã đơn'],
+      ['Tên khách hàng', 'Tên khách hàng'],
+      ['Số đơn hàng', 'Số đơn hàng'],
+      ['Mã PO', 'Mã PO'],
+      ['Ngày booking', 'LOOKUP'],
+      ['Mã vật tư', 'Mã vật tư'],
+      ['Barcode', 'Barcode'],
+      ['Tên sản phẩm', 'Tên sản phẩm'],
+      ['Số lượng', 'Số lượng'],
+      ['Phân loại', 'Phân loại'],
+      ['Tình trạng FF', 'Tình trạng FF'],
+      ['Ghi chú', 'Ghi chú'],
+      ['Hạn sử dụng', 'Hạn sử dụng'],
+      ['Kích thước', 'Kích thước'],
+      ['Khối lượng', 'Khối lượng'],
+      ['Loại siêu thị', 'Loại siêu thị'],
+      ['Hình ảnh', 'Hình ảnh'],
+      ['CBM', 'CBM'],
+      ['Ngày bàn giao', 'Ngày bàn giao'],
     ],
     // Co san pham la day sang dich. Ngay ban giao co the trong va update sau.
     requiredAnyHeaders: ['Mã vật tư', 'Tên sản phẩm', 'Mã đơn'],
@@ -103,8 +72,8 @@ function syncBanGiaoSanPham() {
       sourceKeyHeaders: ['Row Labels', 'Số đơn hàng', 'Mã đơn hàng KH', 'Mã đơn hàng', 'OD'],
       lookupValueHeaders: ['Ngày'],
     },
-    dateFormatColumns: [1, 19, 20],
-    timeFormatColumns: [],
+    dateHeaders: ['Ngày nhận trả', 'Ngày bàn giao', 'Ngày booking'],
+    timeHeaders: [],
   });
 }
 
@@ -159,10 +128,9 @@ function syncSheetByDate_(config) {
 
   const lastRow = sourceSheet.getLastRow();
   const sourceHeaderMap = getHeaderMap_(sourceSheet);
-  const sourceColumns = config.sourceHeaders.map(header => requireHeaderColumn_(sourceHeaderMap, header, config.sourceSheetName));
+  const sourceColumns = config.columns.map(([, src]) => requireHeaderColumn_(sourceHeaderMap, src, config.sourceSheetName));
   const handoverColumn = requireHeaderColumn_(sourceHeaderMap, config.handoverHeader, config.sourceSheetName);
   const maxSourceCol = Math.max(...sourceColumns, handoverColumn);
-  const outputWidth = config.targetHeaders.length;
 
   const output = [];
   if (lastRow >= 2) {
@@ -170,11 +138,7 @@ function syncSheetByDate_(config) {
     rows.forEach((row, index) => {
       const handoverValue = row[handoverColumn - 1];
       if (!isRealDate_(handoverValue)) return;
-      output.push({
-        sortDate: handoverValue,
-        sourceIndex: index,
-        values: sourceColumns.map(col => row[col - 1]),
-      });
+      output.push({sortDate: handoverValue, sourceIndex: index, values: sourceColumns.map(col => row[col - 1])});
     });
   }
 
@@ -184,14 +148,7 @@ function syncSheetByDate_(config) {
   });
 
   pnRequireReady_();
-  const pnOldLast = targetSheet.getLastRow();
-  targetSheet.getRange(1, 1, 1, outputWidth).setValues([config.targetHeaders]);
-  if (output.length) {
-    targetSheet.getRange(2, 1, output.length, outputWidth).setValues(output.map(item => item.values));
-  }
-
-  if (pnOldLast > output.length + 1) targetSheet.getRange(output.length + 2, 1, pnOldLast - output.length - 1, outputWidth).clearContent();
-  applyTargetFormats_(targetSheet, config, Math.max(output.length + 1, 2));
+  writeTargetByHeaders_(targetSheet, config, output.map(item => item.values));
 }
 
 function syncSheetWhenHasProduct_(config) {
@@ -202,17 +159,13 @@ function syncSheetWhenHasProduct_(config) {
 
   const lastRow = sourceSheet.getLastRow();
   const sourceHeaderMap = getHeaderMap_(sourceSheet);
-  const sourceColumns = config.sourceHeaders.map(header => requireHeaderColumn_(sourceHeaderMap, header, config.sourceSheetName));
+  // Cột LOOKUP không đọc từ nguồn (0), lấy từ Booking_full theo Số đơn hàng.
+  const sourceColumns = config.columns.map(([, src]) => src === 'LOOKUP' ? 0 : requireHeaderColumn_(sourceHeaderMap, src, config.sourceSheetName));
   const requiredColumns = (config.requiredAnyHeaders || []).map(header => requireHeaderColumn_(sourceHeaderMap, header, config.sourceSheetName));
   const handoverColumn = requireHeaderColumn_(sourceHeaderMap, config.handoverHeader, config.sourceSheetName);
-  const lookupMap = config.lookupByOrderNumber
-    ? buildLookupByOrderNumber_(config.lookupByOrderNumber)
-    : null;
-  const sourceOrderColumn = lookupMap
-    ? requireHeaderColumn_(sourceHeaderMap, 'Số đơn hàng', config.sourceSheetName)
-    : 0;
-  const maxSourceCol = Math.max(...sourceColumns, ...requiredColumns, handoverColumn);
-  const outputWidth = config.targetHeaders.length;
+  const lookupMap = config.lookupByOrderNumber ? buildLookupByOrderNumber_(config.lookupByOrderNumber) : null;
+  const sourceOrderColumn = lookupMap ? requireHeaderColumn_(sourceHeaderMap, 'Số đơn hàng', config.sourceSheetName) : 0;
+  const maxSourceCol = Math.max(...sourceColumns, ...requiredColumns, handoverColumn, sourceOrderColumn);
 
   const output = [];
   if (lastRow >= 2) {
@@ -220,16 +173,12 @@ function syncSheetWhenHasProduct_(config) {
     rows.forEach((row, index) => {
       const hasProductInfo = requiredColumns.some(col => hasValue_(row[col - 1]));
       if (!hasProductInfo) return;
-
       const handoverValue = row[handoverColumn - 1];
+      const lookup = lookupMap ? (lookupMap[normalizeLookupKey_(row[sourceOrderColumn - 1])] || '') : '';
       output.push({
         sortDate: isRealDate_(handoverValue) ? handoverValue : null,
         sourceIndex: index,
-        values: sourceColumns.map(col => row[col - 1]).concat(
-          lookupMap
-            ? [lookupMap[normalizeLookupKey_(row[sourceOrderColumn - 1])] || '']
-            : []
-        ),
+        values: sourceColumns.map(col => col ? row[col - 1] : lookup),
       });
     });
   }
@@ -245,14 +194,41 @@ function syncSheetWhenHasProduct_(config) {
   });
 
   pnRequireReady_();
-  const pnOldLast = targetSheet.getLastRow();
-  targetSheet.getRange(1, 1, 1, outputWidth).setValues([config.targetHeaders]);
-  if (output.length) {
-    targetSheet.getRange(2, 1, output.length, outputWidth).setValues(output.map(item => item.values));
-  }
+  writeTargetByHeaders_(targetSheet, config, output.map(item => item.values));
+}
 
-  if (pnOldLast > output.length + 1) targetSheet.getRange(output.length + 2, 1, pnOldLast - output.length - 1, outputWidth).clearContent();
-  applyTargetFormats_(targetSheet, config, Math.max(output.length + 1, 2));
+/* Ghi dữ liệu sang tab đích theo TÊN cột ở dòng 1 của tab đích.
+ * - Cột đích chưa có tiêu đề -> thêm vào cuối (tab mới hoàn toàn thì tạo theo thứ tự trong config).
+ * - Chỉ ghi/xóa các cột có trong config; cột khác trên tab đích không bị đụng.
+ * - Định dạng ngày/giờ theo tên cột. */
+function writeTargetByHeaders_(targetSheet, config, rows) {
+  const lastCol = Math.max(targetSheet.getLastColumn(), 1);
+  const headers = targetSheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h == null ? '' : h).trim());
+  const empty = headers.every(h => !h);
+  const map = {};
+  if (empty) headers.length = 0;
+  headers.forEach((h, i) => { const k = normalizeHeader_(h); if (k && !map[k]) map[k] = i + 1; });
+  const cols = config.columns.map(([target]) => {
+    const k = normalizeHeader_(target);
+    if (!map[k]) { headers.push(target); map[k] = headers.length; targetSheet.getRange(1, headers.length).setValue(target); }
+    return map[k];
+  });
+  const oldLast = targetSheet.getLastRow();
+  // Ghi từng nhóm cột liền nhau.
+  const order = cols.map((c, i) => ({c, i})).sort((a, b) => a.c - b.c), runs = [];
+  order.forEach(x => { const r = runs[runs.length - 1]; if (r && r.end === x.c - 1) { r.end = x.c; r.idx.push(x.i); } else runs.push({start: x.c, end: x.c, idx: [x.i]}); });
+  runs.forEach(run => {
+    const w = run.end - run.start + 1;
+    if (rows.length) targetSheet.getRange(2, run.start, rows.length, w).setValues(rows.map(v => run.idx.map(i => v[i])));
+    if (oldLast > rows.length + 1) targetSheet.getRange(rows.length + 2, run.start, oldLast - rows.length - 1, w).clearContent();
+  });
+  const n = Math.max(rows.length, 1);
+  const fmt = (names, pattern) => (names || []).forEach(name => {
+    const c = map[normalizeHeader_(name)];
+    if (c) targetSheet.getRange(2, c, n, 1).setNumberFormat(pattern);
+  });
+  fmt(config.dateHeaders, 'dd/MM/yyyy');
+  fmt(config.timeHeaders, 'hh:mm:ss');
 }
 
 function buildLookupByOrderNumber_(config) {

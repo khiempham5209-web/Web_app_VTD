@@ -318,7 +318,17 @@ test('VHFF returns retain booking date after primary Booking is cleared',()=>{
  r[h.indexOf('Số đơn hàng')]='2';r[h.indexOf('Mã vật tư')]='SKU';r[h.indexOf('Tên sản phẩm')]='Product';
  e.sheets.get('Hoàn sản phẩm').rows.push(r);e.sheets.get('Booking').getRange(2,1,1,16).clearContent();
  e.c.syncBanGiaoSanPham();
- assert.equal(e.targets.get('Bàn giao SP_Hàng hoàn').getRange(2,20).getValue(),'01/09/2026');
+ const dest=e.targets.get('Bàn giao SP_Hàng hoàn'),hd=dest.getRange(1,1,1,dest.getLastColumn()).getValues()[0];
+ assert.equal(dest.getRange(2,hd.indexOf('Ngày booking')+1).getValue(),'01/09/2026');
+ // Người dùng kéo cột "Ngày booking" ra cuối và thêm cột tay: dữ liệu đi theo tên cột, cột tay không bị đụng.
+ const order=[...hd.filter(x=>x!=='Ngày booking'),'Ghi chú tay','Ngày booking'];
+ dest.rows=[order];dest.getRange(2,order.length-1).setValue('giữ nguyên');
+ e.c.syncBanGiaoSanPham();
+ const h2=dest.getRange(1,1,1,dest.getLastColumn()).getValues()[0];
+ assert.deepEqual(h2,order,'header order kept as arranged on the sheet');
+ assert.equal(dest.getRange(2,order.length).getValue(),'01/09/2026');
+ assert.equal(dest.getRange(2,h2.indexOf('Tên sản phẩm')+1).getValue(),'Product');
+ assert.equal(dest.getRange(2,order.length-1).getValue(),'giữ nguyên');
 });
 test('VHFF worker acknowledges all destinations and notices later archive-only edits',()=>{
  const e=environment();seed(e);e.c.pnMigrateFull();
