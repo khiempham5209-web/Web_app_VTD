@@ -1074,3 +1074,39 @@ function pnDrainEditQueue_(maxMs) {
   }
   return {done, left: keys.length - done};
 }
+/* CHỈ ĐỌC, không ghi gì: tra một đơn (Số đơn hàng / Mã đơn GHTK / Mã PO) xem đang nằm ở đâu và vì sao.
+ * Chạy: pnTraceOrder('2959467') rồi xem kết quả trong Nhật ký thực thi. */
+function pnTraceOrder(code) {
+  code = pnText_(code);
+  if (!code) throw new Error('Nhập mã cần tra, ví dụ pnTraceOrder("2959467")');
+  const month = pnCurrentMonth_(), out = {code, month, rows: [], conflicts: [], queued: []};
+  const ids = new Set();
+  for (const p of PN_FULL.pairs) {
+    const cfg = pnV2Cfg_(p);
+    [[p.main, false], [p.full, true]].forEach(([name, isFull]) => {
+      const sh = pnSheet_(name), L = pnV2Layout_(sh, isFull), last = sh.getLastRow();
+      if (last < 2) return;
+      const vals = sh.getRange(2, 1, last - 1, pnV2ReadWidth_(L)).getDisplayValues(), found = [];
+      vals.forEach((rw, i) => { if (rw.some(v => pnText_(v) === code)) found.push(i + 2); });
+      found.forEach(r => {
+        const row = sh.getRange(r, 1, 1, pnV2ReadWidth_(L)).getValues()[0], id = L.id == null ? '' : pnText_(row[L.id]);
+        if (id) ids.add(id);
+        const info = {sheet: name, row: r, id, base: L.base == null ? '' : pnText_(row[L.base]), dateMonth: pnV2Month_(L, cfg, row), isRecord: pnV2Rec_(L, cfg, row)};
+        if (isFull) { info.thang = L.month == null ? '' : pnText_(row[L.month]); info.needsMain = pnV2NeedsMain_(L, cfg, row, month); }
+        out.rows.push(info);
+      });
+    });
+    // Với mỗi ID tìm được ở full: tab chính có dòng mang ID đó không.
+    const M = pnV2Layout_(pnSheet_(p.main), false), lastM = M.sh.getLastRow();
+    if (M.id != null && lastM >= 2) {
+      const mIds = M.sh.getRange(2, M.id + 1, lastM - 1, 1).getValues().map(r => pnText_(r[0]));
+      out.rows.filter(x => x.sheet === p.full && x.id).forEach(x => { const i = mIds.indexOf(x.id); x.mainRowWithSameId = i < 0 ? 'KHÔNG CÓ' : i + 2; });
+    }
+  }
+  const cs = pnSS_().getSheetByName(PN_V2.conflictSheet);
+  if (cs && cs.getLastRow() > 1) cs.getRange(2, 1, cs.getLastRow() - 1, 5).getValues().forEach(r => { if (ids.has(pnText_(r[3])) || String(r[4]).indexOf(code) >= 0) out.conflicts.push({at: r[0], tab: r[1], replacedSide: r[2], id: r[3]}); });
+  const props = PropertiesService.getScriptProperties().getProperties();
+  Object.keys(props).filter(k => k.indexOf('PN_EDITQ_') === 0).forEach(k => out.queued.push(props[k]));
+  console.log(JSON.stringify(out, null, 1));
+  return out;
+}

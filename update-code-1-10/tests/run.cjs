@@ -875,4 +875,10 @@ test('Pasting Booking / File đơn touches only the pasted orders (no full-histo
  assert.equal(M.getRange(rowOf(M,4,'9500'),2).getValue(),'G9500','GHTK reached main');
  auditOk(e);
 });
+test('pnTraceOrder reports where an order is, read-only',()=>{
+ const e=v2env();e.c.pnMirrorAll();const snap=JSON.stringify([...e.sheets.values()].map(s=>s.rows));
+ const r=e.c.pnTraceOrder('1');
+ assert.ok(r.rows.some(x=>x.sheet==='Chứng từ_full'&&x.mainRowWithSameId>1));
+ assert.equal(JSON.stringify([...e.sheets.values()].map(s=>s.rows)),snap,'no writes');
+});
 console.log('RESULT '+passed+' tests passed.');
