@@ -393,9 +393,11 @@ function pnMirrorAll() {
     pnRequireReady_();
     const started=!pnV2Start_; if(started)pnV2Start_=Date.now();
     try {
+      // Sửa mã số dài bị Sheets đổi thành số ở tab chính trước khi so sánh.
+      const longCodes=pnV2RepairLongCodes_();
       const sync=pnV2SyncAll_({});
       const audit=PN_FULL.pairs.map(pnV2Audit_);
-      return {ok:audit.every(a=>a.ok),sync,results:audit};
+      return {ok:audit.every(a=>a.ok),longCodes,sync,results:audit};
     } finally { if(started)pnV2Start_=0; }
   });
 }

@@ -845,4 +845,18 @@ test('Ticked doc edited by hand on Sheet goes to VHFF immediately; unticked rows
  full.getRange(f,10).setValue('sửa ở full');e.c.pnHandleEdit({range:full.getRange(f,10)});
  assert.equal(dest.getRange(find(),cS+1).getValue(),'sửa ở full','edit on full also updates VHFF');
 });
+test('Long PO codes broken into numbers on the main tab are repaired from full, never pushed into full',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const main=e.sheets.get('Chứng từ_FF'),full=e.sheets.get('Chứng từ_full');
+ const f=rowOf(full,4,'1'),m=rowOf(main,4,'1');
+ full.getRange(f,4).setValue('106003302610000380');e.c.pnMirrorAll();
+ assert.equal(main.getRange(m,4).getValue(),'106003302610000380');
+ main.getRange(m,4).setValue(106003302610000000);
+ const r=e.c.pnMirrorAll();
+ assert.equal(full.getRange(f,4).getValue(),'106003302610000380','full keeps the exact code');
+ assert.equal(main.getRange(m,4).getValue(),'106003302610000380','main repaired');
+ assert.equal(r.longCodes.find(x=>x.sheet==='Chứng từ_FF').fixed,1);
+ assert.equal(e.c.pnV2IsCode_('0123456789'),true);assert.equal(e.c.pnV2IsCode_('2959467'),false);assert.equal(e.c.pnV2IsCode_('209003302610000022'),true);
+ auditOk(e);
+});
 console.log('RESULT '+passed+' tests passed.');

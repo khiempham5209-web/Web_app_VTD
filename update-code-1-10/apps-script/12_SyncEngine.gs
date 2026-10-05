@@ -65,7 +65,13 @@ function pnV2Read_(L) {
   return last < 2 ? [] : sh.getRange(2, 1, last - 1, pnV2ReadWidth_(L)).getValues();
 }
 // Giá trị chuẩn hóa để so sánh: ngày dạng text và dạng ngày của Sheets được coi là một.
+function pnV2IsCode_(v) { return typeof v === 'string' && /^(0\d+|\d{12,})$/.test(v.trim()); }
+// Mã số > 15 chữ số: Sheets chỉ giữ 15 chữ số đầu khi ô bị đổi thành số. So sánh theo 15 chữ số đầu + độ dài,
+// để bản bị hỏng ở một bên không bị coi là "sửa mới" và đè sang bên kia.
+function pnV2LongKey_(digits) { return digits.length > 15 ? '#' + digits.slice(0, 15) + ':' + digits.length : digits; }
 function pnV2Canon_(v) {
+  if (typeof v === 'number' && Number.isInteger(v) && Math.abs(v) >= 1e15) return pnV2LongKey_(Math.abs(v).toFixed(0));
+  if (typeof v === 'string' && /^\d{16,}$/.test(v.trim())) return pnV2LongKey_(v.trim());
   if (v instanceof Date) {
     if (isNaN(v)) return '';
     const s = Utilities.formatDate(v, PN_FULL.timezone, 'yyyy-MM-dd HH:mm:ss');
@@ -174,8 +180,9 @@ function pnV2Flush_(sh, updates) {
     cols.forEach(c => { const last = runs[runs.length - 1]; if (last && last.end === c - 1) last.end = c; else runs.push({start: c, end: c}); });
     return {r, vals, runs, sig: JSON.stringify(runs)};
   });
-  // Mã số bắt đầu bằng 0 (vd Mã ecom CT 0123456789): đặt ô thành dạng chữ trước khi ghi để Sheets không cắt số 0.
-  items.forEach(it => Object.keys(it.vals).forEach(c => { const v = it.vals[c]; if (typeof v === 'string' && /^0d+$/.test(v.trim())) sh.getRange(it.r, Number(c) + 1).setNumberFormat('@'); }));
+  // Mã toàn chữ số bắt đầu bằng 0 (Mã ecom CT 0123...) hoặc dài từ 12 số (PO 18 số): đặt ô dạng chữ trước khi ghi,
+  // để Sheets không cắt số 0 / không đổi thành 1,06003E+17 (mất các số cuối).
+  items.forEach(it => Object.keys(it.vals).forEach(c => { if (pnV2IsCode_(it.vals[c])) sh.getRange(it.r, Number(c) + 1).setNumberFormat('@'); }));
   let writes = 0;
   for (let i = 0; i < items.length;) {
     let j = i + 1;
@@ -922,6 +929,40 @@ function pnV2PushVhffRows_(fullRows) {
     return {ok: false, error: String(err && err.message || err)};
   }
 }
+
+/* Sửa các ô mã số dài ở tab chính đã bị Sheets đổi thành số (hiện 1,06003E+17): lấy lại đúng chuỗi từ tab full
+ * (cùng ID), đặt ô dạng chữ. Báo thêm các ô ở tab full cũng đã bị đổi thành số (cần nhập lại tay). */
+function pnV2RepairLongCodes_() {
+  const out = [];
+  for (const p of PN_FULL.pairs) {
+    const L = pnV2EnsureColumns_(p), M = L.M, F = L.F, names = pnV2Names_(M);
+    const fById = new Map(), fullBroken = [];
+    pnV2Read_(F).forEach((r, i) => {
+      const id = pnText_(r[F.id]);
+      if (id) fById.set(id, r);
+      names.forEach(n => { const c = F.cols[n]; if (c != null && typeof r[c] === 'number' && Math.abs(r[c]) >= 1e15) fullBroken.push(p.full + '!' + (i + 2) + ' ' + n); });
+    });
+    let fixed = 0;
+    pnV2Read_(M).forEach((r, i) => {
+      const f = fById.get(pnText_(r[M.id]));
+      if (!f) return;
+      names.forEach(n => {
+        const mc = M.cols[n], fc = F.cols[n];
+        if (mc == null || fc == null) return;
+        const mv = r[mc], fv = f[fc];
+        if (typeof mv === 'number' && pnV2IsCode_(fv)) {
+          const cell = M.sh.getRange(i + 2, mc + 1);
+          cell.setNumberFormat('@'); cell.setValue(String(fv).trim()); fixed++;
+        }
+      });
+    });
+    out.push({sheet: p.main, fixed, fullBroken: fullBroken.slice(0, 50)});
+  }
+  SpreadsheetApp.flush();
+  return out;
+}
+// Chạy tay: sửa mã số dài bị hỏng ở các tab chính.
+function pnRepairLongCodes() { return pnWithLock_(() => pnV2RepairLongCodes_()); }
 
 /* Sửa tay đúng lúc khóa bận: lưu lại đúng tab + dòng đã sửa (mỗi lần một khóa riêng, không ghi đè nhau),
  * và xử lý ngay khi có ai giữ được khóa: lần sửa tiếp theo, lần mở Sheet, hoặc lần app lưu đơn kế tiếp. */
