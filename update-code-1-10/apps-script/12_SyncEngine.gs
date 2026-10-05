@@ -888,11 +888,11 @@ function pnV2HandleRows_(name, r1, r2) {
   const docRows = [];
   let orders = null;
   if (p.main === 'Booking') {
-    const lastBefore = docsFull.getLastRow(), datesBefore = pnV2ColSnap_(docsFull, true, ['Ngày lên đơn']);
     if (side === 'main') { syncBookingRowsToChungTuFF_(r1, r2); bookingSyncUpdateTargetDatesFromBookingRows_(r1, r2); }
     else pnSyncBookingFullRows_(r1, r2);
-    for (let r = lastBefore + 1; r <= docsFull.getLastRow(); r++) docRows.push(r);
-    pnV2ColDiff_(datesBefore, pnV2ColSnap_(docsFull, true, ['Ngày lên đơn'])).forEach(r => docRows.push(r));
+    // Đồng bộ chứng từ của TẤT CẢ các đơn trong các dòng Booking vừa dán/sửa (đơn mới tạo, đơn đã có, đơn đổi ngày),
+    // để một lượt trước bị dừng giữa chừng cũng không làm sót đơn.
+    pnV2DocRowsForOrders_(pnV2BookingOrders_(name, r1, r2)).forEach(r => docRows.push(r));
   }
   else {
     // File đơn: chỉ các đơn (Mã đơn hàng KH) trong các dòng vừa dán/sửa -> điền Mã GHTK cho đúng các chứng từ đó.
@@ -917,6 +917,26 @@ function pnV2HandleRows_(name, r1, r2) {
     });
   }
   return {ok: true, own, docs: docsRes, area: areaRes};
+}
+
+// Các Số đơn hàng (Row Labels) trong các dòng Booking đã cho.
+function pnV2BookingOrders_(name, r1, r2) {
+  const sh = pnSheet_(name), col = bookingSyncHeaderMap_(bookingSyncHeaders_(sh));
+  const c = bookingSyncFirstCol_(col, ['row labels', 'so don hang']), out = new Set();
+  const end = Math.min(r2, sh.getLastRow());
+  if (!c || end < r1) return out;
+  sh.getRange(r1, c, end - r1 + 1, 1).getDisplayValues().forEach(r => { const v = bookingSyncClean_(r[0]); if (v) out.add(v); });
+  return out;
+}
+// Các dòng Chứng từ_full có Số đơn hàng thuộc các đơn đã cho (chỉ đọc 1 cột).
+function pnV2DocRowsForOrders_(orders) {
+  if (!orders || !orders.size) return [];
+  const keys = new Set(Array.from(orders).map(bookingSyncNorm_));
+  const sh = pnSheet_(BOOKING_SYNC_CONFIG.targetSheetName), last = sh.getLastRow(), col = bookingSyncHeaderMap_(bookingSyncHeaders_(sh));
+  const c = bookingSyncFirstCol_(col, ['so don hang', 'row labels', 'od']), rows = [];
+  if (!c || last < 2) return rows;
+  sh.getRange(2, c, last - 1, 1).getDisplayValues().forEach((r, i) => { if (keys.has(bookingSyncNorm_(r[0]))) rows.push(i + 2); });
+  return rows;
 }
 
 /* ---- Xử lý theo đơn (không quét cả lịch sử): chỉ đọc các cột mã cần thiết, chỉ ghi các ô thay đổi. ---- */

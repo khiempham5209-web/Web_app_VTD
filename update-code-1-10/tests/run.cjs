@@ -899,4 +899,38 @@ test('Tháng cells turned into dates by Sheets are read as months and not rewrit
  for(let r=2;r<=F.getLastRow();r++){const v=F.getRange(r,L.month+1).getValue();if(/^d{4}-d{2}$/.test(String(v))){const [y,m]=String(v).split('-');F.getRange(r,L.month+1).setValue(new Date(+y,+m-1,1));}}
  assert.equal(countWrites(()=>e.c.pnMirrorAll()),0,'no rewrites of Tháng');
 });
+test('Re-pasting Booking over rows whose docs exist in full but never reached main syncs them (exact incident)',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ e.run("pnV2HealOrphans_=()=>[];"); // tắt tự vá để kiểm tra riêng đường dán Booking
+ const B=e.sheets.get('Booking'),M=e.sheets.get('Chứng từ_FF'),F=e.sheets.get('Chứng từ_full');
+ const bk=n=>{const r=Array(16).fill('');r[0]='05/10/2026';r[1]=String(n);r[3]='KH';r[4]='PO'+n;r[5]='Addr';r[8]='Circle K';return r;};
+ // Lượt 1 bị dừng giữa chừng: đã tạo chứng từ ở full cho 2 đơn, chưa đồng bộ.
+ const start=B.getLastRow()+1;B.getRange(start,1,2,16).setValues([bk(2959467),bk(2960639)]);
+ e.c.syncBookingRowsToChungTuFF_(start,start+1);
+ assert.ok(rowOf(F,4,'2959467')>0&&!(rowOf(M,4,'2959467')>0));
+ // Dán lại cả 25 đơn một mạch đè từ dòng đó.
+ const all=[bk(2959467),bk(2960639),...Array.from({length:23},(_,i)=>bk(9700+i))];
+ B.getRange(start,1,25,16).setValues(all);e.c.pnHandleEdit({range:B.getRange(start,1,25,16)});
+ const nos=[2959467,2960639,...Array.from({length:23},(_,i)=>9700+i)];
+ assert.deepEqual(nos.filter(n=>!(rowOf(M,4,String(n))>0)),[],'all 25 on main');
+ assert.equal(nos.filter(n=>rowOf(F,4,String(n))>0).length,25,'no duplicates created');
+ assert.equal(F.rows.filter(r=>r&&String(r[4])==='2959467').length,1);
+ auditOk(e);
+});
+test('Clearing or deleting Booking rows then pasting again creates no duplicates and keeps all docs on main',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const B=e.sheets.get('Booking'),BF=e.sheets.get('Booking_full'),M=e.sheets.get('Chứng từ_FF'),F=e.sheets.get('Chứng từ_full');
+ const bk=n=>{const r=Array(16).fill('');r[0]='05/10/2026';r[1]=String(n);r[3]='KH';r[4]='PO'+n;r[5]='Addr';r[8]='Circle K';return r;};
+ const data=Array.from({length:5},(_,i)=>bk(9800+i)),start=B.getLastRow()+1;
+ const paste=()=>{B.getRange(start,1,5,16).setValues(data);e.c.pnHandleEdit({range:B.getRange(start,1,5,16)});};
+ paste();
+ B.getRange(start,1,5,16).clearContent();e.c.pnHandleEdit({range:B.getRange(start,1,5,16)}); // xóa nội dung
+ paste();                                                                                  // dán lại
+ B.rows.splice(start-1,5);                                                                 // xóa hẳn dòng
+ paste();                                                                                  // dán lại lần nữa
+ for(let i=0;i<5;i++){const n=String(9800+i);
+  assert.equal(BF.rows.filter(r=>r&&String(r[1])===n).length,1,'Booking_full no dup '+n);
+  assert.equal(F.rows.filter(r=>r&&String(r[4])===n).length,1,'Chứng từ_full no dup '+n);
+  assert.ok(rowOf(M,4,n)>0,'on main '+n);}
+});
 console.log('RESULT '+passed+' tests passed.');

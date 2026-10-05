@@ -570,18 +570,20 @@ function bookingSyncUpdateTargetDatesFromBookingRows_(startRow, endRow) {
   });
 
   const lastTargetRow = target.getLastRow();
-  if (lastTargetRow < 2) return {ok: true, updated: 0};
-  const targetValues = target.getRange(2, 1, lastTargetRow - 1, target.getLastColumn()).getDisplayValues();
-  const targetDateValues = target.getRange(2, targetDateCol, lastTargetRow - 1, 1).getDisplayValues();
+  if (lastTargetRow < 2 || !Object.keys(dateByOrder).length) return {ok: true, updated: 0};
+  // Chỉ đọc 2 cột (Số đơn hàng, Ngày lên đơn); chỉ ghi đúng ô ngày cần đổi, không ghi lại cả cột.
+  const targetOrders = target.getRange(2, targetOrderCol, lastTargetRow - 1, 1).getDisplayValues();
+  const targetDates = target.getRange(2, targetDateCol, lastTargetRow - 1, 1).getDisplayValues();
+  const up = new Map();
   let updated = 0;
-  targetValues.forEach((row, index) => {
-    const orderNo = bookingSyncClean_(row[targetOrderCol - 1]);
+  targetOrders.forEach((row, index) => {
+    const orderNo = bookingSyncClean_(row[0]);
     const nextDate = dateByOrder[bookingSyncNorm_(orderNo)];
-    if (!nextDate || bookingSyncClean_(row[targetDateCol - 1]) === nextDate) return;
-    targetDateValues[index][0] = nextDate;
+    if (!nextDate || bookingSyncClean_(targetDates[index][0]) === nextDate) return;
+    pnV2Put_(up, index + 2, targetDateCol - 1, nextDate);
     updated++;
   });
-  if (updated) target.getRange(2, targetDateCol, targetDateValues.length, 1).setValues(targetDateValues);
+  if (updated) pnV2Flush_(target, up);
   return {ok: true, updated};
 }
 
