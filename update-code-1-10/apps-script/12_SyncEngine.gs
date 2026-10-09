@@ -873,7 +873,7 @@ function pnV2ComputeRows_(name, rowList) {
 }
 /* Sửa/dán tay trên Booking, File đơn, Chứng từ (chính hoặc full): chỉ xử lý các dòng vừa đổi và những dòng
  * mà script nghiệp vụ đổi theo (đơn chứng từ mới từ Booking, ngày lên đơn, mã GHTK, khu vực). */
-function pnV2HandleRows_(name, r1, r2) {
+function pnV2HandleRows_(name, r1, r2, cols) {
   const p = pnPair_(name), side = name === p.main ? 'main' : 'full', rows = [];
   for (let r = r1; r <= r2; r++) rows.push(r);
   const docs = PN_FULL.pairs[2], docsFull = pnSheet_(docs.full);
@@ -881,6 +881,8 @@ function pnV2HandleRows_(name, r1, r2) {
     const res = pnV2SyncRows_(p, side, rows, true);
     // Dòng đã tích "Đã tạo sv" vừa sửa: đẩy ngay đúng các dòng đó sang VHFF (Chứng từ không đạt YC).
     res.vhff = pnV2PushVhffRows_(side === 'full' ? rows : (res.otherRows || []));
+    // Đã bàn giao CT: điền/xóa/sửa ngày bàn giao, hoặc sửa dòng đã có ngày bàn giao -> cập nhật đích ngay.
+    res.handover = pnV2HandoverIfNeeded_(name, side === 'full' ? rows : (res.otherRows || []), cols);
     return res;
   }
   pnV2ComputeRows_(name, rows);
@@ -1020,6 +1022,31 @@ function pnV2AreaForOrders_(bn, orders) {
   });
   pnV2Flush_(sh, up);
   return changed;
+}
+
+// Chạy một luồng sang file đích; lỗi thì ghi lại và để lượt VHFF sau làm bù, không làm hỏng lần sửa.
+function pnRunTarget_(job, fn) {
+  try { return fn(); }
+  catch (err) {
+    PropertiesService.getScriptProperties().setProperty('PN_VHFF_ERROR', job + ': ' + String(err && err.message || err));
+    pnMarkDirty_();
+    return {ok: false, error: String(err && err.message || err)};
+  }
+}
+// Cột "Ngày bàn giao CT" bị sửa (theo cột của lần sửa), hoặc một trong các dòng full liên quan đang có ngày bàn giao.
+function pnV2HandoverIfNeeded_(name, fullRows, cols) {
+  const header = 'Ngày bàn giao CT';
+  let touched = false;
+  if (cols && cols.c1) {
+    const L = pnV2Layout_(pnSheet_(name), name === PN_FULL.pairs[2].full), c = pnV2Col_(L, [header]);
+    touched = c != null && cols.c1 <= c + 1 && cols.c2 >= c + 1;
+  }
+  if (!touched && fullRows && fullRows.length) {
+    const sh = pnSheet_(PN_FULL.pairs[2].full), F = pnV2Layout_(sh, true), c = pnV2Col_(F, [header]);
+    if (c != null) touched = Array.from(new Set(fullRows)).some(r => r >= 2 && pnText_(sh.getRange(r, c + 1).getValue()));
+  }
+  if (!touched) return {ok: true, skipped: true};
+  return pnRunTarget_('documents', () => syncBanGiaoChungTu());
 }
 
 /* Đẩy ngay sang VHFF (Chứng từ không đạt YC) đúng các dòng Chứng từ_full vừa đổi, CHỈ dòng đã tích "Đã tạo sv"

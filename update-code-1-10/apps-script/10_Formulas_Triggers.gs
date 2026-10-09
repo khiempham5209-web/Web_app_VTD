@@ -88,7 +88,7 @@ function pnStampFullIds_(p) { return 0; }
 function pnHandleEdit(e) {
   if(!e||!e.range)return;
   const sh=e.range.getSheet(),name=sh.getName(),p=pnPair_(name);
-  const watched=['Booking','Booking_full','File đơn','File đơn_full','Chứng từ_FF','Chứng từ_full','DS BC','TT Nhập','DS SKU','Hàng lỗi','Bàn giao chứng từ'];
+  const watched=['Booking','Booking_full','File đơn','File đơn_full','Chứng từ_FF','Chứng từ_full','DS BC','TT Nhập','DS SKU','Hàng lỗi','Bàn giao chứng từ','Hoàn sản phẩm','Sự vụ'];
   if(watched.indexOf(name)<0)return;
   try {
     return pnWithLock_(()=>{
@@ -99,10 +99,13 @@ function pnHandleEdit(e) {
       if(name==='Chứng từ_FF'||name==='Chứng từ_full')bookingSyncRepairControlColumnsForEditedTargetRange_(e.range);
       if(name==='TT Nhập'||name==='DS SKU')onEditSyncTTNhapDSSKU(e);
       if(name==='Hàng lỗi'||name==='DS SKU')onEditSyncHangLoiGHTK(e);
+      // Như logic cũ: sửa Hoàn sản phẩm -> cập nhật Bàn giao SP_Hàng hoàn; sửa Sự vụ -> cập nhật Sự vụ bánh xẹp (file đích).
+      if(name==='Hoàn sản phẩm'&&r2>=2)pnRunTarget_('products',()=>syncBanGiaoSanPham());
+      if(name==='Sự vụ'&&r2>=2)pnRunTarget_('incidents',()=>syncAllSuVuBanhXep_());
       let result=null;
       if(p){
         // Booking / File đơn / Chứng từ (chính hoặc full): chỉ các dòng vừa sửa/dán và dòng script đổi theo.
-        result=pnV2HandleRows_(name,r1,r2);
+        result=pnV2HandleRows_(name,r1,r2,{c1:e.range.getColumn(),c2:e.range.getLastColumn()});
       } else if(name==='DS BC'||name==='TT Nhập'){
         const rows=new Set();if(p)for(let r=r1;r<=r2;r++)rows.add(r);
         result=pnV2SyncAll_(p?{pair:p.main,prefer:{side:name===p.main?'main':'full',rows}}:{});

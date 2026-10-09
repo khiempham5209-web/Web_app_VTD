@@ -24,7 +24,7 @@ class Range{
  getFormula(){return this.sh.formulas.get(this.r+':'+this.c)||'';}
  getDataValidation(){return {kind:'mock'};}
  getRow(){return this.r;}getColumn(){return this.c;}getNumRows(){return this.n;}getNumColumns(){return this.w;}
- getLastRow(){return this.r+this.n-1;} getSheet(){return this.sh;}
+ getLastRow(){return this.r+this.n-1;} getLastColumn(){return this.c+this.w-1;} getSheet(){return this.sh;}
  getA1Notation(){return 'A1';}
  copyTo(to,type){if(type===2){const m=this.sh.fmt?.dv;if(m){const fm=(to.sh.fmt??={}),d=(fm.dv??=new Map());for(let i=0;i<to.n;i++)for(let j=0;j<to.w;j++){const v=m.get((this.r+(i%this.n))+':'+(this.c+j));if(v!=null)d.set((to.r+i)+':'+(to.c+j),v);}}}return this;}
  createFilter(){const range=this,filter={getRange:()=>range,getColumnFilterCriteria:()=>null,setColumnFilterCriteria(){return this;},remove(){range.sh.filter=null;}};this.sh.filter=filter;return filter;}
@@ -932,5 +932,22 @@ test('Clearing or deleting Booking rows then pasting again creates no duplicates
   assert.equal(BF.rows.filter(r=>r&&String(r[1])===n).length,1,'Booking_full no dup '+n);
   assert.equal(F.rows.filter(r=>r&&String(r[4])===n).length,1,'Chứng từ_full no dup '+n);
   assert.ok(rowOf(M,4,n)>0,'on main '+n);}
+});
+test('Filling / clearing Ngày bàn giao CT on main or full updates Đã bàn giao CT immediately; Hoàn sản phẩm edits update Bàn giao SP',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const M=e.sheets.get('Chứng từ_FF'),F=e.sheets.get('Chứng từ_full'),dest=e.targets.get('Đã bàn giao CT');
+ const has=n=>dest.rows.some((r,i)=>i>0&&r&&String(r[4])===String(n));
+ const m=rowOf(M,4,'1');M.getRange(m,8).setValue(new Date(2026,9,8));e.c.pnHandleEdit({range:M.getRange(m,8)});
+ assert.ok(has(1),'main date -> target at once');
+ M.getRange(m,9).setValue(true);M.getRange(m,11).setValue('note mới');e.c.pnHandleEdit({range:M.getRange(m,11)});
+ assert.equal(dest.rows.find((r,i)=>i>0&&r&&String(r[4])==='1')[8],'note mới','edit of a handed-over row updates target');
+ M.getRange(m,8).setValue('');e.c.pnHandleEdit({range:M.getRange(m,8)});
+ assert.ok(!has(1),'cleared date -> removed from target');
+ const f2=rowOf(F,4,'2');F.getRange(f2,8).setValue(new Date(2026,9,8));e.c.pnHandleEdit({range:F.getRange(f2,8)});
+ assert.ok(has(2),'full date -> target at once');
+ const H=e.sheets.get('Hoàn sản phẩm'),h=headers['Hoàn sản phẩm'],r=Array(h.length).fill('');
+ r[h.indexOf('Mã đơn')]='G1';r[h.indexOf('Số đơn hàng')]='1';r[h.indexOf('Mã vật tư')]='SKU9';r[h.indexOf('Tên sản phẩm')]='P9';
+ H.rows.push(r);e.c.pnHandleEdit({range:H.getRange(H.getLastRow(),1,1,h.length)});
+ const sp=e.targets.get('Bàn giao SP_Hàng hoàn');assert.ok(sp.rows.some(x=>x&&x.includes('SKU9')),'product handover updated');
 });
 console.log('RESULT '+passed+' tests passed.');
