@@ -1403,9 +1403,22 @@
       }
     }
   </style>
+<style>
+.vtd-marquee{position:relative;overflow:hidden;white-space:nowrap;border-radius:999px;background:rgba(15,23,42,.78);color:#fff;font-size:13px;line-height:28px;height:28px;box-shadow:0 6px 18px rgba(15,23,42,.18);z-index:40;pointer-events:none}
+.vtd-marquee.hidden{display:none}
+.vtd-marquee>span{display:inline-block;padding-left:100%;animation:vtdMarquee var(--marquee-speed,18s) linear infinite}
+@keyframes vtdMarquee{from{transform:translateX(0)}to{transform:translateX(-100%)}}
+#marqueeLogin{position:fixed;top:10px;left:12px;right:12px}
+#marqueeApp{position:sticky;top:0;margin:6px 12px 0}
+.help-page h2{margin-top:0}.help-page h3{margin:14px 0 6px;font-size:15px}.help-page ol,.help-page ul{margin:6px 0 6px 18px;padding:0}.help-page li{margin:3px 0}
+.help-page table{width:100%;border-collapse:collapse;font-size:13px}.help-page th,.help-page td{border:1px solid var(--line);padding:6px;text-align:left;vertical-align:top}
+.help-toc{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}.help-toc button{min-height:30px;padding:0 10px;font-size:13px}
+.top-help{min-height:32px;min-width:32px;padding:0 8px;border-radius:999px;font-weight:700}
+</style>
 <style>.sku-empty{border:2px solid #dc2626!important}.pn-field-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:start;margin-bottom:12px}.pn-field-pair>*{min-width:0}.pn-field-pair input,.pn-field-pair select{width:100%;min-width:0}</style></head>
 <body class="vtd-flat">
   <div id="login" class="login-page">
+    <div id="marqueeLogin" class="vtd-marquee hidden" aria-hidden="true"><span></span></div>
     <section class="login-card">
       <div class="login-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5"></path><path d="M9 14l2 2 4-5"></path></svg></div>
       <h1>Chứng từ FF</h1>
@@ -1431,8 +1444,9 @@
     <main class="main">
       <header class="top">
         <h1 id="title">Trang chủ</h1>
-        <div class="top-actions"><button id="homeRefreshBtn" class="top-refresh" type="button" title="Tải lại dữ liệu trang chủ" aria-label="Tải lại dữ liệu trang chủ" onclick="retryDashboard()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 4v6h-6"></path></svg></button><div class="user"><span id="topAccount">Tài khoản</span><button style="min-height:32px;padding:0 8px" onclick="logout()">Đăng xuất</button></div></div>
+        <div class="top-actions"><button class="top-help" type="button" title="Hướng dẫn sử dụng" aria-label="Hướng dẫn sử dụng" onclick="setView('help')">?</button><button id="homeRefreshBtn" class="top-refresh" type="button" title="Tải lại dữ liệu trang chủ" aria-label="Tải lại dữ liệu trang chủ" onclick="retryDashboard()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 4v6h-6"></path></svg></button><div class="user"><span id="topAccount">Tài khoản</span><button style="min-height:32px;padding:0 8px" onclick="logout()">Đăng xuất</button></div></div>
       </header>
+      <div id="marqueeApp" class="vtd-marquee hidden" aria-hidden="true"><span></span></div>
       <div class="content" id="view"></div>
     </main>
     <nav class="mobile-tabs" id="tabs"></nav>
@@ -1608,7 +1622,10 @@
         cardRadius: 14,
         cardWidth: 100,
         cardTop: 72,
-        cardBlur: 0
+        cardBlur: 0,
+        marqueeEnabled: true,
+        marqueeText: "Khieemph3: ứng dụng được nghiên cứu, phát triển bởi người không chuyên IT, vui lòng liên hệ nếu chưa hiểu logic",
+        marqueeSpeed: 18
       },
       appAppearance: {
         global: {
@@ -1918,7 +1935,7 @@
       const allowed = allowedScreens();
       const navScreens = desktopMode ? allowed.filter(s => s[0] !== "admin") : allowed;
       const tabScreens = mobileScreens();
-      if (!allowed.some(s => s[0] === view)) view = (appConfig.personal && appConfig.personal.defaultScreen) || "home";
+      if (view !== "help" && !allowed.some(s => s[0] === view)) view = (appConfig.personal && appConfig.personal.defaultScreen) || "home";
       el("nav").innerHTML = navScreens.map(s => `<button class="${view===s[0]?'active':''}" onclick="setView('${s[0]}')">${s[1] ? `<span>${s[1]}</span>` : ""}${s[2]}</button>`).join("");
       el("tabs").style.setProperty("--tab-count", Math.max(tabScreens.length, 1));
       el("tabs").innerHTML = tabScreens.map(s => `<button class="${view===s[0]?'active':''}" onclick="setView('${s[0]}')">${s[1] ? `<span>${s[1]}</span>` : ""}<small>${s[2]}</small></button>`).join("");
@@ -1936,6 +1953,115 @@
       if (topAccount) topAccount.textContent = `${accountEmail} · ${accountRole}`;
       const refreshBtn = el("homeRefreshBtn");
       if (refreshBtn) refreshBtn.classList.toggle("show", view === "home");
+      if (view === "help") el("title").textContent = "Hướng dẫn sử dụng";
+      applyMarquee();
+    }
+    // Dòng chữ chạy: nội dung, bật/tắt, tốc độ lấy từ Giao diện đăng nhập (đẩy theme hệ thống là mọi máy nhận).
+    function applyMarquee(){
+      const cfg = loginAppearanceConfig();
+      const text = String(cfg.marqueeText || "").trim();
+      const on = cfg.marqueeEnabled !== false && !!text;
+      const speed = Math.max(6, Math.min(60, Number(cfg.marqueeSpeed) || 18));
+      ["marqueeLogin", "marqueeApp"].forEach(id => {
+        const box = el(id);
+        if (!box) return;
+        box.classList.toggle("hidden", !on);
+        const span = box.querySelector("span");
+        if (span && span.textContent !== text) span.textContent = text;
+        box.style.setProperty("--marquee-speed", speed + "s");
+      });
+    }
+    function setMarqueeValue(key, value){
+      const cfg = loginAppearanceConfig();
+      cfg[key] = key === "marqueeSpeed" ? Number(value) : value;
+      saveAppConfig(false);
+      applyMarquee();
+      const out = el("marqueeSpeedOut");
+      if (out && key === "marqueeSpeed") out.textContent = value + " giây/vòng";
+    }
+    function helpView(){
+      el("view").className = "content";
+      const go = id => `<button type="button" onclick="document.getElementById('${id}').scrollIntoView({behavior:'smooth'})">`;
+      el("view").innerHTML = `<section class="section help-page">
+        <h2>Hướng dẫn sử dụng app Chứng từ FF</h2>
+        <div class="help-toc">${go("h-start")}Bắt đầu</button>${go("h-home")}Trang chủ</button>${go("h-vtd")}Nhập VTD</button>${go("h-th")}Nhập TH</button>${go("h-pn")}Thao tác CT (PN)</button>${go("h-search")}Tìm kiếm</button>${go("h-store")}Thông tin ST</button>${go("h-queue")}Đơn lỗi / chưa gửi</button>${go("h-faq")}Hỏi đáp</button></div>
+
+        <h3 id="h-start">1. Bắt đầu</h3>
+        <ol>
+          <li><b>Đăng nhập</b> bằng email và Pass được cấp. Quên Pass: bấm <b>Quên Pass</b>, admin sẽ cấp lại.</li>
+          <li><b>Cập nhật app</b>: vào <b>Cài đặt → Cập nhật app</b>. Có bản mới thì bấm <b>Tải và cài bản mới</b>.</li>
+          <li><b>Quét mã</b>: ô nào có biểu tượng quét thì bấm để dùng camera, hoặc gõ tay.</li>
+          <li><b>Quan trọng</b>: bấm <b>OK</b> là đơn đã được <b>lưu vào máy</b>. App tự gửi lên hệ thống, mất mạng cũng không mất đơn. Không cần chờ, nhập tiếp đơn khác được.</li>
+        </ol>
+
+        <h3 id="h-home">2. Trang chủ</h3>
+        <ul>
+          <li>Tổng đơn nhập trong ngày theo SLOG (O1B1, O1B3, O1BH, Ecom), TH Truemilk, Chứng từ PN.</li>
+          <li><b>Trạng thái</b>: Đã đồng bộ / Đang đồng bộ / Lỗi. Có <b>Lỗi</b> thì xem mục 8.</li>
+          <li>Danh sách chi tiết đơn trong ngày của VTD, TH, Phạm Nguyên. Bấm nút tải lại ở góc trên để cập nhật số liệu.</li>
+        </ul>
+
+        <h3 id="h-vtd">3. Nhập thông tin (VTD)</h3>
+        <ol>
+          <li>Quét/nhập <b>Mã đơn GHTK</b>. App tự hiện khách hàng, OD, PO, số HĐ nếu có. Không có vẫn nhập được (mã phát sinh).</li>
+          <li>Chọn <b>Slog</b>, rồi <b>Loại hoàn</b> (danh sách đổi theo Slog).</li>
+          <li><b>Chứng từ</b>: chọn Xác thực chứng từ, kiểm tra Mã PO, chọn Tình trạng. Tình trạng khác "Bình thường" thì ghi rõ ở ô Thông tin chứng từ. Chụp/chọn <b>ảnh chứng từ</b>.</li>
+          <li><b>Sản phẩm / Thu hồi</b>: chọn tên sản phẩm (hoặc quét mã vật tư), Type, Tình trạng, Số lượng. Sữa: thêm Mã lô/HSD, serial. Chụp ít nhất 1 <b>ảnh sản phẩm</b>, bấm <b>Thêm sản phẩm</b>. Nhiều SKU thì lặp lại.</li>
+          <li>Bấm <b>OK</b>. Ô viền đỏ là còn thiếu thông tin bắt buộc.</li>
+        </ol>
+
+        <h3 id="h-th">4. Nhập TH (Truemilk)</h3>
+        <ol>
+          <li>Quét/nhập <b>Mã đơn</b>.</li>
+          <li>Chọn <b>Tên sản phẩm</b>. Không có trong danh sách: nhập SUB SKU, Tên SKU, Đơn vị rồi bấm <b>Lưu SKU mới</b>.</li>
+          <li>Nhập <b>Số lượng</b>, <b>Tình trạng</b>, ghi chú, chụp <b>ảnh SKU</b>, bấm <b>Thêm SKU</b>. Nhiều SKU thì lặp lại.</li>
+          <li>Bấm <b>OK</b>.</li>
+        </ol>
+
+        <h3 id="h-pn">5. Thao tác CT (Phạm Nguyên)</h3>
+        <ol>
+          <li>Quét/nhập <b>Mã đơn</b> (Số đơn hàng / Mã đơn GHTK / PO). Phải hiện thông tin đơn thì mới lưu được. Không thấy đơn: đơn chưa có trên hệ thống, báo người quản lý.</li>
+          <li>Chọn <b>Loại hoàn</b>: Chứng từ / Sản phẩm / Sản phẩm + chứng từ.</li>
+          <li><b>Chứng từ</b>: chọn Xác thực hóa đơn (Đã nhận / Chưa nhận), Trạng thái (Bình thường / Sai, thiếu chứng từ), quét hoặc nhập <b>Mã ecom CT</b> (app tự lấy 10 số cuối), ghi chú nếu có, chụp <b>ít nhất 1 ảnh chứng từ</b>.</li>
+          <li><b>Sản phẩm</b>: chọn tên sản phẩm hoặc quét Barcode/Mã vật tư, chọn <b>Phân loại</b> (Hoàn trả / Hàng thu hồi), Tình trạng, ghi chú, Hạn sử dụng (nếu có), kiểm tra <b>Kích thước + Khối lượng</b> (sai thì sửa lại, app tự tính CBM), chụp <b>ít nhất 1 ảnh</b> cho mỗi SKU, bấm <b>Thêm SKU</b>.</li>
+          <li>Bấm <b>OK</b>.</li>
+        </ol>
+
+        <h3 id="h-search">6. Tìm kiếm</h3>
+        <ul>
+          <li>Nhập/quét từ khóa (mã đơn, serial, PO, số HĐ, OD), có thể lọc SLOG, Loại hoàn, Từ ngày, Đến ngày, bấm <b>Tìm</b>.</li>
+          <li>Bấm vào đơn để xem chi tiết, sửa thông tin nếu được phép.</li>
+        </ul>
+
+        <h3 id="h-store">7. Thông tin ST</h3>
+        <ul><li>Xem biểu đồ, bảng số liệu theo siêu thị, theo ngày/tháng. Bấm vào cột/ngày để xem chi tiết.</li></ul>
+
+        <h3 id="h-queue">8. Đơn lỗi / đơn chưa gửi được</h3>
+        <p>Đơn đã bấm OK nằm trong <b>hàng chờ</b> trên máy cho tới khi gửi xong. Xem ở <b>Cài đặt → Queue đang chờ</b> (nếu tài khoản có quyền) hoặc biểu tượng trạng thái trên form nhập.</p>
+        <table><thead><tr><th>Trạng thái</th><th>Nghĩa</th><th>Cần làm</th></tr></thead><tbody>
+          <tr><td>pending</td><td>Đã lưu trên máy, chờ gửi</td><td>Không cần làm gì</td></tr>
+          <tr><td>syncing</td><td>Đang gửi</td><td>Chờ. Treo quá lâu: bấm <b>Mở khóa đơn treo</b></td></tr>
+          <tr><td>error</td><td>Gửi bị lỗi</td><td>Đọc lỗi ở cột Bước/Lỗi, làm theo bảng dưới rồi bấm <b>Chạy lại sync</b></td></tr>
+        </tbody></table>
+        <table style="margin-top:8px"><thead><tr><th>Lỗi hiện ra</th><th>Cách xử lý</th></tr></thead><tbody>
+          <tr><td>Mất mạng / phản hồi quá lâu / mất phản hồi</td><td>Kiểm tra mạng. App tự gửi lại; vẫn lỗi thì bấm <b>Chạy lại sync</b>.</td></tr>
+          <tr><td>Hệ thống đang bận / đơn đang được lưu ở lần gửi trước</td><td>Không cần làm gì, app tự gửi lại.</td></tr>
+          <tr><td>Không tìm thấy đơn</td><td>Đơn chưa có trên hệ thống. Báo người quản lý bổ sung, sau đó bấm <b>Chạy lại sync</b>.</td></tr>
+          <tr><td>Mã khớp nhiều đơn</td><td>Nhập lại bằng <b>Số đơn hàng</b> (không dùng PO).</td></tr>
+          <tr><td>clientId đã dùng cho nội dung khác</td><td>Báo admin, không tự nhập lại đơn này.</td></tr>
+          <tr><td>Bộ nhớ ảnh offline trên máy đã đầy</td><td>Bấm <b>OK</b> lại (app đã dọn ảnh cũ). Vẫn lỗi: báo admin.</td></tr>
+          <tr><td>Đang nhận ảnh, vui lòng đợi</td><td>Chờ ảnh hiện đủ rồi mới bấm OK.</td></tr>
+        </tbody></table>
+        <p><b>Lưu ý:</b> không xóa app, không xóa dữ liệu app khi còn đơn chưa gửi (sẽ mất đơn trong hàng chờ). Không tự nhập lại đơn đang lỗi; admin có thể yêu cầu máy bạn gửi lại từ xa.</p>
+
+        <h3 id="h-faq">9. Hỏi đáp nhanh</h3>
+        <ul>
+          <li><b>Bấm OK rồi có cần chờ không?</b> Không. Đơn đã lưu trên máy, app tự gửi.</li>
+          <li><b>Trang chủ chưa thấy đơn vừa nhập?</b> Đơn đang được gửi; bấm nút tải lại sau ít phút.</li>
+          <li><b>Chụp nhầm ảnh?</b> Xóa ảnh ở phần xem trước rồi chụp lại trước khi bấm OK.</li>
+          <li><b>Chưa hiểu logic?</b> Liên hệ người phụ trách app.</li>
+        </ul>
+      </section>`;
     }
     function resetSearchState(){
       searchRan = false;
@@ -2021,7 +2147,7 @@
       try {
         applyPersonalSettings();
         shell();
-        const staticViews = {home, search, input, returnth, store, settings, admin};
+        const staticViews = {home, search, input, returnth, store, settings, admin, help: helpView};
         if (typeof window.docops === "function") staticViews.docops = window.docops;
         (view.startsWith("dyn_") ? dynamicView : (staticViews[view] || home))();
         if (typeof applyAppAppearance === "function") applyAppAppearance();
@@ -3156,6 +3282,10 @@
             <h2>Nền đăng nhập</h2>
             <label>Màu nền<input id="loginBgColor" type="color" value="${html(cfg.bgColor || "#e9f3fb")}" oninput="setLoginBgColor(this.value)"></label>
             <label>Độ phủ ảnh nền <output id="bgDimOut">${html(cfg.bgDim || 16)}%</output><input type="range" min="0" max="70" step="1" value="${html(cfg.bgDim || 16)}" oninput="setLoginAppearanceValue('bgDim', this.value)"></label>
+            <h2>Dòng chữ chạy</h2>
+            <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" ${cfg.marqueeEnabled !== false ? "checked" : ""} onchange="setMarqueeValue('marqueeEnabled', this.checked)" style="width:auto">Hiện dòng chữ chạy (màn đăng nhập + trên mọi màn)</label>
+            <label>Nội dung<textarea rows="2" oninput="setMarqueeValue('marqueeText', this.value)">${html(cfg.marqueeText || "")}</textarea></label>
+            <label>Tốc độ <output id="marqueeSpeedOut">${html(cfg.marqueeSpeed || 18)} giây/vòng</output><input type="range" min="6" max="60" step="1" value="${html(cfg.marqueeSpeed || 18)}" oninput="setMarqueeValue('marqueeSpeed', this.value)"></label>
             <label>Link ảnh nền Drive<input id="loginBgDriveUrl" type="url" value="${html(cfg.imageUrl || "")}" placeholder="https://drive.google.com/file/d/.../view" onchange="setLoginBgDriveUrl(this.value)"></label>
             <div class="file-actions"><button type="button" onclick="clearLoginBgImage()">Xóa ảnh nền</button></div>
             <div class="muted">Trạng thái ảnh: ${cfg.hasImage ? "Đã có link ảnh nền" : "Chưa có ảnh nền"}. Mỗi máy tải ảnh sau khi đăng nhập và lưu vào bộ nhớ riêng.</div>
@@ -3675,7 +3805,7 @@
           <div class="stat-line"><span class="muted">Số đơn đã thao tác</span><strong>${statsText}</strong></div>
           <div class="slog-line">${slogText}</div>
         </div>
-        <div class="account-actions"><button onclick="changePass()">Thay đổi Pass</button><button onclick="logout()">Đăng xuất</button></div>
+        <div class="account-actions"><button onclick="changePass()">Thay đổi Pass</button><button onclick="setView('help')">Hướng dẫn sử dụng</button><button onclick="logout()">Đăng xuất</button></div>
       </section>`;
       const updateCfg = appUpdateConfig();
       const updateAvailable = hasNewAppVersion();
@@ -4588,7 +4718,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.18";
+    const APP_VERSION = "5.9.19";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -8549,8 +8679,10 @@
           saveThemeAssetMeta(meta);
           return {changed:true, dataUrl:remote.dataUrl};
         } catch (err) {
-          console.warn("Theme asset download failed", err);
-          return {changed:false, dataUrl:""};
+          // APK mở giao diện từ file trong máy nên Drive chặn đọc dữ liệu ảnh; trình duyệt vẫn hiển thị ảnh
+          // trực tiếp từ link được -> dùng thẳng link (không lưu offline).
+          console.warn("Theme asset download failed, dùng link trực tiếp", err);
+          return {changed:true, dataUrl:remoteUrl};
         }
       }
       if (!version) return {changed:false, dataUrl:""};
@@ -8580,6 +8712,7 @@
       const assets = themeConfig.assets || {};
       if (assets.login) {
         const result = await applyThemeAssetIfChanged("login", "login", assets.login, writeStoredLoginBgImage, deleteStoredLoginBgImage);
+        if (result.changed && /^https:/i.test(result.dataUrl || "")) { loginBgImageCache = result.dataUrl; loginBgImageLoaded = true; }
         if (result.changed) {
           loginBgImageCache = result.dataUrl || "";
           loginBgImageLoaded = true;
@@ -8709,6 +8842,7 @@
     }
     function initLoginAppearance(){
       applyLoginAppearance(loginBgImageCache);
+      applyMarquee();
       if (!loginBgImageLoaded) {
         loginBgImageLoaded = true;
         readStoredLoginBgImage().then(image => {
