@@ -1409,11 +1409,10 @@
 .vtd-marquee.hidden{display:none}
 .vtd-marquee>span{display:inline-block;padding-left:100%;animation:vtdMarquee var(--marquee-speed,18s) linear infinite}
 @keyframes vtdMarquee{from{transform:translateX(0)}to{transform:translateX(-100%)}}
-#marqueeLogin{position:fixed;top:10px;left:12px;right:12px}
-#marqueeLogin.pos-bottom{top:auto;bottom:12px}
-#marqueeApp{position:sticky;top:0;margin:6px 12px 0}
-#marqueeApp.pos-bottom{position:fixed;top:auto;margin:0;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 74px)}
-html.desktop #marqueeApp.pos-bottom{left:auto;right:16px;bottom:16px;width:min(720px,calc(100vw - 300px))}
+#marqueeLogin,#marqueeApp{position:fixed;left:12px;right:12px;margin:0;z-index:1000}
+html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px))}
+.hp-settings-row{display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:12px 16px;border:0;background:transparent;text-align:left;border-radius:inherit;cursor:pointer}
+.hp-settings-icon{font-size:26px}.hp-settings-text{display:grid;gap:2px;flex:1}.hp-settings-text b{font-size:15px}.hp-settings-text small{color:var(--muted);font-size:12.5px}.hp-settings-arrow{font-size:22px;color:var(--muted)}
 .top-help{min-height:32px;min-width:32px;padding:0 8px;border-radius:999px;font-weight:700}
 .top-help.hidden{display:none}
 /* ---- Hướng dẫn sử dụng ---- */
@@ -1505,7 +1504,7 @@ html.desktop #marqueeApp.pos-bottom{left:auto;right:16px;bottom:16px;width:min(7
     <main class="main">
       <header class="top">
         <h1 id="title">Trang chủ</h1>
-        <div class="top-actions"><button id="topHelpBtn" class="top-help" type="button" title="Hướng dẫn sử dụng" aria-label="Hướng dẫn sử dụng" onclick="setView('help')">?</button><button id="homeRefreshBtn" class="top-refresh" type="button" title="Tải lại dữ liệu trang chủ" aria-label="Tải lại dữ liệu trang chủ" onclick="retryDashboard()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 4v6h-6"></path></svg></button><div class="user"><span id="topAccount">Tài khoản</span><button style="min-height:32px;padding:0 8px" onclick="logout()">Đăng xuất</button></div></div>
+        <div class="top-actions"><button id="homeRefreshBtn" class="top-refresh" type="button" title="Tải lại dữ liệu trang chủ" aria-label="Tải lại dữ liệu trang chủ" onclick="retryDashboard()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 4v6h-6"></path></svg></button><div class="user"><span id="topAccount">Tài khoản</span><button style="min-height:32px;padding:0 8px" onclick="logout()">Đăng xuất</button></div></div>
       </header>
       <div id="marqueeApp" class="vtd-marquee hidden" aria-hidden="true"><span></span></div>
       <div class="content" id="view"></div>
@@ -2018,27 +2017,47 @@ html.desktop #marqueeApp.pos-bottom{left:auto;right:16px;bottom:16px;width:min(7
       applyMarquee();
     }
     // ===== Dòng chữ chạy + Hướng dẫn: cấu hình của chủ app (lưu trong theme hệ thống, mọi máy nhận) =====
-    var MARQUEE_DEFAULTS = {marqueeEnabled:true, marqueeText:"Khieemph3: ứng dụng được nghiên cứu, phát triển bởi người không chuyên IT, vui lòng liên hệ nếu chưa hiểu logic", marqueeSpeed:18, marqueeBg:true, marqueeBgColor:"#0f172a", marqueeBgOpacity:78, marqueeColor:"#ffffff", marqueeFontSize:13, marqueeBold:false, marqueeWhere:"both", marqueePosition:"top", helpEnabled:true};
+    var MARQUEE_DEFAULTS = {marqueeEnabled:true, marqueeText:"Khieemph3: ứng dụng được nghiên cứu, phát triển bởi người không chuyên IT, vui lòng liên hệ nếu chưa hiểu logic", marqueeSpeed:18, marqueeBg:true, marqueeBgColor:"#0f172a", marqueeBgOpacity:78, marqueeColor:"#ffffff", marqueeFontSize:13, marqueeBold:false, marqueeWhere:"both", marqueePosition:"top", marqueeMode:"continuous", marqueeEvery:10, marqueeShowSeconds:20, helpEnabled:true};
+    // Trạng thái chạy trên máy này: đang hiện hay ẩn, vị trí hiện tại, hẹn giờ.
+    var mqState = {sig:"", visible:false, pos:"top", randomTop:30, timers:[]};
     function marqueeConfig(){
       const cfg = loginAppearanceConfig();
       Object.keys(MARQUEE_DEFAULTS).forEach(k => { if (cfg[k] === undefined || cfg[k] === null || cfg[k] === "") cfg[k] = MARQUEE_DEFAULTS[k]; });
       return cfg;
     }
     function helpEnabled(){ return marqueeConfig().helpEnabled !== false; }
-    function applyMarquee(){
+    function mqPickPosition(cfg){
+      mqState.pos = cfg.marqueePosition || "top";
+      if (mqState.pos === "random") mqState.randomTop = 12 + Math.round(Math.random() * 70);
+    }
+    // Lịch chạy: liên tục, hoặc cứ N phút hiện một lần, mỗi lần M giây.
+    function mqSchedule(cfg, on){
+      mqState.timers.forEach(t => { clearTimeout(t); clearInterval(t); });
+      mqState.timers = [];
+      if (!on) { mqState.visible = false; return; }
+      if (cfg.marqueeMode !== "periodic") { mqState.visible = true; mqPickPosition(cfg); return; }
+      const every = Math.max(1, Number(cfg.marqueeEvery) || 10) * 60000;
+      const showMs = Math.max(3, Number(cfg.marqueeShowSeconds) || 20) * 1000;
+      const showOnce = () => {
+        mqPickPosition(marqueeConfig());
+        mqState.visible = true; mqRender();
+        mqState.timers.push(setTimeout(() => { mqState.visible = false; mqRender(); }, showMs));
+      };
+      showOnce();
+      mqState.timers.push(setInterval(showOnce, every));
+    }
+    function mqRender(){
       const cfg = marqueeConfig();
       const text = String(cfg.marqueeText || "").trim();
-      const on = cfg.marqueeEnabled !== false && !!text;
       const speed = Math.max(6, Math.min(60, Number(cfg.marqueeSpeed) || 18));
-      const size = Math.max(10, Math.min(24, Number(cfg.marqueeFontSize) || 13));
+      const size = Math.max(10, Math.min(28, Number(cfg.marqueeFontSize) || 13));
       const rgb = hexToRgb(cfg.marqueeBgColor || "#0f172a"), alpha = Math.max(0, Math.min(100, Number(cfg.marqueeBgOpacity))) / 100;
       const where = cfg.marqueeWhere || "both";
-      [["marqueeLogin", where !== "app"], ["marqueeApp", where !== "login"]].forEach(([id, allowed]) => {
+      [["marqueeLogin", where !== "app", true], ["marqueeApp", where !== "login", false]].forEach(([id, allowed, isLogin]) => {
         const box = el(id);
         if (!box) return;
-        box.classList.toggle("hidden", !(on && allowed));
+        box.classList.toggle("hidden", !(mqState.visible && allowed && !!text));
         box.classList.toggle("no-bg", cfg.marqueeBg === false);
-        box.classList.toggle("pos-bottom", cfg.marqueePosition === "bottom");
         const span = box.querySelector("span");
         if (span && span.textContent !== text) span.textContent = text;
         box.style.setProperty("--marquee-speed", speed + "s");
@@ -2046,18 +2065,33 @@ html.desktop #marqueeApp.pos-bottom{left:auto;right:16px;bottom:16px;width:min(7
         box.style.setProperty("--mq-color", cfg.marqueeColor || "#ffffff");
         box.style.setProperty("--mq-weight", cfg.marqueeBold ? "700" : "500");
         box.style.setProperty("--mq-bg", `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${isFinite(alpha) ? alpha : .78})`);
+        // Nổi đè lên màn hình, không chiếm chỗ: trên / giữa / dưới / ngẫu nhiên.
+        const pos = mqState.pos;
+        box.style.top = pos === "top" ? (isLogin ? "10px" : "calc(env(safe-area-inset-top,0px) + 60px)") : pos === "middle" ? "46%" : pos === "random" ? mqState.randomTop + "%" : "auto";
+        box.style.bottom = pos === "bottom" ? (isLogin ? "12px" : "calc(env(safe-area-inset-bottom,0px) + 80px)") : "auto";
+        if (span && !span.dataset.mqBound) {
+          span.dataset.mqBound = "1";
+          // Chạy liên tục + vị trí ngẫu nhiên: mỗi vòng chữ đổi chỗ một lần.
+          span.addEventListener("animationiteration", () => { const c = marqueeConfig(); if (c.marqueePosition === "random" && c.marqueeMode !== "periodic") { mqPickPosition(c); mqRender(); } });
+        }
       });
-      const helpBtn = el("topHelpBtn");
-      if (helpBtn) helpBtn.classList.toggle("hidden", !helpEnabled());
+    }
+    function applyMarquee(){
+      const cfg = marqueeConfig();
+      const on = cfg.marqueeEnabled !== false && !!String(cfg.marqueeText || "").trim();
+      const sig = JSON.stringify([on, cfg.marqueeMode, cfg.marqueeEvery, cfg.marqueeShowSeconds, cfg.marqueePosition]);
+      if (sig !== mqState.sig) { mqState.sig = sig; mqSchedule(cfg, on); }
+      mqRender();
     }
     function setMarqueeValue(key, value){
       const cfg = marqueeConfig();
-      const numeric = ["marqueeSpeed", "marqueeFontSize", "marqueeBgOpacity"];
+      const numeric = ["marqueeSpeed", "marqueeFontSize", "marqueeBgOpacity", "marqueeEvery", "marqueeShowSeconds"];
       cfg[key] = numeric.includes(key) ? Number(value) : value;
       saveAppConfig(false);
       applyMarquee();
       const out = el("mqOut_" + key);
       if (out) out.textContent = key === "marqueeSpeed" ? value + " giây/vòng" : key === "marqueeFontSize" ? value + " px" : value + "%";
+      if (key === "marqueeMode") { const box = el("mqPeriodic"); if (box) box.style.display = value === "periodic" ? "" : "none"; }
     }
     function marqueeOwnerPanel(){
       const c = marqueeConfig();
@@ -2071,25 +2105,34 @@ html.desktop #marqueeApp.pos-bottom{left:auto;right:16px;bottom:16px;width:min(7
           <label class="mq-check"><input type="checkbox" ${c.marqueeBold ? "checked" : ""} onchange="setMarqueeValue('marqueeBold', this.checked)">Chữ đậm</label>
         </div>
         <label style="margin-top:10px">Nội dung<textarea rows="2" oninput="setMarqueeValue('marqueeText', this.value)">${html(c.marqueeText || "")}</textarea></label>
-        <div class="mq-grid" style="margin-top:10px">
+        <h3 style="margin:14px 0 6px">Kiểu chữ</h3>
+        <div class="mq-grid">
           <label>Màu chữ<input type="color" value="${html(c.marqueeColor)}" oninput="setMarqueeValue('marqueeColor', this.value)"></label>
           <label>Màu nền<input type="color" value="${html(c.marqueeBgColor)}" oninput="setMarqueeValue('marqueeBgColor', this.value)"></label>
           <label>Độ đậm nền <output id="mqOut_marqueeBgOpacity">${html(c.marqueeBgOpacity)}%</output><input type="range" min="0" max="100" step="1" value="${html(c.marqueeBgOpacity)}" oninput="setMarqueeValue('marqueeBgOpacity', this.value)"></label>
-          <label>Cỡ chữ <output id="mqOut_marqueeFontSize">${html(c.marqueeFontSize)} px</output><input type="range" min="10" max="24" step="1" value="${html(c.marqueeFontSize)}" oninput="setMarqueeValue('marqueeFontSize', this.value)"></label>
-          <label>Tốc độ <output id="mqOut_marqueeSpeed">${html(c.marqueeSpeed)} giây/vòng</output><input type="range" min="6" max="60" step="1" value="${html(c.marqueeSpeed)}" oninput="setMarqueeValue('marqueeSpeed', this.value)"></label>
+          <label>Cỡ chữ <output id="mqOut_marqueeFontSize">${html(c.marqueeFontSize)} px</output><input type="range" min="10" max="28" step="1" value="${html(c.marqueeFontSize)}" oninput="setMarqueeValue('marqueeFontSize', this.value)"></label>
+          <label>Tốc độ chạy <output id="mqOut_marqueeSpeed">${html(c.marqueeSpeed)} giây/vòng</output><input type="range" min="6" max="60" step="1" value="${html(c.marqueeSpeed)}" oninput="setMarqueeValue('marqueeSpeed', this.value)"></label>
+        </div>
+        <h3 style="margin:14px 0 6px">Chạy khi nào, ở đâu</h3>
+        <div class="mq-grid">
           <label>Hiện ở<select onchange="setMarqueeValue('marqueeWhere', this.value)">${opt("marqueeWhere", [["both", "Đăng nhập + trong app"], ["login", "Chỉ màn đăng nhập"], ["app", "Chỉ trong app"]])}</select></label>
-          <label>Vị trí<select onchange="setMarqueeValue('marqueePosition', this.value)">${opt("marqueePosition", [["top", "Trên cùng"], ["bottom", "Dưới cùng"]])}</select></label>
+          <label>Vị trí (nổi đè lên màn hình)<select onchange="setMarqueeValue('marqueePosition', this.value)">${opt("marqueePosition", [["top", "Trên"], ["middle", "Giữa"], ["bottom", "Dưới"], ["random", "Ngẫu nhiên mỗi lần chạy"]])}</select></label>
+          <label>Kiểu chạy<select onchange="setMarqueeValue('marqueeMode', this.value)">${opt("marqueeMode", [["continuous", "Chạy liên tục"], ["periodic", "Chạy theo lượt"]])}</select></label>
+        </div>
+        <div id="mqPeriodic" class="mq-grid" style="margin-top:10px;${c.marqueeMode === "periodic" ? "" : "display:none"}">
+          <label>Bao nhiêu phút chạy lại 1 lần<input type="number" min="1" max="1440" step="1" value="${html(c.marqueeEvery)}" onchange="setMarqueeValue('marqueeEvery', this.value)"></label>
+          <label>Mỗi lần hiện bao nhiêu giây<input type="number" min="3" max="600" step="1" value="${html(c.marqueeShowSeconds)}" onchange="setMarqueeValue('marqueeShowSeconds', this.value)"></label>
         </div>
         <h2 style="margin-top:16px">Hướng dẫn sử dụng</h2>
-        <label class="mq-check"><input type="checkbox" ${c.helpEnabled !== false ? "checked" : ""} onchange="setMarqueeValue('helpEnabled', this.checked); settings()">Hiện hướng dẫn cho mọi user (nút ? và mục Hướng dẫn trong Cài đặt)</label>
+        <label class="mq-check"><input type="checkbox" ${c.helpEnabled !== false ? "checked" : ""} onchange="setMarqueeValue('helpEnabled', this.checked); settings()">Hiện mục Hướng dẫn sử dụng app cho mọi user (cuối màn Cài đặt)</label>
         <div class="config-actions" style="margin-top:14px"><button type="button" onclick="Object.assign(loginAppearanceConfig(), MARQUEE_DEFAULTS); saveAppConfig(false); applyMarquee(); settings()">Về mặc định</button><button type="button" class="primary" onclick="saveThemeConfigToSystem()">Áp dụng cho mọi máy</button></div>
       </section>`;
     }
+    // Cuối màn Cài đặt: bấm vào dòng là mở hướng dẫn.
     function helpSettingsPanel(){
       if (!helpEnabled()) return "";
-      return `<section class="section"><div class="hp-settings-card"><div style="font-size:28px">📘</div><p><b style="color:var(--text)">Hướng dẫn sử dụng</b><br>Cách nhập từng màn, màn hình mẫu, cách xử lý đơn lỗi.</p><button class="primary" onclick="setView('help')">Mở hướng dẫn</button></div></section>`;
+      return `<section class="section" style="padding:0"><button type="button" class="hp-settings-row" onclick="setView('help')"><span class="hp-settings-icon">📘</span><span class="hp-settings-text"><b>Hướng dẫn sử dụng app</b><small>Cách nhập từng màn, màn hình mẫu, cách xử lý đơn lỗi</small></span><span class="hp-settings-arrow">›</span></button></section>`;
     }
-    // ===== Màn Hướng dẫn sử dụng =====
     function hpField(label, value, kind){
       const tail = kind === "scan" ? `<i class="hp-scan"></i>` : kind === "select" ? `<span class="hp-dd">▾</span>` : "";
       return `<div class="hp-f"><label>${label}</label><div class="hp-in ${kind === "req" ? "req" : ""}">${value || "<em>…</em>"}${tail}</div></div>`;
@@ -3953,7 +3996,7 @@ html.desktop #marqueeApp.pos-bottom{left:auto;right:16px;bottom:16px;width:min(7
       const apiPanel = canViewApiArea() ? `<section class="section"><h2>API hệ thống đang dùng</h2>${smallTable(apiEntries)}${returnThApiControl}${docOpsApiControl}</section>` : "";
       const devicePanel = canViewDeviceArea() ? adminCache : "";
       const opsPanel = canViewOpsArea() ? `${queuePanel}${adminQueueErrors}` : "";
-      el("view").innerHTML = `${accountPanel}${helpSettingsPanel()}
+      el("view").innerHTML = `${accountPanel}
       <section class="section">
         <details class="settings-root"><summary><h2>Cài đặt khác</h2></summary>
           <div class="settings-menu">
@@ -3968,7 +4011,7 @@ html.desktop #marqueeApp.pos-bottom{left:auto;right:16px;bottom:16px;width:min(7
             ${canViewApiArea() ? settingsFold("API hệ thống", apiPanel, false) : ""}
           </div>
         </details>
-      </section>`;
+      </section>${helpSettingsPanel()}`;
       if (canViewDeviceArea() && !live.lookupCacheStatusLoaded) setTimeout(loadLookupCacheStatus, 0);
       if (canViewOpsArea() && !live.queueErrorsLoaded) setTimeout(loadQueueErrors, 0);
       if (canAdminUsers() && !live.forgotPassRequestsLoaded) setTimeout(loadForgotPassRequests, 0);
@@ -4820,7 +4863,7 @@ html.desktop #marqueeApp.pos-bottom{left:auto;right:16px;bottom:16px;width:min(7
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.20";
+    const APP_VERSION = "5.9.21";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
