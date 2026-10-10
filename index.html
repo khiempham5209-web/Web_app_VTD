@@ -1416,7 +1416,8 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
 .top-help{min-height:32px;min-width:32px;padding:0 8px;border-radius:999px;font-weight:700}
 .top-help.hidden{display:none}
 /* ---- Hướng dẫn sử dụng ---- */
-.hp{--hp-blue:#2563eb;--hp-green:#059669;--hp-amber:#d97706;--hp-red:#dc2626;--hp-violet:#7c3aed;--hp-teal:#0d9488;display:grid;gap:14px}
+.hp{--hp-blue:#2563eb;--hp-green:#059669;--hp-amber:#d97706;--hp-red:#dc2626;--hp-violet:#7c3aed;--hp-teal:#0d9488;display:grid;gap:32px}
+.hp-hero+.hp-toc{margin-top:-18px}
 .hp-hero{border-radius:14px;padding:18px;background:linear-gradient(135deg,#1e3a8a,#2563eb 55%,#0ea5e9);color:#fff}
 .hp-hero h2{margin:0 0 6px;color:#fff;font-size:20px}.hp-hero p{margin:0;opacity:.92;font-size:14px;line-height:1.5}
 .hp-hero .hp-ver{display:inline-block;margin-top:10px;padding:3px 10px;border-radius:999px;background:rgba(255,255,255,.18);font-size:12px}
@@ -2033,7 +2034,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       applyMarquee();
     }
     // ===== Dòng chữ chạy + Hướng dẫn: cấu hình của chủ app (lưu trong theme hệ thống, mọi máy nhận) =====
-    var MARQUEE_DEFAULTS = {marqueeEnabled:true, marqueeText:"Khieemph3: ứng dụng được nghiên cứu, phát triển bởi người không chuyên IT, vui lòng liên hệ nếu chưa hiểu logic", marqueeSpeed:18, marqueeBg:true, marqueeBgColor:"#0f172a", marqueeBgOpacity:78, marqueeColor:"#ffffff", marqueeFontSize:13, marqueeBold:false, marqueeWhere:"both", marqueePosition:"top", marqueeMode:"continuous", marqueeEvery:10, marqueeShowSeconds:20, helpEnabled:true};
+    var MARQUEE_DEFAULTS = {marqueeEnabled:true, marqueeText:"Khieemph3: ứng dụng được nghiên cứu, phát triển bởi người không chuyên IT, vui lòng liên hệ nếu chưa hiểu logic", marqueeSpeed:18, marqueeBg:true, marqueeBgColor:"#0f172a", marqueeBgOpacity:78, marqueeColor:"#ffffff", marqueeFontSize:13, marqueeBold:false, marqueeWhere:"both", marqueePosition:"top", marqueeMode:"continuous", marqueeEvery:10, marqueeShowSeconds:20, helpEnabled:true, notifyAccents:true};
     // Trạng thái chạy trên máy này: đang hiện hay ẩn, vị trí hiện tại, hẹn giờ.
     var mqState = {sig:"", visible:false, pos:"top", randomTop:30, timers:[]};
     function marqueeConfig(){
@@ -2141,6 +2142,8 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         </div>
         <h2 style="margin-top:16px">Hướng dẫn sử dụng</h2>
         <label class="mq-check"><input type="checkbox" ${c.helpEnabled !== false ? "checked" : ""} onchange="setMarqueeValue('helpEnabled', this.checked); settings()">Hiện mục Hướng dẫn sử dụng app cho mọi user (cuối màn Cài đặt)</label>
+        <h2 style="margin-top:16px">Thông báo về máy</h2>
+        <label class="mq-check"><input type="checkbox" ${c.notifyAccents !== false ? "checked" : ""} onchange="setMarqueeValue('notifyAccents', this.checked)">Thông báo tiếng Việt có dấu (bỏ tích nếu máy nào hiện lỗi font)</label>
         <div class="config-actions" style="margin-top:14px"><button type="button" onclick="Object.assign(loginAppearanceConfig(), MARQUEE_DEFAULTS); saveAppConfig(false); applyMarquee(); settings()">Về mặc định</button><button type="button" class="primary" onclick="saveThemeConfigToSystem()">Áp dụng cho mọi máy</button></div>
       </section>`;
     }
@@ -4902,7 +4905,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.23";
+    const APP_VERSION = "5.9.24";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -7029,6 +7032,10 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
     }
     function normalizeNotificationText(value, fallback){
       let raw = String(value == null || value === "" ? (fallback || "") : value).trim();
+      // Mặc định giữ tiếng Việt có dấu; chủ app tắt "Thông báo có dấu" thì quay về kiểu cũ (bỏ dấu, chỉ chữ cơ bản).
+      let accents = true;
+      try { accents = marqueeConfig().notifyAccents !== false; } catch (err) {}
+      if (accents) return raw.replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim();
       try {
         raw = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, match => match === "Đ" ? "D" : "d");
       } catch (err) {}
@@ -7041,7 +7048,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
           if (localStorage.getItem(seenKey)) return;
           localStorage.setItem(seenKey, String(Date.now()));
         }
-        const safeTitle = normalizeNotificationText(title, "Chung tu FF");
+        const safeTitle = normalizeNotificationText(title, "Chứng từ FF");
         const safeMessage = normalizeNotificationText(message, "");
         if (window.VTDNative && typeof window.VTDNative.notify === "function") {
           window.VTDNative.notify(safeTitle, safeMessage, String(route || ""));
@@ -7072,15 +7079,15 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         const code = (draft && draft.code) || queueItemOrderCode(first);
         const total = active.length;
         const parts = [];
-        if (draft) parts.push(draft.label || "Co thao tac dang do");
-        if (syncing) parts.push(`${syncing} don dang dong bo`);
-        if (pending) parts.push(`${pending} don dang cho dong bo`);
-        if (errors) parts.push(`${errors} don loi sync`);
+        if (draft) parts.push(draft.label || "Có thao tác đang dở");
+        if (syncing) parts.push(`${syncing} đơn đang đồng bộ`);
+        if (pending) parts.push(`${pending} đơn đang chờ đồng bộ`);
+        if (errors) parts.push(`${errors} đơn lỗi đồng bộ`);
         const user = currentEmail ? currentEmail() : "";
         const prefix = user ? `${user}: ` : "";
-        const statusText = parts.join(", ") || `${total} don chua dong bo`;
-        const title = code ? `Don ${code} chua hoan tat` : (draft ? "Co thao tac chua hoan tat" : `${total} don chua sync xong`);
-        const message = `${prefix}${statusText}. Mo app de hoan tat truoc khi thoat.`;
+        const statusText = parts.join(", ") || `${total} đơn chưa đồng bộ`;
+        const title = code ? `Đơn ${code} chưa hoàn tất` : (draft ? "Có thao tác chưa hoàn tất" : `${total} đơn chưa đồng bộ xong`);
+        const message = `${prefix}${statusText}. Mở app để hoàn tất trước khi thoát.`;
         const route = draft && draft.route ? draft.route : "#settings";
         notifyDevice(title, message, route, `queue_exit_v2_${Math.floor(now / 8000)}_${code || total || "draft"}_${syncing}_${pending}_${errors}_${reason || "hide"}`);
         return true;
@@ -7091,16 +7098,16 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
     function notifyQueueItemError(item){
       if (!item || item.notifiedErrorAt) return;
       const code = queueItemOrderCode(item);
-      const message = code ? "Chua hoan tat dong bo he thong. Vui long mo app de xu ly lai." : "Co 1 don chua hoan tat dong bo he thong. Vui long mo app de xu ly lai.";
+      const message = code ? "Chưa hoàn tất đồng bộ hệ thống. Vui lòng mở app để xử lý lại." : "Có 1 đơn chưa hoàn tất đồng bộ hệ thống. Vui lòng mở app để xử lý lại.";
       item.notifiedErrorAt = Date.now();
-      notifyDevice(code ? `Don ${code} loi sync` : "Don loi sync", message, "#settings", `user_error_${item.localId || code || item.createdAt || Date.now()}`);
+      notifyDevice(code ? `Đơn ${code} lỗi đồng bộ` : "Đơn lỗi đồng bộ", message, "#settings", `user_error_${item.localId || code || item.createdAt || Date.now()}`);
     }
     function notifyQueueItemDone(item){
       if (!item || !item.notifiedErrorAt || item.notifiedDoneAt) return;
       const code = queueItemOrderCode(item);
-      const message = code ? "Da dong bo thanh cong." : "Don loi da dong bo thanh cong.";
+      const message = code ? "Đã đồng bộ thành công." : "Đơn lỗi đã đồng bộ thành công.";
       item.notifiedDoneAt = Date.now();
-      notifyDevice(code ? `Don ${code} da dong bo` : "Dong bo thanh cong", message, "#home", `user_done_${item.localId || code || item.syncedAt || Date.now()}`);
+      notifyDevice(code ? `Đơn ${code} đã đồng bộ` : "Đồng bộ thành công", message, "#home", `user_done_${item.localId || code || item.syncedAt || Date.now()}`);
     }
     function notifyAdminQueueErrors(rows){
       if (!Array.isArray(rows) || !rows.length) return;
@@ -7114,8 +7121,8 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         changed = true;
         const user = row.email || row.user || "user";
         const code = row.maDon || "";
-        const message = code ? `${user} co don chua hoan thanh dong bo. Vui long bao user mo app kiem tra lai.` : `Co 1 don chua hoan thanh dong bo boi ${user}. Vui long bao user mo app kiem tra lai.`;
-        notifyDevice(code ? `Don ${code} loi sync` : "Don loi sync", message, "#settings", `admin_error_${key}`);
+        const message = code ? `${user} có đơn chưa hoàn thành đồng bộ. Vui lòng báo user mở app kiểm tra lại.` : `Có 1 đơn chưa hoàn thành đồng bộ bởi ${user}. Vui lòng báo user mở app kiểm tra lại.`;
+        notifyDevice(code ? `Đơn ${code} lỗi đồng bộ` : "Đơn lỗi đồng bộ", message, "#settings", `admin_error_${key}`);
       });
       if (changed) {
         const entries = Object.entries(seen).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 300);
