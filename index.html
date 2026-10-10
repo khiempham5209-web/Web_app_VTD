@@ -1476,10 +1476,10 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
 .pns-seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .pns-seg button{border:0;border-radius:0;min-height:40px;font-weight:600;background:transparent}
 .pns-seg button.on{background:#2563eb;color:#fff}
-.pns-sum{display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:12px;color:var(--muted);margin-bottom:6px}
-.pns-list{border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.pns-it{display:grid;grid-template-columns:40px 72px minmax(0,1fr) auto;gap:8px;align-items:center;width:100%;min-height:38px;padding:6px 10px;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent;text-align:left;font-weight:400;font-size:13px;color:var(--text)}
-.pns-it:first-child{border-top:0}
+.pns-sum{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;font-size:13px;color:var(--muted);margin-bottom:8px}.pns-sum b{color:var(--text);font-weight:700}.pns-tot{display:flex;gap:10px;align-items:center}
+.pns-list{display:grid;gap:2px}
+.pns-it{display:grid;grid-template-columns:40px 72px minmax(0,1fr) auto;gap:8px;align-items:center;width:100%;min-height:38px;padding:6px 10px;border:0;border-radius:8px;background:transparent;text-align:left;font-weight:400;font-size:13px;color:var(--text)}
+.pns-it:nth-child(even){background:rgba(148,163,184,.10)}
 .pns-date{color:var(--muted);font-size:12px}.pns-no{font-weight:700}.pns-kh{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
 .pns-tg{display:flex;gap:4px}
 .pns-dot{font-style:normal;display:inline-grid;place-items:center;min-width:24px;height:20px;padding:0 6px;border-radius:999px;font-size:11px;font-weight:700}
@@ -2205,7 +2205,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         "",
         hpPhone(hpTab("search"), seg("vtd") + hpField("Từ khóa", "PR-15592478", "scan") + `<div class="hp-pair">${hpField("SLOG", "Tất cả", "select")}${hpField("Loại hoàn", "Tất cả", "select")}</div><div class="hp-pair">${hpField("Từ ngày", "01/10/2026")}${hpField("Đến ngày", "10/10/2026")}</div><div class="hp-btns"><span class="hp-btn pri">Tìm</span></div>`, "search"));
       const s6b = hpSection("hp-search-pn", 7, C.amber, "Tìm kiếm Phạm Nguyên", "Chứng từ + sản phẩm hoàn PN",
-        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("search")} ở thanh dưới cùng.</b></li><li><b>Chọn shop Phạm Nguyên ở ô "Chọn shop tìm kiếm".</b><small>App nhớ shop đã chọn cho lần sau.</small></li><li><b>Quét hoặc nhập Mã đơn GHTK / Số đơn hàng.</b><small>Nhập một phần mã cũng tìm được. Muốn xem theo bộ lọc thì để trống ô này.</small></li><li><b>Chọn thêm bộ lọc nếu cần: Loại hoàn, Phân loại, Loại siêu thị, User thao tác, Ngày nhập từ, đến.</b><small>Chọn nhiều bộ lọc thì đơn phải thỏa tất cả. Để trống bộ lọc nào thì không lọc theo mục đó.</small></li><li><b>Bấm Tìm.</b><small>Đơn mới nhất ở trên cùng. Bấm "Xóa lọc" để bỏ hết bộ lọc.</small></li><li><b>Đọc dòng kết quả: Ngày · Mã đơn · Khách hàng · nhãn CT / SP.</b></li><li><b>Bấm vào một đơn để xem đủ thông tin.</b><small>Gồm Thông tin đơn, Chứng từ (xác thực, trạng thái, mã ecom CT, ngày bàn giao, đã tạo SV, ảnh) và từng Sản phẩm hoàn (mã vật tư, số lượng, phân loại, tình trạng, HSD, kích thước, ảnh).</small></li><li><b>Bấm "Quay lại kết quả" để về danh sách.</b></li></ol>
+        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("search")} ở thanh dưới cùng.</b></li><li><b>Chọn shop Phạm Nguyên ở ô "Chọn shop tìm kiếm".</b><small>App nhớ shop đã chọn cho lần sau.</small></li><li><b>Quét hoặc nhập Mã đơn GHTK / Số đơn hàng.</b><small>Nhập một phần mã cũng tìm được. Muốn xem theo bộ lọc thì để trống ô này.</small></li><li><b>Chọn thêm bộ lọc nếu cần: Loại hoàn, Phân loại, Loại siêu thị, User thao tác, Ngày nhập từ, đến.</b><small>Chọn nhiều bộ lọc thì đơn phải thỏa tất cả. Để trống bộ lọc nào thì không lọc theo mục đó.</small></li><li><b>Bấm Tìm.</b><small>Đơn mới nhất ở trên cùng. Bấm "Xóa lọc" để bỏ hết bộ lọc.</small></li><li><b>Đọc kết quả.</b><small>Dòng đầu: tổng số đơn, số đơn chứng từ, số đơn sản phẩm. Mỗi đơn một dòng: Ngày · Mã đơn · Khách hàng · nhãn CT / SP.</small></li><li><b>Bấm vào một đơn để xem đủ thông tin.</b><small>Gồm Thông tin đơn, Chứng từ (xác thực, trạng thái, mã ecom CT, ngày bàn giao, đã tạo SV, ảnh) và từng Sản phẩm hoàn (mã vật tư, số lượng, phân loại, tình trạng, HSD, kích thước, ảnh).</small></li><li><b>Bấm "Quay lại kết quả" để về danh sách.</b></li></ol>
         <table class="hp-table" style="--c:${C.amber};margin-top:12px"><thead><tr><th>Bộ lọc Phạm Nguyên</th><th>Tìm như thế nào</th></tr></thead><tbody>
           <tr><td>Mã đơn GHTK / Số đơn hàng</td><td>Khớp Mã đơn GHTK hoặc Số đơn hàng, nhập một phần mã cũng được</td></tr>
           <tr><td>Loại hoàn = Chứng từ</td><td>Đơn đã thao tác chứng từ trên app</td></tr>
@@ -4902,7 +4902,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.22";
+    const APP_VERSION = "5.9.23";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -9817,7 +9817,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       const list = live.pnLoading ? `<div class="lookup search-loading"><div class="inline-spinner"></div><span>Đang tìm trên dữ liệu máy...</span></div>`
         : !live.pnRan ? `<div class="lookup">Nhập mã hoặc chọn bộ lọc rồi bấm Tìm. Để trống tất cả rồi bấm Tìm là xem toàn bộ.</div>`
         : !rows.length ? `<div class="lookup">Không có đơn phù hợp. Thử bỏ bớt bộ lọc, hoặc tải lại dữ liệu trên máy.</div>`
-        : `<div class="pns-sum"><span>${rows.length.toLocaleString("vi-VN")} đơn${rows.length > shown.length ? ` · hiện ${shown.length} đơn mới nhất, thêm bộ lọc để thu gọn` : ""}</span><span><i class="pns-dot ok">CT</i> đã nhận <i class="pns-dot no">CT</i> chưa <i class="pns-dot sp">2SP</i> 2 sản phẩm</span></div>
+        : `<div class="pns-sum"><span><b>${rows.length.toLocaleString("vi-VN")}</b> đơn${rows.length > shown.length ? ` · hiện ${shown.length} đơn mới nhất` : ""}</span><span class="pns-tot"><span><i class="pns-dot ok">CT</i> <b>${rows.filter(o => o.doc).length.toLocaleString("vi-VN")}</b> đơn chứng từ</span><span><i class="pns-dot sp">SP</i> <b>${rows.filter(o => o.items.length).length.toLocaleString("vi-VN")}</b> đơn sản phẩm</span></span></div>
           <div class="pns-list">${shown.map(o => `<button type="button" class="pns-it" onclick="openPnDetail('${html(o.key).replace(/'/g, "&#39;")}')"><span class="pns-date">${html(pnDateShow(o.date)) || "--/--"}</span><span class="pns-no">${html(o.orderNo || o.ghtk)}</span><span class="pns-kh">${html(o.customer || "-")}</span><span class="pns-tg">${o.doc ? `<i class="pns-dot ${/^đã nhận/i.test(o.doc.xacThuc || "") ? "ok" : "no"}">CT</i>` : ""}${o.items.length ? `<i class="pns-dot sp">${o.items.length > 1 ? o.items.length + "SP" : "SP"}</i>` : ""}</span></button>`).join("")}</div>
           <div class="muted" style="text-align:center;margin-top:6px;font-size:12px">Bấm vào đơn để xem đủ thông tin</div>`;
       const docP = keyedProgress("docOpsLookup"), retP = keyedProgress("docOpsReturns");
