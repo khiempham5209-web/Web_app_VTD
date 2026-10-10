@@ -361,14 +361,14 @@ function pnBreakApartSafe_(range) {
 }
 
 function handoverSyncSourceSheet_() {
-  const ss = SpreadsheetApp.openById(HANDOVER_SYNC_CONFIG.spreadsheetId);
+  const ss = pnOpenById_(HANDOVER_SYNC_CONFIG.spreadsheetId);
   const sh = ss.getSheetByName(HANDOVER_SYNC_CONFIG.sourceSheetName);
   if (!sh) throw new Error("Khong thay tab " + HANDOVER_SYNC_CONFIG.sourceSheetName);
   return sh;
 }
 
 function handoverSyncTargetSheet_() {
-  const ss = SpreadsheetApp.openById(HANDOVER_SYNC_CONFIG.spreadsheetId);
+  const ss = pnOpenById_(HANDOVER_SYNC_CONFIG.spreadsheetId);
   const sh = ss.getSheetByName(HANDOVER_SYNC_CONFIG.targetSheetName);
   if (!sh) throw new Error("Khong thay tab " + HANDOVER_SYNC_CONFIG.targetSheetName);
   return sh;

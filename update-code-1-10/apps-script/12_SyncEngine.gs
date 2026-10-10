@@ -37,6 +37,13 @@ function pnV2OverBudget_() { return pnV2Start_ && Date.now() - pnV2Start_ > PN_V
 
 // Bố cục một tab theo tiêu đề dòng 1.
 function pnV2Layout_(sh, isFull) {
+  const key = sh.getName() + '|' + !!isFull;
+  if (PN_RUN_ && PN_RUN_.layout.has(key)) return PN_RUN_.layout.get(key);
+  const L = pnV2LayoutRead_(sh, isFull);
+  if (PN_RUN_) PN_RUN_.layout.set(key, L);
+  return L;
+}
+function pnV2LayoutRead_(sh, isFull) {
   const lastCol = Math.max(1, sh.getLastColumn());
   const headers = sh.getRange(1, 1, 1, lastCol).getDisplayValues()[0].map(pnText_);
   let width = 0;
@@ -136,7 +143,7 @@ function pnV2EnsureColumns_(p) {
     for (let i = L.isFull ? 0 : L.width + 1; i < limit; i++) if (!L.headers[i]) return i;
     return Math.max(L.headers.length, L.isFull ? 0 : L.width + 1);
   };
-  const setHeader = (L, i, text) => { pnSize_(L.sh, 2, i + 1); L.sh.getRange(1, i + 1).setValue(text); L.headers[i] = text; };
+  const setHeader = (L, i, text) => { pnSize_(L.sh, 2, i + 1); L.sh.getRange(1, i + 1).setValue(text); L.headers[i] = text; pnRunInvalidate_(); };
   let changed = false;
   if (M.id == null || M.base == null) {
     // Cột kỹ thuật tab chính: mặc định AD:AE như bản migration.
@@ -184,7 +191,14 @@ function pnV2Flush_(sh, updates) {
   });
   // Mã toàn chữ số bắt đầu bằng 0 (Mã ecom CT 0123...) hoặc dài từ 12 số (PO 18 số): đặt ô dạng chữ trước khi ghi,
   // để Sheets không cắt số 0 / không đổi thành 1,06003E+17 (mất các số cuối).
-  items.forEach(it => Object.keys(it.vals).forEach(c => { if (pnV2IsCode_(it.vals[c])) sh.getRange(it.r, Number(c) + 1).setNumberFormat('@'); }));
+  const codeCols = new Map();
+  items.forEach(it => Object.keys(it.vals).forEach(c => { if (pnV2IsCode_(it.vals[c])) { if (!codeCols.has(c)) codeCols.set(c, []); codeCols.get(c).push(it.r); } }));
+  codeCols.forEach((rs, c) => {
+    let a = rs[0], b = rs[0];
+    const put = () => sh.getRange(a, Number(c) + 1, b - a + 1, 1).setNumberFormat('@');
+    for (let i = 1; i < rs.length; i++) { if (rs[i] === b + 1) b = rs[i]; else { put(); a = b = rs[i]; } }
+    put();
+  });
   let writes = 0;
   for (let i = 0; i < items.length;) {
     let j = i + 1;
@@ -720,7 +734,7 @@ function pnV2SyncRows_(p, side, rowList, prefer, mode) {
   const L = api ? {M: pnV2Layout_(pnSheet_(p.main), false), F: pnV2Layout_(pnSheet_(p.full), true)} : pnV2EnsureColumns_(p), M = L.M, F = L.F, names = pnV2Names_(M);
   if (api && (M.id == null || M.base == null || F.id == null || F.base == null)) { pnQueueEdit_(side === 'main' ? p.main : p.full, rowsIn[0], rowsIn[rowsIn.length - 1]); return Object.assign(res, {queued: true}); }
   const src = side === 'main' ? M : F, dst = side === 'main' ? F : M;
-  const rows = rowsIn.filter(r => r <= src.sh.getLastRow());
+  const srcLast = src.sh.getLastRow(), rows = rowsIn.filter(r => r <= srcLast);
   if (!rows.length) return res;
   const colVals = (Lx, i) => { const last = Lx.sh.getLastRow(); return last < 2 || i == null ? [] : Lx.sh.getRange(2, i + 1, last - 1, 1).getValues().map(r => r[0]); };
   const r1 = rows[0], r2 = rows[rows.length - 1];
@@ -957,6 +971,9 @@ function pnV2FileDonOrders_(name, rows) {
 function pnV2FileDonLookup_(orders) {
   const out = {ghtk: new Map(), area: new Map()};
   if (!orders || !orders.size) return out;
+  const memoKey = 'fd|' + Array.from(orders).sort().join('|');
+  if (PN_RUN_ && PN_RUN_.lookup.has(memoKey)) return PN_RUN_.lookup.get(memoKey);
+  if (PN_RUN_) PN_RUN_.lookup.set(memoKey, out);
   const sh = pnSheet_(BOOKING_SYNC_CONFIG.orderSheetName), last = sh.getLastRow();
   const bcol = bookingSyncHeaderMap_(bookingSyncHeaders_(sh)), kcol = khuVucBookingHeaderMap_(khuVucBookingHeaders_(sh));
   const bKeys = new Set(Array.from(orders).map(bookingSyncNorm_)), kKeys = new Set(Array.from(orders).map(khuVucBookingNorm_));
@@ -1036,19 +1053,31 @@ function pnRunTarget_(job, fn) {
 // Cột "Ngày bàn giao CT" bị sửa (theo cột của lần sửa), hoặc một trong các dòng full liên quan đang có ngày bàn giao.
 function pnV2HandoverIfNeeded_(name, fullRows, cols) {
   const header = 'Ngày bàn giao CT';
-  let touched = false;
-  if (cols && cols.c1) {
-    const L = pnV2Layout_(pnSheet_(name), name === PN_FULL.pairs[2].full), c = pnV2Col_(L, [header]);
-    touched = c != null && cols.c1 <= c + 1 && cols.c2 >= c + 1;
+  const rs = Array.from(new Set(fullRows || [])).filter(r => r >= 2).sort((a, b) => a - b);
+  if (!rs.length) return {ok: true, skipped: true};
+  const sh = pnSheet_(PN_FULL.pairs[2].full), F = pnV2Layout_(sh, true);
+  const cDate = pnV2Col_(F, [header]), cOrder = pnV2Col_(F, ['Số đơn hàng']), cGhtk = pnV2Col_(F, ['Mã đơn GHTK']);
+  if (cDate == null) return {ok: true, skipped: true};
+  const block = sh.getRange(rs[0], 1, rs[rs.length - 1] - rs[0] + 1, Math.max(cDate, cOrder || 0, cGhtk || 0) + 1).getValues();
+  const rowsOf = rs.map(r => block[r - rs[0]]);
+  // Có dòng đang có ngày bàn giao -> cập nhật đích.
+  let need = rowsOf.some(r => pnText_(r[cDate]));
+  // Vừa sửa đúng cột ngày bàn giao mà giờ trống (xóa ngày): chỉ cập nhật nếu đơn đó đang nằm ở đích.
+  if (!need && cols && cols.c1) {
+    const L = name === PN_FULL.pairs[2].full ? F : pnV2Layout_(pnSheet_(name), false), c = pnV2Col_(L, [header]);
+    if (c != null && cols.c1 <= c + 1 && cols.c2 >= c + 1) {
+      const target = pnOpenById_(TARGET_SPREADSHEET_ID).getSheetByName(DOC_TARGET_SHEET);
+      if (target && target.getLastRow() >= 2) {
+        const map = getHeaderMap_(target), to = map[normalizeHeader_('Số đơn hàng')], tg = map[normalizeHeader_('Mã đơn GHTK')];
+        const inTarget = new Set();
+        [to, tg].filter(Boolean).forEach(c2 => target.getRange(2, c2, target.getLastRow() - 1, 1).getValues().forEach(v => { if (pnText_(v[0])) inTarget.add(pnText_(v[0])); }));
+        need = rowsOf.some(r => (cOrder != null && inTarget.has(pnText_(r[cOrder]))) || (cGhtk != null && inTarget.has(pnText_(r[cGhtk]))));
+      }
+    }
   }
-  if (!touched && fullRows && fullRows.length) {
-    const sh = pnSheet_(PN_FULL.pairs[2].full), F = pnV2Layout_(sh, true), c = pnV2Col_(F, [header]);
-    if (c != null) touched = Array.from(new Set(fullRows)).some(r => r >= 2 && pnText_(sh.getRange(r, c + 1).getValue()));
-  }
-  if (!touched) return {ok: true, skipped: true};
+  if (!need) return {ok: true, skipped: true};
   return pnRunTarget_('documents', () => syncBanGiaoChungTu());
 }
-
 /* Đẩy ngay sang VHFF (Chứng từ không đạt YC) đúng các dòng Chứng từ_full vừa đổi, CHỈ dòng đã tích "Đã tạo sv"
  * và có Mã đơn GHTK. Không có dòng nào đã tích thì không làm gì (không mở file đích). Lỗi thì để lượt VHFF sau làm bù. */
 function pnV2PushVhffRows_(fullRows) {
@@ -1057,8 +1086,9 @@ function pnV2PushVhffRows_(fullRows) {
   const sh = pnSheet_(PN_FULL.pairs[2].full), L = pnV2Layout_(sh, true);
   const cTick = pnV2Col_(L, ['Đã tạo sv']), cGhtk = pnV2Col_(L, ['Mã đơn GHTK']);
   if (cTick == null || cGhtk == null) return {ok: true, count: 0};
-  const cell = (r, c) => sh.getRange(r, c + 1).getValue();
-  const ticked = rows.filter(r => rejectSyncIsTrue_(cell(r, cTick)) && pnText_(cell(r, cGhtk)));
+  const r1 = rows[0], r2 = rows[rows.length - 1];
+  const block = sh.getRange(r1, 1, r2 - r1 + 1, Math.max(cTick, cGhtk) + 1).getValues();
+  const ticked = rows.filter(r => rejectSyncIsTrue_(block[r - r1][cTick]) && pnText_(block[r - r1][cGhtk]));
   if (!ticked.length) return {ok: true, count: 0};
   try { return syncChungTuKhongDatYCRows_(ticked); }
   catch (err) {

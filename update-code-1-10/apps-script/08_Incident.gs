@@ -254,7 +254,7 @@ function suVuBanhXepOrderSheet_() {
 }
 
 function suVuBanhXepSheetById_(spreadsheetId, sheetId, label) {
-  const ss = SpreadsheetApp.openById(spreadsheetId);
+  const ss = pnOpenById_(spreadsheetId);
   const sheets = ss.getSheets();
 
   for (let i = 0; i < sheets.length; i++) {
@@ -265,7 +265,7 @@ function suVuBanhXepSheetById_(spreadsheetId, sheetId, label) {
 }
 
 function suVuBanhXepSheetByIdOrName_(spreadsheetId, sheetId, sheetName, label) {
-  const ss = SpreadsheetApp.openById(spreadsheetId);
+  const ss = pnOpenById_(spreadsheetId);
   const sheets = ss.getSheets();
 
   for (let i = 0; i < sheets.length; i++) {

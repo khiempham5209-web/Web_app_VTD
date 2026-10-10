@@ -276,7 +276,7 @@ function rejectSyncRecordFromRowValues_(row, col) {
 }
 
 function rejectSyncOrderInfoMap_() {
-  const ss = SpreadsheetApp.openById(REJECT_SYNC_CONFIG.sourceSpreadsheetId);
+  const ss = pnOpenById_(REJECT_SYNC_CONFIG.sourceSpreadsheetId);
   const sh = ss.getSheetByName(REJECT_SYNC_CONFIG.orderSheetName);
   if (!sh) throw new Error("Khong thay tab " + REJECT_SYNC_CONFIG.orderSheetName);
   const lastRow = sh.getLastRow();
@@ -299,14 +299,14 @@ function rejectSyncOrderInfoMap_() {
 }
 
 function rejectSyncSourceSheet_() {
-  const ss = SpreadsheetApp.openById(REJECT_SYNC_CONFIG.sourceSpreadsheetId);
+  const ss = pnOpenById_(REJECT_SYNC_CONFIG.sourceSpreadsheetId);
   const sh = ss.getSheetByName(REJECT_SYNC_CONFIG.sourceSheetName);
   if (!sh) throw new Error("Khong thay tab " + REJECT_SYNC_CONFIG.sourceSheetName);
   return sh;
 }
 
 function rejectSyncTargetSheet_() {
-  const ss = SpreadsheetApp.openById(REJECT_SYNC_CONFIG.targetSpreadsheetId);
+  const ss = pnOpenById_(REJECT_SYNC_CONFIG.targetSpreadsheetId);
   const sh = ss.getSheetByName(REJECT_SYNC_CONFIG.targetSheetName);
   if (!sh) throw new Error("Khong thay tab " + REJECT_SYNC_CONFIG.targetSheetName);
   return sh;

@@ -13,10 +13,12 @@ const PN_FULL = {
 };
 let pnLockDepth_ = 0;
 let pnRequest_ = null;
-function pnSS_() { return SpreadsheetApp.openById(PN_FULL.spreadsheetId); }
+function pnSS_() { return pnOpenById_(PN_FULL.spreadsheetId); }
 function pnSheet_(name) {
+  if (PN_RUN_ && PN_RUN_.sheets.has(name)) return PN_RUN_.sheets.get(name);
   const sh = pnSS_().getSheetByName(name);
   if (!sh) throw new Error('Thiếu tab: ' + name);
+  if (PN_RUN_) PN_RUN_.sheets.set(name, sh);
   return sh;
 }
 function pnPair_(name) { return PN_FULL.pairs.find(p => p.main === name || p.full === name); }
@@ -26,13 +28,20 @@ function pnHash_(v) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, JSON.stringify(v), Utilities.Charset.UTF_8)
     .map(x => ('0' + ((x + 256) % 256).toString(16)).slice(-2)).join('');
 }
+// Bộ nhớ trong một lượt chạy (giữ khóa): file đã mở, tab, tiêu đề, kết quả tra. Hết lượt thì bỏ.
+let PN_RUN_ = null;
+const PN_SS_CACHE_ = {};
+function pnOpenById_(id) { return PN_SS_CACHE_[id] || (PN_SS_CACHE_[id] = SpreadsheetApp.openById(id)); }
+// Tiêu đề vừa bị đổi (thêm cột/đổi tên): bỏ bộ nhớ tiêu đề để đọc lại.
+function pnRunInvalidate_() { if (PN_RUN_) { PN_RUN_.layout.clear(); PN_RUN_.lookup.clear(); } }
 function pnWithLock_(fn, waitMs) {
   if (pnLockDepth_) return fn();
   const lock = LockService.getScriptLock();
   // Lỗi có mã PN_BUSY để apiSave_ trả về "đang bận, gửi lại" thay vì lỗi khó hiểu.
   if (!lock.tryLock(waitMs || 30000)) throw new Error('PN_BUSY: Hệ thống PN đang bận (khóa), thử lại sau.');
   pnLockDepth_++;
-  try { return fn(); } finally { pnLockDepth_--; lock.releaseLock(); }
+  PN_RUN_ = {layout: new Map(), sheets: new Map(), lookup: new Map()};
+  try { return fn(); } finally { pnLockDepth_--; PN_RUN_ = null; lock.releaseLock(); }
 }
 
 // API, đọc dữ liệu, VHFF chỉ dùng tab full -> KHÔNG bị chặn bởi việc dọn tab chính.
@@ -108,7 +117,7 @@ function pnSetupPair_(p) {
   const old=full.getRange(1,1,1,p.width).getValues()[0];
   if(old.some(pnText_) && old.some((x,i)=>pnNorm_(x)!==pnNorm_(headers[i])))
     throw new Error('Header full khác nguồn: '+p.full);
-  full.getRange(1,1,1,p.width+1).setValues([headers.concat(['Tháng'])]);
+  full.getRange(1,1,1,p.width+1).setValues([headers.concat(['Tháng'])]);pnRunInvalidate_();
   [main,full].forEach(sh => {
     const meta=sh.getRange(1,30,1,2).getValues()[0];
     if(meta.some((v,i)=>v && v!==['__PN_ID','__PN_BASE'][i])) throw new Error('AD:AE đã có dữ liệu: '+sh.getName());

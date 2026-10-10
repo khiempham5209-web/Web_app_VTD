@@ -287,21 +287,21 @@ function bookingSyncGhtkMap_() {
 }
 
 function bookingSyncBookingSheet_() {
-  const ss = SpreadsheetApp.openById(BOOKING_SYNC_CONFIG.spreadsheetId);
+  const ss = pnOpenById_(BOOKING_SYNC_CONFIG.spreadsheetId);
   const sh = ss.getSheetByName(BOOKING_SYNC_CONFIG.bookingSheetName);
   if (!sh) throw new Error("Khong thay tab " + BOOKING_SYNC_CONFIG.bookingSheetName);
   return sh;
 }
 
 function bookingSyncOrderSheet_() {
-  const ss = SpreadsheetApp.openById(BOOKING_SYNC_CONFIG.spreadsheetId);
+  const ss = pnOpenById_(BOOKING_SYNC_CONFIG.spreadsheetId);
   const sh = ss.getSheetByName(BOOKING_SYNC_CONFIG.orderSheetName);
   if (!sh) throw new Error("Khong thay tab " + BOOKING_SYNC_CONFIG.orderSheetName);
   return sh;
 }
 
 function bookingSyncTargetSheet_() {
-  const ss = SpreadsheetApp.openById(BOOKING_SYNC_CONFIG.spreadsheetId);
+  const ss = pnOpenById_(BOOKING_SYNC_CONFIG.spreadsheetId);
   const sh = ss.getSheetByName(BOOKING_SYNC_CONFIG.targetSheetName);
   if (!sh) throw new Error("Khong thay tab " + BOOKING_SYNC_CONFIG.targetSheetName);
   return sh;
@@ -316,7 +316,7 @@ function bookingSyncEnsureTargetHeaders_(sh) {
   ];
   const current = sh.getRange(1, 1, 1, headers.length).getDisplayValues()[0];
   const emptyOrMismatch = current.every(v => !bookingSyncClean_(v)) || bookingSyncNorm_(current[0]) !== bookingSyncNorm_(headers[0]);
-  if (emptyOrMismatch) sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+  if (emptyOrMismatch) { sh.getRange(1, 1, 1, headers.length).setValues([headers]); pnRunInvalidate_(); }
 }
 
 function bookingSyncApplyControlColumns_(target, targetCol, rowNumber) {

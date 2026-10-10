@@ -276,21 +276,21 @@ function defectSyncFormatTarget_(target, dataCount) {
 }
 
 function defectSyncSourceSheet_() {
-  const ss = SpreadsheetApp.openById(DEFECT_SYNC_CONFIG.sourceSpreadsheetId);
+  const ss = pnOpenById_(DEFECT_SYNC_CONFIG.sourceSpreadsheetId);
   const sh = ss.getSheetByName(DEFECT_SYNC_CONFIG.sourceSheetName);
   if (!sh) throw new Error("Khong thay tab " + DEFECT_SYNC_CONFIG.sourceSheetName);
   return sh;
 }
 
 function defectSyncSkuSheet_() {
-  const ss = SpreadsheetApp.openById(DEFECT_SYNC_CONFIG.sourceSpreadsheetId);
+  const ss = pnOpenById_(DEFECT_SYNC_CONFIG.sourceSpreadsheetId);
   const sh = ss.getSheetByName(DEFECT_SYNC_CONFIG.skuSheetName);
   if (!sh) throw new Error("Khong thay tab " + DEFECT_SYNC_CONFIG.skuSheetName);
   return sh;
 }
 
 function defectSyncTargetSheet_() {
-  const ss = SpreadsheetApp.openById(DEFECT_SYNC_CONFIG.targetSpreadsheetId);
+  const ss = pnOpenById_(DEFECT_SYNC_CONFIG.targetSpreadsheetId);
   const sh = ss.getSheetByName(DEFECT_SYNC_CONFIG.targetSheetName);
   if (!sh) throw new Error("Khong thay tab " + DEFECT_SYNC_CONFIG.targetSheetName);
   return sh;

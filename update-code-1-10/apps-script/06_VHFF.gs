@@ -109,7 +109,7 @@ function handleBanGiaoEdit(e) {
 
 function setupBanGiaoTrigger() { return pnInstallTriggers(); /* superseded */
 
-  const ss = SpreadsheetApp.openById(SOURCE_SPREADSHEET_ID);
+  const ss = pnOpenById_(SOURCE_SPREADSHEET_ID);
   ScriptApp.getProjectTriggers()
     .filter(trigger => trigger.getHandlerFunction() === 'handleBanGiaoEdit')
     .forEach(trigger => ScriptApp.deleteTrigger(trigger));
@@ -121,8 +121,8 @@ function setupBanGiaoTrigger() { return pnInstallTriggers(); /* superseded */
 }
 
 function syncSheetByDate_(config) {
-  const sourceSheet = SpreadsheetApp.openById(SOURCE_SPREADSHEET_ID).getSheetByName(config.sourceSheetName);
-  const targetSheet = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID).getSheetByName(config.targetSheetName);
+  const sourceSheet = pnOpenById_(SOURCE_SPREADSHEET_ID).getSheetByName(config.sourceSheetName);
+  const targetSheet = pnOpenById_(TARGET_SPREADSHEET_ID).getSheetByName(config.targetSheetName);
   if (!sourceSheet) throw new Error(`Khong tim thay tab nguon: ${config.sourceSheetName}`);
   if (!targetSheet) throw new Error(`Khong tim thay tab dich: ${config.targetSheetName}`);
 
@@ -152,8 +152,8 @@ function syncSheetByDate_(config) {
 }
 
 function syncSheetWhenHasProduct_(config) {
-  const sourceSheet = SpreadsheetApp.openById(SOURCE_SPREADSHEET_ID).getSheetByName(config.sourceSheetName);
-  const targetSheet = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID).getSheetByName(config.targetSheetName);
+  const sourceSheet = pnOpenById_(SOURCE_SPREADSHEET_ID).getSheetByName(config.sourceSheetName);
+  const targetSheet = pnOpenById_(TARGET_SPREADSHEET_ID).getSheetByName(config.targetSheetName);
   if (!sourceSheet) throw new Error(`Khong tim thay tab nguon: ${config.sourceSheetName}`);
   if (!targetSheet) throw new Error(`Khong tim thay tab dich: ${config.targetSheetName}`);
 

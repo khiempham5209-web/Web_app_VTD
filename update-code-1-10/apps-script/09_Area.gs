@@ -249,6 +249,7 @@ function khuVucBookingEnsureBookingAreaColumn_(booking) {
 
   const insertAfterCol = khuVucBookingFirstCol_(col, KHUVUC_BOOKING_SYNC_CONFIG.bookingAreaInsertAfterAliases) || booking.getLastColumn();
   booking.insertColumnAfter(insertAfterCol);
+  pnRunInvalidate_();
   booking.getRange(1, insertAfterCol + 1).setValue(KHUVUC_BOOKING_SYNC_CONFIG.bookingAreaHeader);
 
   const lastRow = Math.max(booking.getLastRow(), 1);
@@ -270,7 +271,7 @@ function khuVucBookingOrderSheet_() {
 }
 
 function khuVucBookingSheetByName_(sheetName) {
-  const ss = SpreadsheetApp.openById(KHUVUC_BOOKING_SYNC_CONFIG.spreadsheetId);
+  const ss = pnOpenById_(KHUVUC_BOOKING_SYNC_CONFIG.spreadsheetId);
   const sh = ss.getSheetByName(sheetName);
   if (!sh) throw new Error("Khong thay tab " + sheetName);
   return sh;

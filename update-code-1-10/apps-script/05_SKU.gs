@@ -313,14 +313,14 @@ function skuSyncRangeIntersectsAnyColumn_(range, columns) {
 }
 
 function skuSyncSourceSheet_() {
-  const ss = SpreadsheetApp.openById(SKU_SYNC_CONFIG.spreadsheetId);
+  const ss = pnOpenById_(SKU_SYNC_CONFIG.spreadsheetId);
   const sh = ss.getSheetByName(SKU_SYNC_CONFIG.sourceSheetName);
   if (!sh) throw new Error("Khong thay tab " + SKU_SYNC_CONFIG.sourceSheetName);
   return sh;
 }
 
 function skuSyncTargetSheet_() {
-  const ss = SpreadsheetApp.openById(SKU_SYNC_CONFIG.spreadsheetId);
+  const ss = pnOpenById_(SKU_SYNC_CONFIG.spreadsheetId);
   const sh = ss.getSheetByName(SKU_SYNC_CONFIG.targetSheetName);
   if (!sh) throw new Error("Khong thay tab " + SKU_SYNC_CONFIG.targetSheetName);
   return sh;

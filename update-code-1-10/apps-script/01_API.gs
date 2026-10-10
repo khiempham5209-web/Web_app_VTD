@@ -522,7 +522,7 @@ function callRejectSyncLocal_(rowNumber) {
 }
 
 function sheet_() {
-  const ss = SpreadsheetApp.openById(CONFIG.spreadsheetId);
+  const ss = pnOpenById_(CONFIG.spreadsheetId);
   pnRequireReady_();
   const sh = ss.getSheetByName(CONFIG.sheetName);
   if (!sh) throw new Error("Khong thay tab " + CONFIG.sheetName);
@@ -530,13 +530,13 @@ function sheet_() {
 }
 
 function skuSheet_() {
-  const sh = SpreadsheetApp.openById(CONFIG.spreadsheetId).getSheetByName(CONFIG.skuSheetName);
+  const sh = pnOpenById_(CONFIG.spreadsheetId).getSheetByName(CONFIG.skuSheetName);
   if (!sh) throw new Error("Khong thay tab " + CONFIG.skuSheetName);
   return sh;
 }
 
 function productReturnSheet_() {
-  const sh = SpreadsheetApp.openById(CONFIG.spreadsheetId).getSheetByName(CONFIG.productReturnSheetName);
+  const sh = pnOpenById_(CONFIG.spreadsheetId).getSheetByName(CONFIG.productReturnSheetName);
   if (!sh) throw new Error("Khong thay tab " + CONFIG.productReturnSheetName);
   return sh;
 }
