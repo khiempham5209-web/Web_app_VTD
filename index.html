@@ -1404,16 +1404,77 @@
     }
   </style>
 <style>
-.vtd-marquee{position:relative;overflow:hidden;white-space:nowrap;border-radius:999px;background:rgba(15,23,42,.78);color:#fff;font-size:13px;line-height:28px;height:28px;box-shadow:0 6px 18px rgba(15,23,42,.18);z-index:40;pointer-events:none}
+.vtd-marquee{position:relative;overflow:hidden;white-space:nowrap;border-radius:999px;background:var(--mq-bg,rgba(15,23,42,.78));color:var(--mq-color,#fff);font-size:var(--mq-size,13px);font-weight:var(--mq-weight,500);line-height:calc(var(--mq-size,13px) * 2.1);height:calc(var(--mq-size,13px) * 2.1);box-shadow:var(--mq-shadow,0 6px 18px rgba(15,23,42,.18));z-index:40;pointer-events:none}
+.vtd-marquee.no-bg{background:transparent;box-shadow:none;text-shadow:0 1px 2px rgba(0,0,0,.25)}
 .vtd-marquee.hidden{display:none}
 .vtd-marquee>span{display:inline-block;padding-left:100%;animation:vtdMarquee var(--marquee-speed,18s) linear infinite}
 @keyframes vtdMarquee{from{transform:translateX(0)}to{transform:translateX(-100%)}}
 #marqueeLogin{position:fixed;top:10px;left:12px;right:12px}
+#marqueeLogin.pos-bottom{top:auto;bottom:12px}
 #marqueeApp{position:sticky;top:0;margin:6px 12px 0}
-.help-page h2{margin-top:0}.help-page h3{margin:14px 0 6px;font-size:15px}.help-page ol,.help-page ul{margin:6px 0 6px 18px;padding:0}.help-page li{margin:3px 0}
-.help-page table{width:100%;border-collapse:collapse;font-size:13px}.help-page th,.help-page td{border:1px solid var(--line);padding:6px;text-align:left;vertical-align:top}
-.help-toc{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}.help-toc button{min-height:30px;padding:0 10px;font-size:13px}
+#marqueeApp.pos-bottom{position:fixed;top:auto;margin:0;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 74px)}
+html.desktop #marqueeApp.pos-bottom{left:auto;right:16px;bottom:16px;width:min(720px,calc(100vw - 300px))}
 .top-help{min-height:32px;min-width:32px;padding:0 8px;border-radius:999px;font-weight:700}
+.top-help.hidden{display:none}
+/* ---- Hướng dẫn sử dụng ---- */
+.hp{--hp-blue:#2563eb;--hp-green:#059669;--hp-amber:#d97706;--hp-red:#dc2626;--hp-violet:#7c3aed;--hp-teal:#0d9488;display:grid;gap:14px}
+.hp-hero{border-radius:14px;padding:18px;background:linear-gradient(135deg,#1e3a8a,#2563eb 55%,#0ea5e9);color:#fff}
+.hp-hero h2{margin:0 0 6px;color:#fff;font-size:20px}.hp-hero p{margin:0;opacity:.92;font-size:14px;line-height:1.5}
+.hp-hero .hp-ver{display:inline-block;margin-top:10px;padding:3px 10px;border-radius:999px;background:rgba(255,255,255,.18);font-size:12px}
+.hp-toc{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.hp-toc button{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-height:74px;padding:12px;border-radius:12px;border:1px solid var(--line);text-align:left;background:var(--panel,transparent);border-left:4px solid var(--c)}
+.hp-toc b{font-size:14px}.hp-toc small{color:var(--muted);font-size:12px;line-height:1.35}
+.hp-sec{border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.hp-sec-head{display:flex;align-items:center;gap:10px;padding:12px 14px;background:color-mix(in srgb,var(--c) 10%,transparent);border-bottom:1px solid var(--line)}
+.hp-num{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:999px;background:var(--c);color:#fff;font-weight:700;font-size:14px;flex:none}
+.hp-sec-head h3{margin:0;font-size:16px}.hp-sec-head span.hp-sub{color:var(--muted);font-size:12px;margin-left:auto}
+.hp-body{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:16px;padding:14px}
+.hp-body.single{grid-template-columns:minmax(0,1fr)}
+@media (max-width:720px){.hp-body{grid-template-columns:minmax(0,1fr)}}
+.hp-steps{list-style:none;margin:0;padding:0;display:grid;gap:10px;counter-reset:hp}
+.hp-steps li{position:relative;padding-left:48px;min-height:26px;line-height:1.5;font-size:14px;counter-increment:hp}
+.hp-steps li::before{content:"B" counter(hp);position:absolute;left:0;top:0;min-width:36px;height:24px;padding:0 6px;box-sizing:border-box;border-radius:999px;display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff;background:var(--c)}
+.hp-steps li small{display:block;color:var(--muted);font-size:12.5px}
+.hp-note{margin-top:12px;padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.5;border:1px solid}
+.hp-tip{background:color-mix(in srgb,var(--hp-blue) 8%,transparent);border-color:color-mix(in srgb,var(--hp-blue) 35%,transparent)}
+.hp-warn{background:color-mix(in srgb,var(--hp-amber) 10%,transparent);border-color:color-mix(in srgb,var(--hp-amber) 40%,transparent)}
+.hp-danger{background:color-mix(in srgb,var(--hp-red) 8%,transparent);border-color:color-mix(in srgb,var(--hp-red) 35%,transparent)}
+.hp-note b{display:block;margin-bottom:2px}
+/* màn hình mẫu */
+.hp-phone{border:8px solid #1f2937;border-radius:22px;background:#f8fafc;color:#0f172a;overflow:hidden;box-shadow:0 10px 24px rgba(15,23,42,.18);font-size:11px;align-self:start}
+.hp-phone-top{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#fff;border-bottom:1px solid #e2e8f0;font-weight:700;font-size:12px}
+.hp-phone-top i{font-style:normal;font-weight:400;color:#64748b;font-size:10px}
+.hp-phone-body{padding:8px;display:grid;gap:6px}
+.hp-f{display:grid;gap:2px}.hp-f label{color:#475569;font-size:10px;font-weight:600}
+.hp-in{display:flex;justify-content:space-between;align-items:center;border:1px solid #cbd5e1;border-radius:6px;padding:5px 7px;background:#fff;min-height:24px}
+.hp-in.req{border-color:#dc2626;border-width:2px}.hp-in em{font-style:normal;color:#94a3b8}
+.hp-in .hp-scan{width:16px;height:16px;border-radius:4px;background:#2563eb;display:inline-block}
+.hp-in .hp-dd{color:#64748b}
+.hp-pair{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.hp-card{border:1px solid #bfdbfe;background:#eff6ff;border-radius:6px;padding:6px 7px;line-height:1.45}
+.hp-card b{display:block;font-size:11px}
+.hp-photos{display:flex;gap:4px}.hp-photos span{width:34px;height:34px;border-radius:5px;background:linear-gradient(135deg,#cbd5e1,#e2e8f0);border:1px solid #cbd5e1}
+.hp-btns{display:flex;justify-content:flex-end;gap:6px;margin-top:2px}
+.hp-btn{padding:5px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;font-weight:600}
+.hp-btn.ok{background:#059669;border-color:#059669;color:#fff}.hp-btn.pri{background:#2563eb;border-color:#2563eb;color:#fff}
+.hp-stat{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.hp-stat div{border:1px solid #e2e8f0;border-radius:6px;padding:5px;background:#fff;text-align:center}
+.hp-stat b{display:block;font-size:14px}.hp-stat .err b{color:#dc2626}
+.hp-row{display:flex;justify-content:space-between;padding:4px 6px;border-bottom:1px solid #e2e8f0;background:#fff}
+.hp-badge{display:inline-block;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700}
+.b-pending{background:#e0f2fe;color:#0369a1}.b-sync{background:#ede9fe;color:#6d28d9}.b-error{background:#fee2e2;color:#b91c1c}.b-done{background:#dcfce7;color:#047857}
+.hp-tabs{display:flex;justify-content:space-around;border-top:1px solid #e2e8f0;background:#fff;padding:5px 0;color:#64748b;font-size:9px}
+.hp-tabs .on{color:#2563eb;font-weight:700}
+.hp-table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.hp-table th{background:color-mix(in srgb,var(--c,#2563eb) 10%,transparent);text-align:left;padding:8px;font-size:12.5px}
+.hp-table td{padding:8px;border-top:1px solid var(--line);vertical-align:top;line-height:1.45}
+.hp-faq details{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px}
+.hp-faq summary{cursor:pointer;font-weight:600;font-size:14px}.hp-faq p{margin:8px 0 0;font-size:13.5px;line-height:1.5}
+.hp-foot{text-align:center;color:var(--muted);font-size:12px;padding:6px 0 10px}
+.hp-settings-card{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.hp-settings-card p{margin:0;color:var(--muted);font-size:13px;flex:1;min-width:200px}
+.mq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.mq-grid label{font-size:13px}.mq-check{display:flex;gap:8px;align-items:center}.mq-check input{width:auto}
 </style>
 <style>.sku-empty{border:2px solid #dc2626!important}.pn-field-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:start;margin-bottom:12px}.pn-field-pair>*{min-width:0}.pn-field-pair input,.pn-field-pair select{width:100%;min-width:0}</style></head>
 <body class="vtd-flat">
@@ -1444,7 +1505,7 @@
     <main class="main">
       <header class="top">
         <h1 id="title">Trang chủ</h1>
-        <div class="top-actions"><button class="top-help" type="button" title="Hướng dẫn sử dụng" aria-label="Hướng dẫn sử dụng" onclick="setView('help')">?</button><button id="homeRefreshBtn" class="top-refresh" type="button" title="Tải lại dữ liệu trang chủ" aria-label="Tải lại dữ liệu trang chủ" onclick="retryDashboard()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 4v6h-6"></path></svg></button><div class="user"><span id="topAccount">Tài khoản</span><button style="min-height:32px;padding:0 8px" onclick="logout()">Đăng xuất</button></div></div>
+        <div class="top-actions"><button id="topHelpBtn" class="top-help" type="button" title="Hướng dẫn sử dụng" aria-label="Hướng dẫn sử dụng" onclick="setView('help')">?</button><button id="homeRefreshBtn" class="top-refresh" type="button" title="Tải lại dữ liệu trang chủ" aria-label="Tải lại dữ liệu trang chủ" onclick="retryDashboard()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 4v6h-6"></path></svg></button><div class="user"><span id="topAccount">Tài khoản</span><button style="min-height:32px;padding:0 8px" onclick="logout()">Đăng xuất</button></div></div>
       </header>
       <div id="marqueeApp" class="vtd-marquee hidden" aria-hidden="true"><span></span></div>
       <div class="content" id="view"></div>
@@ -1956,112 +2017,156 @@
       if (view === "help") el("title").textContent = "Hướng dẫn sử dụng";
       applyMarquee();
     }
-    // Dòng chữ chạy: nội dung, bật/tắt, tốc độ lấy từ Giao diện đăng nhập (đẩy theme hệ thống là mọi máy nhận).
-    function applyMarquee(){
+    // ===== Dòng chữ chạy + Hướng dẫn: cấu hình của chủ app (lưu trong theme hệ thống, mọi máy nhận) =====
+    var MARQUEE_DEFAULTS = {marqueeEnabled:true, marqueeText:"Khieemph3: ứng dụng được nghiên cứu, phát triển bởi người không chuyên IT, vui lòng liên hệ nếu chưa hiểu logic", marqueeSpeed:18, marqueeBg:true, marqueeBgColor:"#0f172a", marqueeBgOpacity:78, marqueeColor:"#ffffff", marqueeFontSize:13, marqueeBold:false, marqueeWhere:"both", marqueePosition:"top", helpEnabled:true};
+    function marqueeConfig(){
       const cfg = loginAppearanceConfig();
+      Object.keys(MARQUEE_DEFAULTS).forEach(k => { if (cfg[k] === undefined || cfg[k] === null || cfg[k] === "") cfg[k] = MARQUEE_DEFAULTS[k]; });
+      return cfg;
+    }
+    function helpEnabled(){ return marqueeConfig().helpEnabled !== false; }
+    function applyMarquee(){
+      const cfg = marqueeConfig();
       const text = String(cfg.marqueeText || "").trim();
       const on = cfg.marqueeEnabled !== false && !!text;
       const speed = Math.max(6, Math.min(60, Number(cfg.marqueeSpeed) || 18));
-      ["marqueeLogin", "marqueeApp"].forEach(id => {
+      const size = Math.max(10, Math.min(24, Number(cfg.marqueeFontSize) || 13));
+      const rgb = hexToRgb(cfg.marqueeBgColor || "#0f172a"), alpha = Math.max(0, Math.min(100, Number(cfg.marqueeBgOpacity))) / 100;
+      const where = cfg.marqueeWhere || "both";
+      [["marqueeLogin", where !== "app"], ["marqueeApp", where !== "login"]].forEach(([id, allowed]) => {
         const box = el(id);
         if (!box) return;
-        box.classList.toggle("hidden", !on);
+        box.classList.toggle("hidden", !(on && allowed));
+        box.classList.toggle("no-bg", cfg.marqueeBg === false);
+        box.classList.toggle("pos-bottom", cfg.marqueePosition === "bottom");
         const span = box.querySelector("span");
         if (span && span.textContent !== text) span.textContent = text;
         box.style.setProperty("--marquee-speed", speed + "s");
+        box.style.setProperty("--mq-size", size + "px");
+        box.style.setProperty("--mq-color", cfg.marqueeColor || "#ffffff");
+        box.style.setProperty("--mq-weight", cfg.marqueeBold ? "700" : "500");
+        box.style.setProperty("--mq-bg", `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${isFinite(alpha) ? alpha : .78})`);
       });
+      const helpBtn = el("topHelpBtn");
+      if (helpBtn) helpBtn.classList.toggle("hidden", !helpEnabled());
     }
     function setMarqueeValue(key, value){
-      const cfg = loginAppearanceConfig();
-      cfg[key] = key === "marqueeSpeed" ? Number(value) : value;
+      const cfg = marqueeConfig();
+      const numeric = ["marqueeSpeed", "marqueeFontSize", "marqueeBgOpacity"];
+      cfg[key] = numeric.includes(key) ? Number(value) : value;
       saveAppConfig(false);
       applyMarquee();
-      const out = el("marqueeSpeedOut");
-      if (out && key === "marqueeSpeed") out.textContent = value + " giây/vòng";
+      const out = el("mqOut_" + key);
+      if (out) out.textContent = key === "marqueeSpeed" ? value + " giây/vòng" : key === "marqueeFontSize" ? value + " px" : value + "%";
+    }
+    function marqueeOwnerPanel(){
+      const c = marqueeConfig();
+      const opt = (key, list) => list.map(([v, t]) => `<option value="${html(v)}" ${String(c[key]) === v ? "selected" : ""}>${html(t)}</option>`).join("");
+      return `<section class="section">
+        <div class="muted" style="margin-bottom:10px">Chỉnh trực tiếp, dòng chữ trên máy này đổi ngay để xem trước. Xong bấm <b>Áp dụng cho mọi máy</b> để mọi người nhận khi mở lại app.</div>
+        <h2>Dòng chữ chạy</h2>
+        <div class="mq-grid">
+          <label class="mq-check"><input type="checkbox" ${c.marqueeEnabled !== false ? "checked" : ""} onchange="setMarqueeValue('marqueeEnabled', this.checked)">Bật dòng chữ chạy</label>
+          <label class="mq-check"><input type="checkbox" ${c.marqueeBg !== false ? "checked" : ""} onchange="setMarqueeValue('marqueeBg', this.checked)">Hiện nền (bỏ tích = chỉ còn chữ)</label>
+          <label class="mq-check"><input type="checkbox" ${c.marqueeBold ? "checked" : ""} onchange="setMarqueeValue('marqueeBold', this.checked)">Chữ đậm</label>
+        </div>
+        <label style="margin-top:10px">Nội dung<textarea rows="2" oninput="setMarqueeValue('marqueeText', this.value)">${html(c.marqueeText || "")}</textarea></label>
+        <div class="mq-grid" style="margin-top:10px">
+          <label>Màu chữ<input type="color" value="${html(c.marqueeColor)}" oninput="setMarqueeValue('marqueeColor', this.value)"></label>
+          <label>Màu nền<input type="color" value="${html(c.marqueeBgColor)}" oninput="setMarqueeValue('marqueeBgColor', this.value)"></label>
+          <label>Độ đậm nền <output id="mqOut_marqueeBgOpacity">${html(c.marqueeBgOpacity)}%</output><input type="range" min="0" max="100" step="1" value="${html(c.marqueeBgOpacity)}" oninput="setMarqueeValue('marqueeBgOpacity', this.value)"></label>
+          <label>Cỡ chữ <output id="mqOut_marqueeFontSize">${html(c.marqueeFontSize)} px</output><input type="range" min="10" max="24" step="1" value="${html(c.marqueeFontSize)}" oninput="setMarqueeValue('marqueeFontSize', this.value)"></label>
+          <label>Tốc độ <output id="mqOut_marqueeSpeed">${html(c.marqueeSpeed)} giây/vòng</output><input type="range" min="6" max="60" step="1" value="${html(c.marqueeSpeed)}" oninput="setMarqueeValue('marqueeSpeed', this.value)"></label>
+          <label>Hiện ở<select onchange="setMarqueeValue('marqueeWhere', this.value)">${opt("marqueeWhere", [["both", "Đăng nhập + trong app"], ["login", "Chỉ màn đăng nhập"], ["app", "Chỉ trong app"]])}</select></label>
+          <label>Vị trí<select onchange="setMarqueeValue('marqueePosition', this.value)">${opt("marqueePosition", [["top", "Trên cùng"], ["bottom", "Dưới cùng"]])}</select></label>
+        </div>
+        <h2 style="margin-top:16px">Hướng dẫn sử dụng</h2>
+        <label class="mq-check"><input type="checkbox" ${c.helpEnabled !== false ? "checked" : ""} onchange="setMarqueeValue('helpEnabled', this.checked); settings()">Hiện hướng dẫn cho mọi user (nút ? và mục Hướng dẫn trong Cài đặt)</label>
+        <div class="config-actions" style="margin-top:14px"><button type="button" onclick="Object.assign(loginAppearanceConfig(), MARQUEE_DEFAULTS); saveAppConfig(false); applyMarquee(); settings()">Về mặc định</button><button type="button" class="primary" onclick="saveThemeConfigToSystem()">Áp dụng cho mọi máy</button></div>
+      </section>`;
+    }
+    function helpSettingsPanel(){
+      if (!helpEnabled()) return "";
+      return `<section class="section"><div class="hp-settings-card"><div style="font-size:28px">📘</div><p><b style="color:var(--text)">Hướng dẫn sử dụng</b><br>Cách nhập từng màn, màn hình mẫu, cách xử lý đơn lỗi.</p><button class="primary" onclick="setView('help')">Mở hướng dẫn</button></div></section>`;
+    }
+    // ===== Màn Hướng dẫn sử dụng =====
+    function hpField(label, value, kind){
+      const tail = kind === "scan" ? `<i class="hp-scan"></i>` : kind === "select" ? `<span class="hp-dd">▾</span>` : "";
+      return `<div class="hp-f"><label>${label}</label><div class="hp-in ${kind === "req" ? "req" : ""}">${value || "<em>…</em>"}${tail}</div></div>`;
+    }
+    // Tên tab đúng như đang hiện trên app (đổi tên tab trong cấu hình thì hướng dẫn đổi theo).
+    function hpTab(id){ const d = (typeof allScreenDefs === "function" ? allScreenDefs() : []).find(s => s[0] === id); return html(d && d[2] || ({home:"Trang chủ", input:"Nhập VTD", returnth:"Nhập TH", docops:"Nhập PN", search:"Tìm kiếm", store:"Thông tin ST", settings:"Cài đặt"})[id] || id); }
+    function hpPhone(title, body, tab){
+      const tabs = ["home", "input", "docops", "search", "settings"].map(k => [k, hpTab(k)]);
+      return `<div class="hp-phone" aria-hidden="true"><div class="hp-phone-top">${title}<i>Màn hình mẫu</i></div><div class="hp-phone-body">${body}</div><div class="hp-tabs">${tabs.map(([k, t]) => `<span class="${k === tab ? "on" : ""}">${t}</span>`).join("")}</div></div>`;
+    }
+    function hpSection(id, num, color, title, sub, steps, notes, phone){
+      return `<section class="hp-sec" id="${id}" style="--c:${color}"><div class="hp-sec-head"><span class="hp-num">${num}</span><h3>${title}</h3><span class="hp-sub">${sub}</span></div>
+        <div class="hp-body ${phone ? "" : "single"}"><div>${steps}${notes || ""}</div>${phone || ""}</div></section>`;
     }
     function helpView(){
+      if (!helpEnabled()) { view = "home"; return render(); }
       el("view").className = "content";
-      const go = id => `<button type="button" onclick="document.getElementById('${id}').scrollIntoView({behavior:'smooth'})">`;
-      el("view").innerHTML = `<section class="section help-page">
-        <h2>Hướng dẫn sử dụng app Chứng từ FF</h2>
-        <div class="help-toc">${go("h-start")}Bắt đầu</button>${go("h-home")}Trang chủ</button>${go("h-vtd")}Nhập VTD</button>${go("h-th")}Nhập TH</button>${go("h-pn")}Thao tác CT (PN)</button>${go("h-search")}Tìm kiếm</button>${go("h-store")}Thông tin ST</button>${go("h-queue")}Đơn lỗi / chưa gửi</button>${go("h-faq")}Hỏi đáp</button></div>
-
-        <h3 id="h-start">1. Bắt đầu</h3>
-        <ol>
-          <li><b>Đăng nhập</b> bằng email và Pass được cấp. Quên Pass: bấm <b>Quên Pass</b>, admin sẽ cấp lại.</li>
-          <li><b>Cập nhật app</b>: vào <b>Cài đặt → Cập nhật app</b>. Có bản mới thì bấm <b>Tải và cài bản mới</b>.</li>
-          <li><b>Quét mã</b>: ô nào có biểu tượng quét thì bấm để dùng camera, hoặc gõ tay.</li>
-          <li><b>Quan trọng</b>: bấm <b>OK</b> là đơn đã được <b>lưu vào máy</b>. App tự gửi lên hệ thống, mất mạng cũng không mất đơn. Không cần chờ, nhập tiếp đơn khác được.</li>
-        </ol>
-
-        <h3 id="h-home">2. Trang chủ</h3>
-        <ul>
-          <li>Tổng đơn nhập trong ngày theo SLOG (O1B1, O1B3, O1BH, Ecom), TH Truemilk, Chứng từ PN.</li>
-          <li><b>Trạng thái</b>: Đã đồng bộ / Đang đồng bộ / Lỗi. Có <b>Lỗi</b> thì xem mục 8.</li>
-          <li>Danh sách chi tiết đơn trong ngày của VTD, TH, Phạm Nguyên. Bấm nút tải lại ở góc trên để cập nhật số liệu.</li>
-        </ul>
-
-        <h3 id="h-vtd">3. Nhập thông tin (VTD)</h3>
-        <ol>
-          <li>Quét/nhập <b>Mã đơn GHTK</b>. App tự hiện khách hàng, OD, PO, số HĐ nếu có. Không có vẫn nhập được (mã phát sinh).</li>
-          <li>Chọn <b>Slog</b>, rồi <b>Loại hoàn</b> (danh sách đổi theo Slog).</li>
-          <li><b>Chứng từ</b>: chọn Xác thực chứng từ, kiểm tra Mã PO, chọn Tình trạng. Tình trạng khác "Bình thường" thì ghi rõ ở ô Thông tin chứng từ. Chụp/chọn <b>ảnh chứng từ</b>.</li>
-          <li><b>Sản phẩm / Thu hồi</b>: chọn tên sản phẩm (hoặc quét mã vật tư), Type, Tình trạng, Số lượng. Sữa: thêm Mã lô/HSD, serial. Chụp ít nhất 1 <b>ảnh sản phẩm</b>, bấm <b>Thêm sản phẩm</b>. Nhiều SKU thì lặp lại.</li>
-          <li>Bấm <b>OK</b>. Ô viền đỏ là còn thiếu thông tin bắt buộc.</li>
-        </ol>
-
-        <h3 id="h-th">4. Nhập TH (Truemilk)</h3>
-        <ol>
-          <li>Quét/nhập <b>Mã đơn</b>.</li>
-          <li>Chọn <b>Tên sản phẩm</b>. Không có trong danh sách: nhập SUB SKU, Tên SKU, Đơn vị rồi bấm <b>Lưu SKU mới</b>.</li>
-          <li>Nhập <b>Số lượng</b>, <b>Tình trạng</b>, ghi chú, chụp <b>ảnh SKU</b>, bấm <b>Thêm SKU</b>. Nhiều SKU thì lặp lại.</li>
-          <li>Bấm <b>OK</b>.</li>
-        </ol>
-
-        <h3 id="h-pn">5. Thao tác CT (Phạm Nguyên)</h3>
-        <ol>
-          <li>Quét/nhập <b>Mã đơn</b> (Số đơn hàng / Mã đơn GHTK / PO). Phải hiện thông tin đơn thì mới lưu được. Không thấy đơn: đơn chưa có trên hệ thống, báo người quản lý.</li>
-          <li>Chọn <b>Loại hoàn</b>: Chứng từ / Sản phẩm / Sản phẩm + chứng từ.</li>
-          <li><b>Chứng từ</b>: chọn Xác thực hóa đơn (Đã nhận / Chưa nhận), Trạng thái (Bình thường / Sai, thiếu chứng từ), quét hoặc nhập <b>Mã ecom CT</b> (app tự lấy 10 số cuối), ghi chú nếu có, chụp <b>ít nhất 1 ảnh chứng từ</b>.</li>
-          <li><b>Sản phẩm</b>: chọn tên sản phẩm hoặc quét Barcode/Mã vật tư, chọn <b>Phân loại</b> (Hoàn trả / Hàng thu hồi), Tình trạng, ghi chú, Hạn sử dụng (nếu có), kiểm tra <b>Kích thước + Khối lượng</b> (sai thì sửa lại, app tự tính CBM), chụp <b>ít nhất 1 ảnh</b> cho mỗi SKU, bấm <b>Thêm SKU</b>.</li>
-          <li>Bấm <b>OK</b>.</li>
-        </ol>
-
-        <h3 id="h-search">6. Tìm kiếm</h3>
-        <ul>
-          <li>Nhập/quét từ khóa (mã đơn, serial, PO, số HĐ, OD), có thể lọc SLOG, Loại hoàn, Từ ngày, Đến ngày, bấm <b>Tìm</b>.</li>
-          <li>Bấm vào đơn để xem chi tiết, sửa thông tin nếu được phép.</li>
-        </ul>
-
-        <h3 id="h-store">7. Thông tin ST</h3>
-        <ul><li>Xem biểu đồ, bảng số liệu theo siêu thị, theo ngày/tháng. Bấm vào cột/ngày để xem chi tiết.</li></ul>
-
-        <h3 id="h-queue">8. Đơn lỗi / đơn chưa gửi được</h3>
-        <p>Đơn đã bấm OK nằm trong <b>hàng chờ</b> trên máy cho tới khi gửi xong. Xem ở <b>Cài đặt → Queue đang chờ</b> (nếu tài khoản có quyền) hoặc biểu tượng trạng thái trên form nhập.</p>
-        <table><thead><tr><th>Trạng thái</th><th>Nghĩa</th><th>Cần làm</th></tr></thead><tbody>
-          <tr><td>pending</td><td>Đã lưu trên máy, chờ gửi</td><td>Không cần làm gì</td></tr>
-          <tr><td>syncing</td><td>Đang gửi</td><td>Chờ. Treo quá lâu: bấm <b>Mở khóa đơn treo</b></td></tr>
-          <tr><td>error</td><td>Gửi bị lỗi</td><td>Đọc lỗi ở cột Bước/Lỗi, làm theo bảng dưới rồi bấm <b>Chạy lại sync</b></td></tr>
-        </tbody></table>
-        <table style="margin-top:8px"><thead><tr><th>Lỗi hiện ra</th><th>Cách xử lý</th></tr></thead><tbody>
-          <tr><td>Mất mạng / phản hồi quá lâu / mất phản hồi</td><td>Kiểm tra mạng. App tự gửi lại; vẫn lỗi thì bấm <b>Chạy lại sync</b>.</td></tr>
-          <tr><td>Hệ thống đang bận / đơn đang được lưu ở lần gửi trước</td><td>Không cần làm gì, app tự gửi lại.</td></tr>
-          <tr><td>Không tìm thấy đơn</td><td>Đơn chưa có trên hệ thống. Báo người quản lý bổ sung, sau đó bấm <b>Chạy lại sync</b>.</td></tr>
+      const C = {blue:"#2563eb", green:"#059669", violet:"#7c3aed", teal:"#0d9488", amber:"#d97706", red:"#dc2626", slate:"#475569"};
+      const toc = [["hp-start", C.blue, "Bắt đầu", "Đăng nhập, cập nhật, quét mã"], ["hp-home", C.teal, "Trang chủ", "Số liệu, trạng thái trong ngày"], ["hp-vtd", C.green, hpTab("input"), "Chứng từ, sản phẩm, thu hồi"], ["hp-th", C.violet, hpTab("returnth"), "Hàng hoàn TH Truemilk"], ["hp-pn", C.amber, hpTab("docops"), "Chứng từ, hàng hoàn Phạm Nguyên"], ["hp-search", C.slate, "Tìm kiếm & ST", "Tra đơn, thống kê siêu thị"], ["hp-cache", C.teal, "Thiếu dữ liệu", "Tải lại dữ liệu trên máy"], ["hp-queue", C.red, "Đơn lỗi", "Trạng thái và cách xử lý"], ["hp-faq", C.blue, "Hỏi đáp", "Câu hỏi thường gặp"]];
+      const go = id => `document.getElementById('${id}').scrollIntoView({behavior:'smooth',block:'start'})`;
+      const tip = (t, b) => `<div class="hp-note hp-tip"><b>💡 ${t}</b>${b}</div>`;
+      const warn = (t, b) => `<div class="hp-note hp-warn"><b>⚠️ ${t}</b>${b}</div>`;
+      const danger = (t, b) => `<div class="hp-note hp-danger"><b>⛔ ${t}</b>${b}</div>`;
+      const s1 = hpSection("hp-start", 1, C.blue, "Bắt đầu", "Dành cho mọi nhân viên",
+        `<ol class="hp-steps"><li><b>Mở app, nhập Email và Pass được cấp, bấm Đăng nhập.</b><small>Quên Pass: bấm "Quên Pass", admin sẽ cấp lại.</small></li><li><b>Kiểm tra bản mới: Cài đặt → Cài đặt khác → Cập nhật app.</b><small>Có bản mới thì bấm "Tải và cài bản mới".</small></li><li><b>Chọn màn cần làm ở thanh dưới cùng (${["home","input","returnth","docops","search","store","settings"].map(hpTab).join(", ")}).</b></li><li><b>Quét mã: bấm biểu tượng quét màu xanh cạnh ô nhập, đưa camera vào mã.</b><small>Không quét được thì gõ tay vào ô.</small></li><li><b>Bấm OK sau khi nhập xong: đơn được lưu vào máy, app tự gửi lên hệ thống.</b><small>Không cần chờ, nhập tiếp đơn khác được.</small></li></ol>`,
+        tip("Mất mạng vẫn nhập được", "Đơn nằm trong hàng chờ trên máy và tự gửi khi có mạng lại.") + warn("Không xoá app khi còn đơn chưa gửi", "Xoá app hoặc xoá dữ liệu app sẽ mất các đơn trong hàng chờ."),
+        hpPhone("Chứng từ FF", hpField("Email", "nhanvien@gmail.com") + hpField("Pass", "••••••") + `<div class="hp-btns"><span class="hp-btn">Quên Pass</span><span class="hp-btn pri">Đăng nhập</span></div>`, ""));
+      const s2 = hpSection("hp-home", 2, C.teal, "Trang chủ", "Xem nhanh trong ngày",
+        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("home")} ở thanh dưới cùng.</b></li><li><b>Xem ô Đơn nhập trong ngày: tổng theo SLOG (O1B1, O1B3, O1BH, Ecom), TH Truemilk, Chứng từ PN.</b></li><li><b>Xem ô Trạng thái: Đã đồng bộ / Đang đồng bộ / Lỗi.</b><small>Có số ở ô Lỗi thì làm theo mục 8.</small></li><li><b>Xem bảng User thao tác và Chi tiết VTD, TH, Phạm Nguyên trong ngày.</b></li><li><b>Bấm nút tải lại ở góc trên khi cần cập nhật số liệu mới.</b></li></ol>`,
+        "",
+        hpPhone("Trang chủ", `<div class="hp-stat"><div><b>128</b>Đơn nhập</div><div><b>3</b>Đang ĐB</div><div class="err"><b>1</b>Lỗi</div></div><div class="hp-row"><span>O1B1</span><b>42</b></div><div class="hp-row"><span>Chứng từ PN</span><b>36</b></div><div class="hp-row"><span>TH Truemilk</span><b>18</b></div>`, "home"));
+      const s3 = hpSection("hp-vtd", 3, C.green, hpTab("input"), "Chứng từ · Sản phẩm · Thu hồi",
+        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("input")} ở thanh dưới cùng.</b></li><li><b>Quét hoặc nhập Mã đơn GHTK.</b><small>App tự hiện khách hàng, OD, PO, số HĐ nếu có. Không có vẫn nhập được (mã phát sinh).</small></li><li><b>Chọn Slog, rồi chọn Loại hoàn.</b><small>Danh sách Loại hoàn đổi theo Slog.</small></li><li><b>Nếu là Chứng từ: chọn Xác thực, kiểm tra Mã PO, chọn Tình trạng, chụp ảnh chứng từ.</b><small>Tình trạng khác "Bình thường" thì ghi rõ ở ô Thông tin chứng từ.</small></li><li><b>Nếu là Sản phẩm / Thu hồi: chọn sản phẩm (hoặc quét mã vật tư), Type, Tình trạng, Số lượng, chụp ít nhất 1 ảnh, bấm Thêm sản phẩm.</b><small>Sữa: nhập thêm Mã lô/HSD và serial. Nhiều SKU thì lặp lại bước này.</small></li><li><b>Bấm OK để lưu.</b></li></ol>`,
+        tip("Ô viền đỏ", "Là ô bắt buộc còn thiếu, bổ sung rồi bấm OK lại."),
+        hpPhone("Nhập thông tin", hpField("Mã đơn GHTK", "S22843210.MB1", "scan") + `<div class="hp-card"><b>Thông tin khách hàng</b>Khách hàng: Circle K · PO: PR-15592</div>` + `<div class="hp-pair">${hpField("Slog", "O1B1", "select")}${hpField("Loại hoàn", "Chứng từ", "select")}</div>` + hpField("Tình trạng chứng từ", "Bình thường", "select") + `<div class="hp-photos"><span></span><span></span></div><div class="hp-btns"><span class="hp-btn">Hủy</span><span class="hp-btn ok">OK</span></div>`, "input"));
+      const s4 = hpSection("hp-th", 4, C.violet, hpTab("returnth") + " (Truemilk)", "Một đơn nhiều SKU",
+        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("returnth")} ở thanh dưới cùng.</b></li><li><b>Quét hoặc nhập Mã đơn.</b></li><li><b>Chọn Tên sản phẩm.</b><small>Không có trong danh sách: nhập SUB SKU, Tên SKU, Đơn vị rồi bấm "Lưu SKU mới".</small></li><li><b>Nhập Số lượng, chọn Tình trạng, ghi chú nếu có, chụp ảnh SKU.</b></li><li><b>Bấm Thêm SKU.</b><small>Nhiều SKU thì lặp lại B3 đến B5.</small></li><li><b>Bấm OK để lưu.</b></li></ol>`,
+        "",
+        hpPhone("Nhập TH", hpField("Mã đơn", "TH-240915", "scan") + hpField("Tên sản phẩm", "Sữa TH 180ml", "select") + `<div class="hp-pair">${hpField("Số lượng", "12")}${hpField("Tình trạng", "Bình thường", "select")}</div><div class="hp-photos"><span></span></div><div class="hp-btns"><span class="hp-btn">Thêm SKU</span><span class="hp-btn ok">OK</span></div>`, "input"));
+      const s5 = hpSection("hp-pn", 5, C.amber, hpTab("docops") + " (Phạm Nguyên)", "Chứng từ · Sản phẩm · SP + CT",
+        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("docops")} ở thanh dưới cùng.</b></li><li><b>Quét hoặc nhập Mã đơn (Số đơn hàng, Mã đơn GHTK hoặc PO).</b><small>Phải hiện khung thông tin đơn mới lưu được. Không thấy đơn: xem mục 7 (tải lại dữ liệu) hoặc báo người quản lý.</small></li><li><b>Chọn Loại hoàn: Chứng từ / Sản phẩm / Sản phẩm + chứng từ.</b></li><li><b>Phần Chứng từ: chọn Xác thực hóa đơn và Trạng thái, quét Mã ecom CT, ghi chú nếu có, chụp ít nhất 1 ảnh.</b><small>Quét ra link thì app tự lấy 10 chữ số cuối.</small></li><li><b>Phần Sản phẩm: chọn sản phẩm hoặc quét Barcode, chọn Phân loại và Tình trạng, nhập HSD nếu có, kiểm tra Kích thước + Khối lượng, chụp ảnh, bấm Thêm SKU.</b><small>App tự tính CBM; kích thước sai thì sửa lại. Nhiều SKU thì lặp lại bước này.</small></li><li><b>Bấm OK để lưu.</b></li></ol>`,
+        warn("Mỗi SKU cần ít nhất 1 ảnh", "Chứng từ cũng cần ít nhất 1 ảnh, thiếu ảnh app sẽ không cho lưu."),
+        hpPhone("Thao tác Phạm Nguyên", hpField("Mã đơn", "2959467", "scan") + `<div class="hp-card"><b>Đơn tìm thấy</b>7-ELEVEN · PO P000084GGU</div>` + hpField("Loại hoàn", "Chứng từ", "select") + `<div class="hp-pair">${hpField("Xác thực", "Đã nhận", "select")}${hpField("Trạng thái", "Bình thường", "select")}</div>` + hpField("Mã ecom CT", "1972031652", "scan") + `<div class="hp-photos"><span></span><span></span></div><div class="hp-btns"><span class="hp-btn">Hủy</span><span class="hp-btn ok">OK</span></div>`, "docops"));
+      const s6 = hpSection("hp-search", 6, C.slate, hpTab("search") + " & " + hpTab("store"), "Tra cứu, thống kê",
+        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("search")} ở thanh dưới cùng.</b></li><li><b>Nhập hoặc quét từ khóa: mã đơn, serial, PO, số HĐ, OD.</b></li><li><b>Chọn bộ lọc nếu cần: SLOG, Loại hoàn, Từ ngày, Đến ngày.</b></li><li><b>Bấm Tìm, rồi bấm vào một đơn để xem chi tiết và sửa.</b></li><li><b>Xem thống kê: bấm tab ${hpTab("store")}, bấm vào cột hoặc ngày để xem chi tiết.</b></li></ol>`,
+        "",
+        hpPhone("Tìm kiếm", hpField("Từ khóa", "PR-15592478", "scan") + `<div class="hp-pair">${hpField("SLOG", "Tất cả", "select")}${hpField("Loại hoàn", "Tất cả", "select")}</div><div class="hp-btns"><span class="hp-btn pri">Tìm</span></div><div class="hp-row"><span>2945068 · Circle K</span><span class="hp-badge b-done">Đã ĐB</span></div>`, "search"));
+      const s7 = hpSection("hp-queue", 8, C.red, "Đơn lỗi / đơn chưa gửi được", "Cách đọc hàng chờ",
+        `<p style="margin:0 0 10px;font-size:14px;line-height:1.5">Đơn đã bấm OK nằm trong <b>hàng chờ</b> trên máy cho tới khi gửi xong. Xem ở <b>Cài đặt → Cài đặt khác → Quản lý vận hành → Queue đang chờ</b> (nếu tài khoản có quyền).</p>
+        <ol class="hp-steps" style="margin-bottom:12px"><li><b>Bấm tab ${hpTab("settings")} → Cài đặt khác → Quản lý vận hành → Queue đang chờ.</b></li><li><b>Xem cột Trạng thái của từng đơn</b><small>Đối chiếu với bảng trạng thái bên dưới.</small></li><li><b>Đơn ở trạng thái error: đọc lỗi ở cột Bước/Lỗi, xử lý theo bảng lỗi bên dưới.</b></li><li><b>Bấm "Chạy lại sync".</b><small>Đơn treo ở syncing quá lâu thì bấm "Mở khóa đơn treo" trước.</small></li><li><b>Quay lại Trang chủ, kiểm tra ô Lỗi đã về 0.</b></li></ol>
+        <table class="hp-table" style="--c:${C.red}"><thead><tr><th>Trạng thái</th><th>Nghĩa</th><th>Cần làm</th></tr></thead><tbody>
+          <tr><td><span class="hp-badge b-pending">pending</span></td><td>Đã lưu trên máy, chờ gửi</td><td>Không cần làm gì</td></tr>
+          <tr><td><span class="hp-badge b-sync">syncing</span></td><td>Đang gửi</td><td>Chờ. Treo quá lâu: bấm <b>Mở khóa đơn treo</b></td></tr>
+          <tr><td><span class="hp-badge b-error">error</span></td><td>Gửi bị lỗi</td><td>Đọc lỗi ở cột Bước/Lỗi, xử lý theo bảng dưới, rồi bấm <b>Chạy lại sync</b></td></tr></tbody></table>
+        <table class="hp-table" style="--c:${C.red};margin-top:12px"><thead><tr><th>Lỗi hiện ra</th><th>Cách xử lý</th></tr></thead><tbody>
+          <tr><td>Mất mạng / phản hồi quá lâu</td><td>Kiểm tra mạng. App tự gửi lại; vẫn lỗi thì bấm <b>Chạy lại sync</b>.</td></tr>
+          <tr><td>Hệ thống đang bận / đơn đang được lưu</td><td>Không cần làm gì, app tự gửi lại.</td></tr>
+          <tr><td>Không tìm thấy đơn</td><td>Đơn chưa có trên hệ thống. Báo người quản lý bổ sung, rồi bấm <b>Chạy lại sync</b>.</td></tr>
           <tr><td>Mã khớp nhiều đơn</td><td>Nhập lại bằng <b>Số đơn hàng</b> (không dùng PO).</td></tr>
           <tr><td>clientId đã dùng cho nội dung khác</td><td>Báo admin, không tự nhập lại đơn này.</td></tr>
-          <tr><td>Bộ nhớ ảnh offline trên máy đã đầy</td><td>Bấm <b>OK</b> lại (app đã dọn ảnh cũ). Vẫn lỗi: báo admin.</td></tr>
-          <tr><td>Đang nhận ảnh, vui lòng đợi</td><td>Chờ ảnh hiện đủ rồi mới bấm OK.</td></tr>
-        </tbody></table>
-        <p><b>Lưu ý:</b> không xóa app, không xóa dữ liệu app khi còn đơn chưa gửi (sẽ mất đơn trong hàng chờ). Không tự nhập lại đơn đang lỗi; admin có thể yêu cầu máy bạn gửi lại từ xa.</p>
-
-        <h3 id="h-faq">9. Hỏi đáp nhanh</h3>
-        <ul>
-          <li><b>Bấm OK rồi có cần chờ không?</b> Không. Đơn đã lưu trên máy, app tự gửi.</li>
-          <li><b>Trang chủ chưa thấy đơn vừa nhập?</b> Đơn đang được gửi; bấm nút tải lại sau ít phút.</li>
-          <li><b>Chụp nhầm ảnh?</b> Xóa ảnh ở phần xem trước rồi chụp lại trước khi bấm OK.</li>
-          <li><b>Chưa hiểu logic?</b> Liên hệ người phụ trách app.</li>
-        </ul>
-      </section>`;
+          <tr><td>Bộ nhớ ảnh offline đã đầy</td><td>Bấm <b>OK</b> lại (app đã dọn ảnh cũ). Vẫn lỗi: báo admin.</td></tr>
+          <tr><td>Đang nhận ảnh, vui lòng đợi</td><td>Chờ ảnh hiện đủ rồi mới bấm OK.</td></tr></tbody></table>`,
+        danger("Không tự nhập lại đơn đang lỗi", "Sẽ tạo trùng. Admin có thể yêu cầu máy bạn gửi lại từ xa."),
+        "");
+      const sCache = hpSection("hp-cache", 7, C.teal, "App thiếu dữ liệu: tải lại dữ liệu trên máy", "Khi tra không thấy đơn, SKU",
+        `<p style="margin:0 0 10px;font-size:14px;line-height:1.5">App giữ sẵn một bản dữ liệu trên máy (danh sách đơn PN, SKU VTD, SKU Phạm Nguyên) để tra cứu nhanh, kể cả khi mạng yếu. Bản này tự cập nhật mỗi ngày; khi thấy thiếu thì tải lại bằng tay.</p>
+        <ol class="hp-steps"><li><b>Kiểm tra khi nào cần tải lại.</b><small>Quét mã ở ${hpTab("docops")} báo không thấy đơn dù đơn đã có · Không thấy SKU mới · Thông tin đơn hiện ra cũ, sai.</small></li><li><b>Bấm tab ${hpTab("settings")} → Cài đặt khác → Cập nhật app.</b></li><li><b>Xem khung "Dữ liệu trên máy này".</b><small>Mỗi dòng (Master SKU VTD, SKU Phạm Nguyên, Đơn PN) có trạng thái và số đã tải / tổng.</small></li><li><b>Bấm "Tải lại cache máy này", giữ app mở và có mạng.</b><small>Chờ tới khi app báo "Đã kết thúc lượt kiểm tra cache".</small></li><li><b>Quay lại màn nhập, quét lại mã.</b></li></ol>`,
+        tip("Chưa thấy nút Tải lại cache?", "Tài khoản chưa được cấp quyền; liên hệ admin để cấp quyền hoặc nhờ admin tải giúp.") + warn("Cần có mạng", "Không có mạng thì app giữ nguyên dữ liệu cũ, không xoá gì."),
+        hpPhone("Cài đặt", `<div class="hp-card"><b>Dữ liệu trên máy này</b>Master SKU VTD: Xong · 1.240/1.240<br>SKU Phạm Nguyên: Xong · 386/386<br>Đơn PN: Đang tải · 2.100/2.544</div><div class="hp-btns"><span class="hp-btn pri">Tải lại cache máy này</span></div>`, "settings"));
+      const faq = [["Bấm OK rồi có cần chờ không?", "Không. Đơn đã lưu trên máy, app tự gửi lên hệ thống."], ["Trang chủ chưa thấy đơn vừa nhập?", "Đơn đang được gửi. Bấm nút tải lại ở góc trên sau ít phút."], ["Chụp nhầm ảnh thì sao?", "Xoá ảnh ở phần xem trước rồi chụp lại trước khi bấm OK. Mỗi nhóm ảnh tối đa 8 ảnh."], ["Dòng chữ chạy trên đầu màn hình là gì?", "Là thông báo chung của app, không phải lỗi."], ["Quét mã không thấy đơn hoặc SKU?", "Đơn hoặc SKU mới có thể chưa có trong dữ liệu trên máy. Làm theo mục 7: tải lại cache máy này."], ["Gặp lỗi không có trong bảng?", "Chụp màn hình hàng chờ hoặc thông báo lỗi, gửi người phụ trách app."]];
+      const s8 = `<section class="hp-sec hp-faq" id="hp-faq" style="--c:${C.blue}"><div class="hp-sec-head"><span class="hp-num">9</span><h3>Hỏi đáp nhanh</h3><span class="hp-sub">Bấm vào câu hỏi để xem</span></div><div style="padding:6px 14px 14px">${faq.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join("")}</div></section>`;
+      el("view").innerHTML = `<div class="hp">
+        <div class="hp-hero"><h2>Hướng dẫn sử dụng app Chứng từ FF</h2><p>Cách nhập từng màn, màn hình mẫu và cách xử lý đơn lỗi. Bấm một chủ đề để đi tới mục đó.</p><span class="hp-ver">Phiên bản ${html(APP_VERSION)}</span></div>
+        <div class="hp-toc">${toc.map(([id, c, t, d]) => `<button type="button" style="--c:${c}" onclick="${go(id)}"><b>${t}</b><small>${d}</small></button>`).join("")}</div>
+        ${s1}${s2}${s3}${s4}${s5}${s6}${sCache}${s7}${s8}
+        <div class="hp-foot">Màn hình mẫu chỉ để minh hoạ. Chưa hiểu logic, vui lòng liên hệ người phụ trách app.</div>
+      </div>`;
     }
     function resetSearchState(){
       searchRan = false;
@@ -3282,10 +3387,6 @@
             <h2>Nền đăng nhập</h2>
             <label>Màu nền<input id="loginBgColor" type="color" value="${html(cfg.bgColor || "#e9f3fb")}" oninput="setLoginBgColor(this.value)"></label>
             <label>Độ phủ ảnh nền <output id="bgDimOut">${html(cfg.bgDim || 16)}%</output><input type="range" min="0" max="70" step="1" value="${html(cfg.bgDim || 16)}" oninput="setLoginAppearanceValue('bgDim', this.value)"></label>
-            <h2>Dòng chữ chạy</h2>
-            <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" ${cfg.marqueeEnabled !== false ? "checked" : ""} onchange="setMarqueeValue('marqueeEnabled', this.checked)" style="width:auto">Hiện dòng chữ chạy (màn đăng nhập + trên mọi màn)</label>
-            <label>Nội dung<textarea rows="2" oninput="setMarqueeValue('marqueeText', this.value)">${html(cfg.marqueeText || "")}</textarea></label>
-            <label>Tốc độ <output id="marqueeSpeedOut">${html(cfg.marqueeSpeed || 18)} giây/vòng</output><input type="range" min="6" max="60" step="1" value="${html(cfg.marqueeSpeed || 18)}" oninput="setMarqueeValue('marqueeSpeed', this.value)"></label>
             <label>Link ảnh nền Drive<input id="loginBgDriveUrl" type="url" value="${html(cfg.imageUrl || "")}" placeholder="https://drive.google.com/file/d/.../view" onchange="setLoginBgDriveUrl(this.value)"></label>
             <div class="file-actions"><button type="button" onclick="clearLoginBgImage()">Xóa ảnh nền</button></div>
             <div class="muted">Trạng thái ảnh: ${cfg.hasImage ? "Đã có link ảnh nền" : "Chưa có ảnh nền"}. Mỗi máy tải ảnh sau khi đăng nhập và lưu vào bộ nhớ riêng.</div>
@@ -3805,7 +3906,7 @@
           <div class="stat-line"><span class="muted">Số đơn đã thao tác</span><strong>${statsText}</strong></div>
           <div class="slog-line">${slogText}</div>
         </div>
-        <div class="account-actions"><button onclick="changePass()">Thay đổi Pass</button><button onclick="setView('help')">Hướng dẫn sử dụng</button><button onclick="logout()">Đăng xuất</button></div>
+        <div class="account-actions"><button onclick="changePass()">Thay đổi Pass</button><button onclick="logout()">Đăng xuất</button></div>
       </section>`;
       const updateCfg = appUpdateConfig();
       const updateAvailable = hasNewAppVersion();
@@ -3852,7 +3953,7 @@
       const apiPanel = canViewApiArea() ? `<section class="section"><h2>API hệ thống đang dùng</h2>${smallTable(apiEntries)}${returnThApiControl}${docOpsApiControl}</section>` : "";
       const devicePanel = canViewDeviceArea() ? adminCache : "";
       const opsPanel = canViewOpsArea() ? `${queuePanel}${adminQueueErrors}` : "";
-      el("view").innerHTML = `${accountPanel}
+      el("view").innerHTML = `${accountPanel}${helpSettingsPanel()}
       <section class="section">
         <details class="settings-root"><summary><h2>Cài đặt khác</h2></summary>
           <div class="settings-menu">
@@ -3861,6 +3962,7 @@
             ${canOpenAdminArea() ? settingsFold("Quản lý admin", adminPanel, false) : ""}
             ${canViewDeviceArea() ? settingsFold("Quản lý thiết bị", devicePanel, false) : ""}
             ${canViewOpsArea() ? settingsFold("Quản lý vận hành", opsPanel, false) : ""}
+            ${isSystemOwner() ? settingsFold("Dòng chữ chạy & Hướng dẫn", marqueeOwnerPanel(), false) : ""}
             ${isSystemOwner() ? settingsFold("Báo cáo đăng nhập", adminLoginReport, false) : ""}
             ${canAdminUsers() ? settingsFold("Reset Pass", adminForgotPass, false) : ""}
             ${canViewApiArea() ? settingsFold("API hệ thống", apiPanel, false) : ""}
@@ -4718,7 +4820,7 @@
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.19";
+    const APP_VERSION = "5.9.20";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
