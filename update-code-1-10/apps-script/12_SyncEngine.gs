@@ -221,10 +221,13 @@ function pnV2Put_(map, row, col, value) {
 }
 // Sao chép định dạng/validation của dòng mẫu (dòng 2) cho các dòng vừa thêm.
 // Dòng mới thêm vào chỉ lấy dropdown/checkbox và định dạng số của dòng mẫu (dòng 2), KHÔNG lấy màu/chữ của đơn khác.
+// Tab được tự kẻ viền cho dòng mới: mọi tab chính + Chứng từ_full.
+const PN_V2_BORDER_FULL_ = ['Chứng từ_full'];
+function pnV2Bordered_(L) { return !L.isFull || PN_V2_BORDER_FULL_.indexOf(L.name) >= 0; }
 function pnV2CopyFormat_(L, start, count, width) {
   if (!count || width < 1) return;
   // Tab chính: kẻ viền (ô + đường trong) cho dòng mới, không phải kẻ tay.
-  if (!L.isFull) L.sh.getRange(start, 1, count, width).setBorder(true, true, true, true, true, true);
+  if (pnV2Bordered_(L)) L.sh.getRange(start, 1, count, width).setBorder(true, true, true, true, true, true);
   if (start <= 2) return;
   const from = L.sh.getRange(2, 1, 1, width), to = L.sh.getRange(start, 1, count, width);
   from.copyTo(to, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);

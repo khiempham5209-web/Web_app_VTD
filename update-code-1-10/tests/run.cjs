@@ -808,7 +808,7 @@ test('pnRepairMainFormats restores lost dropdowns down the column without touchi
  for(let i=2;i<=12;i++)assert.equal(dv.get(i+':7'),i===5?'OTHER':'DROPDOWN');
  assert.equal(r.validation[0].fixed,9);
 });
-test('New rows added to a main tab get borders; full tab rows do not',()=>{
+test('New rows added to a main tab get borders; Booking_full / File đơn_full rows do not',()=>{
  const e=v2env();e.c.pnMirrorAll();
  const calls=[];const orig=Range.prototype.setBorder;Range.prototype.setBorder=function(){calls.push(this.sh.name+':'+this.r+'x'+this.n);return this;};
  try {
@@ -817,7 +817,7 @@ test('New rows added to a main tab get borders; full tab rows do not',()=>{
   e.c.pnMirrorAll();
  } finally { Range.prototype.setBorder=orig; }
  assert.ok(calls.some(c=>c.indexOf('Chứng từ_FF:')===0),JSON.stringify(calls));
- assert.ok(!calls.some(c=>c.indexOf('_full:')>0),JSON.stringify(calls));
+ assert.ok(!calls.some(c=>/^(Booking|File đơn)_full:/.test(c)),JSON.stringify(calls));
 });
 test('Journal prune drops only rows older than 7 days',()=>{
  const e=environment();seed(e);e.c.pnMigrateFull();
@@ -949,5 +949,15 @@ test('Filling / clearing Ngày bàn giao CT on main or full updates Đã bàn gi
  r[h.indexOf('Mã đơn')]='G1';r[h.indexOf('Số đơn hàng')]='1';r[h.indexOf('Mã vật tư')]='SKU9';r[h.indexOf('Tên sản phẩm')]='P9';
  H.rows.push(r);e.c.pnHandleEdit({range:H.getRange(H.getLastRow(),1,1,h.length)});
  const sp=e.targets.get('Bàn giao SP_Hàng hoàn');assert.ok(sp.rows.some(x=>x&&x.includes('SKU9')),'product handover updated');
+});
+test('New docs in Chứng từ_full (from Booking) get borders',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const calls=[];const orig=Range.prototype.setBorder;Range.prototype.setBorder=function(){calls.push(this.sh.name+':'+this.r+'x'+this.n);return this;};
+ try {
+  const B=e.sheets.get('Booking'),s=B.getLastRow()+1,r=Array(16).fill('');r[0]='10/10/2026';r[1]='9600';r[3]='KH';
+  B.getRange(s,1,1,16).setValues([r]);e.c.pnHandleEdit({range:B.getRange(s,1,1,16)});
+ } finally { Range.prototype.setBorder=orig; }
+ assert.ok(calls.some(c=>c.indexOf('Chứng từ_full:')===0),JSON.stringify(calls));
+ assert.ok(calls.some(c=>c.indexOf('Chứng từ_FF:')===0),JSON.stringify(calls));
 });
 console.log('RESULT '+passed+' tests passed.');

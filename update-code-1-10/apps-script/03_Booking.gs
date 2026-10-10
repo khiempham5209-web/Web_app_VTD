@@ -214,6 +214,9 @@ function syncBookingRowsToChungTuFF_(startRow, endRow) {
   const nextRow = Math.max(target.getLastRow() + 1, 2);
   target.getRange(nextRow, 1, output.length, outputWidth).setValues(output);
   bookingSyncApplyControlColumnsBatch_(target, targetCol, nextRow, output.length);
+  // Chứng từ_full: kẻ viền cho các đơn mới tạo từ Booking (như tab chính).
+  const tl = pnV2Layout_(target, true);
+  if (pnV2Bordered_(tl) && tl.width) target.getRange(nextRow, 1, output.length, tl.width).setBorder(true, true, true, true, true, true);
   pnStampFullIds_(PN_FULL.pairs[2]);
   pnMarkDirty_();
   return {ok: true, added: output.length, skipped};
