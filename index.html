@@ -1472,6 +1472,22 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
 .hp-foot{text-align:center;color:var(--muted);font-size:12px;padding:6px 0 10px}
 .hp-settings-card{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .hp-settings-card p{margin:0;color:var(--muted);font-size:13px;flex:1;min-width:200px}
+.pns-shop{display:grid;gap:6px;margin-bottom:12px}.pns-shop>span{font-size:13px;color:var(--muted)}
+.pns-seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.pns-seg button{border:0;border-radius:0;min-height:40px;font-weight:600;background:transparent}
+.pns-seg button.on{background:#2563eb;color:#fff}
+.pns-sum{display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:12px;color:var(--muted);margin-bottom:6px}
+.pns-list{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.pns-it{display:grid;grid-template-columns:40px 72px minmax(0,1fr) auto;gap:8px;align-items:center;width:100%;min-height:38px;padding:6px 10px;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent;text-align:left;font-weight:400;font-size:13px;color:var(--text)}
+.pns-it:first-child{border-top:0}
+.pns-date{color:var(--muted);font-size:12px}.pns-no{font-weight:700}.pns-kh{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.pns-tg{display:flex;gap:4px}
+.pns-dot{font-style:normal;display:inline-grid;place-items:center;min-width:24px;height:20px;padding:0 6px;border-radius:999px;font-size:11px;font-weight:700}
+.pns-dot.ok{background:#dcfce7;color:#047857}.pns-dot.no{background:#fef3c7;color:#b45309}.pns-dot.sp{background:#dbeafe;color:#1d4ed8}
+.pns-h{display:flex;gap:6px;align-items:center;font-size:15px;margin:16px 0 8px}
+.pns-kv{display:grid;grid-template-columns:130px minmax(0,1fr);gap:5px 10px;font-size:13.5px}.pns-kv>span:nth-child(odd){color:var(--muted)}
+.pns-card{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px}.pns-card-t{font-weight:700;margin-bottom:6px}
+.pns-link{min-height:28px;padding:0 10px;font-size:12.5px}
 .mq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
 .mq-grid label{font-size:13px}.mq-check{display:flex;gap:8px;align-items:center}.mq-check input{width:auto}
 </style>
@@ -2151,7 +2167,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       if (!helpEnabled()) { view = "home"; return render(); }
       el("view").className = "content";
       const C = {blue:"#2563eb", green:"#059669", violet:"#7c3aed", teal:"#0d9488", amber:"#d97706", red:"#dc2626", slate:"#475569"};
-      const toc = [["hp-start", C.blue, "Bắt đầu", "Đăng nhập, cập nhật, quét mã"], ["hp-home", C.teal, "Trang chủ", "Số liệu, trạng thái trong ngày"], ["hp-vtd", C.green, hpTab("input"), "Chứng từ, sản phẩm, thu hồi"], ["hp-th", C.violet, hpTab("returnth"), "Hàng hoàn TH Truemilk"], ["hp-pn", C.amber, hpTab("docops"), "Chứng từ, hàng hoàn Phạm Nguyên"], ["hp-search", C.slate, "Tìm kiếm & ST", "Tra đơn, thống kê siêu thị"], ["hp-cache", C.teal, "Thiếu dữ liệu", "Tải lại dữ liệu trên máy"], ["hp-queue", C.red, "Đơn lỗi", "Trạng thái và cách xử lý"], ["hp-faq", C.blue, "Hỏi đáp", "Câu hỏi thường gặp"]];
+      const toc = [["hp-start", C.blue, "Bắt đầu", "Đăng nhập, cập nhật, quét mã"], ["hp-home", C.teal, "Trang chủ", "Số liệu, trạng thái trong ngày"], ["hp-vtd", C.green, hpTab("input"), "Chứng từ, sản phẩm, thu hồi"], ["hp-th", C.violet, hpTab("returnth"), "Hàng hoàn TH Truemilk"], ["hp-pn", C.amber, hpTab("docops"), "Chứng từ, hàng hoàn Phạm Nguyên"], ["hp-search-vtd", C.slate, "Tìm kiếm VTD", "Tra đơn VTD, thống kê ST"], ["hp-search-pn", C.amber, "Tìm kiếm PN", "Chứng từ + sản phẩm PN"], ["hp-cache", C.teal, "Thiếu dữ liệu", "Tải lại dữ liệu trên máy"], ["hp-queue", C.red, "Đơn lỗi", "Trạng thái và cách xử lý"], ["hp-faq", C.blue, "Hỏi đáp", "Câu hỏi thường gặp"]];
       const go = id => `document.getElementById('${id}').scrollIntoView({behavior:'smooth',block:'start'})`;
       const tip = (t, b) => `<div class="hp-note hp-tip"><b>💡 ${t}</b>${b}</div>`;
       const warn = (t, b) => `<div class="hp-note hp-warn"><b>⚠️ ${t}</b>${b}</div>`;
@@ -2161,7 +2177,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         tip("Mất mạng vẫn nhập được", "Đơn nằm trong hàng chờ trên máy và tự gửi khi có mạng lại.") + warn("Không xoá app khi còn đơn chưa gửi", "Xoá app hoặc xoá dữ liệu app sẽ mất các đơn trong hàng chờ."),
         hpPhone("Chứng từ FF", hpField("Email", "nhanvien@gmail.com") + hpField("Pass", "••••••") + `<div class="hp-btns"><span class="hp-btn">Quên Pass</span><span class="hp-btn pri">Đăng nhập</span></div>`, ""));
       const s2 = hpSection("hp-home", 2, C.teal, "Trang chủ", "Xem nhanh trong ngày",
-        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("home")} ở thanh dưới cùng.</b></li><li><b>Xem ô Đơn nhập trong ngày: tổng theo SLOG (O1B1, O1B3, O1BH, Ecom), TH Truemilk, Chứng từ PN.</b></li><li><b>Xem ô Trạng thái: Đã đồng bộ / Đang đồng bộ / Lỗi.</b><small>Có số ở ô Lỗi thì làm theo mục 8.</small></li><li><b>Xem bảng User thao tác và Chi tiết VTD, TH, Phạm Nguyên trong ngày.</b></li><li><b>Bấm nút tải lại ở góc trên khi cần cập nhật số liệu mới.</b></li></ol>`,
+        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("home")} ở thanh dưới cùng.</b></li><li><b>Xem ô Đơn nhập trong ngày: tổng theo SLOG (O1B1, O1B3, O1BH, Ecom), TH Truemilk, Chứng từ PN.</b></li><li><b>Xem ô Trạng thái: Đã đồng bộ / Đang đồng bộ / Lỗi.</b><small>Có số ở ô Lỗi thì làm theo mục 9.</small></li><li><b>Xem bảng User thao tác và Chi tiết VTD, TH, Phạm Nguyên trong ngày.</b></li><li><b>Bấm nút tải lại ở góc trên khi cần cập nhật số liệu mới.</b></li></ol>`,
         "",
         hpPhone("Trang chủ", `<div class="hp-stat"><div><b>128</b>Đơn nhập</div><div><b>3</b>Đang ĐB</div><div class="err"><b>1</b>Lỗi</div></div><div class="hp-row"><span>O1B1</span><b>42</b></div><div class="hp-row"><span>Chứng từ PN</span><b>36</b></div><div class="hp-row"><span>TH Truemilk</span><b>18</b></div>`, "home"));
       const s3 = hpSection("hp-vtd", 3, C.green, hpTab("input"), "Chứng từ · Sản phẩm · Thu hồi",
@@ -2173,14 +2189,37 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         "",
         hpPhone("Nhập TH", hpField("Mã đơn", "TH-240915", "scan") + hpField("Tên sản phẩm", "Sữa TH 180ml", "select") + `<div class="hp-pair">${hpField("Số lượng", "12")}${hpField("Tình trạng", "Bình thường", "select")}</div><div class="hp-photos"><span></span></div><div class="hp-btns"><span class="hp-btn">Thêm SKU</span><span class="hp-btn ok">OK</span></div>`, "input"));
       const s5 = hpSection("hp-pn", 5, C.amber, hpTab("docops") + " (Phạm Nguyên)", "Chứng từ · Sản phẩm · SP + CT",
-        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("docops")} ở thanh dưới cùng.</b></li><li><b>Quét hoặc nhập Mã đơn (Số đơn hàng, Mã đơn GHTK hoặc PO).</b><small>Phải hiện khung thông tin đơn mới lưu được. Không thấy đơn: xem mục 7 (tải lại dữ liệu) hoặc báo người quản lý.</small></li><li><b>Chọn Loại hoàn: Chứng từ / Sản phẩm / Sản phẩm + chứng từ.</b></li><li><b>Phần Chứng từ: chọn Xác thực hóa đơn và Trạng thái, quét Mã ecom CT, ghi chú nếu có, chụp ít nhất 1 ảnh.</b><small>Quét ra link thì app tự lấy 10 chữ số cuối.</small></li><li><b>Phần Sản phẩm: chọn sản phẩm hoặc quét Barcode, chọn Phân loại và Tình trạng, nhập HSD nếu có, kiểm tra Kích thước + Khối lượng, chụp ảnh, bấm Thêm SKU.</b><small>App tự tính CBM; kích thước sai thì sửa lại. Nhiều SKU thì lặp lại bước này.</small></li><li><b>Bấm OK để lưu.</b></li></ol>`,
+        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("docops")} ở thanh dưới cùng.</b></li><li><b>Quét hoặc nhập Mã đơn (Số đơn hàng, Mã đơn GHTK hoặc PO).</b><small>Phải hiện khung thông tin đơn mới lưu được. Không thấy đơn: xem mục 8 (tải lại dữ liệu) hoặc báo người quản lý.</small></li><li><b>Chọn Loại hoàn: Chứng từ / Sản phẩm / Sản phẩm + chứng từ.</b></li><li><b>Phần Chứng từ: chọn Xác thực hóa đơn và Trạng thái, quét Mã ecom CT, ghi chú nếu có, chụp ít nhất 1 ảnh.</b><small>Quét ra link thì app tự lấy 10 chữ số cuối.</small></li><li><b>Phần Sản phẩm: chọn sản phẩm hoặc quét Barcode, chọn Phân loại và Tình trạng, nhập HSD nếu có, kiểm tra Kích thước + Khối lượng, chụp ảnh, bấm Thêm SKU.</b><small>App tự tính CBM; kích thước sai thì sửa lại. Nhiều SKU thì lặp lại bước này.</small></li><li><b>Bấm OK để lưu.</b></li></ol>`,
         warn("Mỗi SKU cần ít nhất 1 ảnh", "Chứng từ cũng cần ít nhất 1 ảnh, thiếu ảnh app sẽ không cho lưu."),
         hpPhone("Thao tác Phạm Nguyên", hpField("Mã đơn", "2959467", "scan") + `<div class="hp-card"><b>Đơn tìm thấy</b>7-ELEVEN · PO P000084GGU</div>` + hpField("Loại hoàn", "Chứng từ", "select") + `<div class="hp-pair">${hpField("Xác thực", "Đã nhận", "select")}${hpField("Trạng thái", "Bình thường", "select")}</div>` + hpField("Mã ecom CT", "1972031652", "scan") + `<div class="hp-photos"><span></span><span></span></div><div class="hp-btns"><span class="hp-btn">Hủy</span><span class="hp-btn ok">OK</span></div>`, "docops"));
-      const s6 = hpSection("hp-search", 6, C.slate, hpTab("search") + " & " + hpTab("store"), "Tra cứu, thống kê",
-        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("search")} ở thanh dưới cùng.</b></li><li><b>Nhập hoặc quét từ khóa: mã đơn, serial, PO, số HĐ, OD.</b></li><li><b>Chọn bộ lọc nếu cần: SLOG, Loại hoàn, Từ ngày, Đến ngày.</b></li><li><b>Bấm Tìm, rồi bấm vào một đơn để xem chi tiết và sửa.</b></li><li><b>Xem thống kê: bấm tab ${hpTab("store")}, bấm vào cột hoặc ngày để xem chi tiết.</b></li></ol>`,
+      const hpRow = (date, no, kh, tags) => `<div class="hp-row" style="justify-content:flex-start;gap:6px"><span style="color:#64748b;width:30px">${date}</span><b style="width:52px">${no}</b><span style="flex:1;color:#64748b;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${kh}</span>${tags}</div>`;
+      const ctOk = `<span class="hp-badge b-done">CT</span>`, ctNo = `<span class="hp-badge" style="background:#fef3c7;color:#b45309">CT</span>`, sp = n => `<span class="hp-badge b-pending">${n > 1 ? n + "SP" : "SP"}</span>`;
+      const seg = on => `<div class="hp-pair" style="gap:0;border:1px solid #cbd5e1;border-radius:6px;overflow:hidden"><span style="text-align:center;padding:4px;${on === "vtd" ? "background:#2563eb;color:#fff;font-weight:700" : "background:#fff"}">VTD</span><span style="text-align:center;padding:4px;${on === "pn" ? "background:#2563eb;color:#fff;font-weight:700" : "background:#fff"}">Phạm Nguyên</span></div>`;
+      const s6 = hpSection("hp-search-vtd", 6, C.slate, "Tìm kiếm VTD", "Tra đơn VTD, thống kê siêu thị",
+        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("search")} ở thanh dưới cùng.</b></li><li><b>Chọn shop VTD ở ô "Chọn shop tìm kiếm".</b><small>Tài khoản không có quyền Phạm Nguyên thì không thấy ô này, màn tìm kiếm luôn là VTD.</small></li><li><b>Nhập hoặc quét Từ khóa.</b><small>Tìm theo mã đơn, serial, PO, số HĐ hoặc OD.</small></li><li><b>Chọn bộ lọc nếu cần: SLOG, Loại hoàn (Chứng từ / Sản phẩm / Thu hồi), Từ ngày, Đến ngày.</b></li><li><b>Bấm Tìm.</b></li><li><b>Bấm vào một đơn để xem chi tiết và sửa thông tin (nếu được phép).</b></li><li><b>Xem thống kê: bấm tab ${hpTab("store")}, bấm vào cột hoặc ngày để xem chi tiết.</b></li></ol>
+        <table class="hp-table" style="--c:${C.slate};margin-top:12px"><thead><tr><th>Bộ lọc VTD</th><th>Tìm như thế nào</th></tr></thead><tbody>
+          <tr><td>Từ khóa</td><td>Mã đơn, serial, PO, số HĐ, OD</td></tr>
+          <tr><td>SLOG</td><td>O1B1, O1B3, O1BH, Ecom</td></tr>
+          <tr><td>Loại hoàn</td><td>Chứng từ, Sản phẩm, Thu hồi</td></tr>
+          <tr><td>Từ ngày / Đến ngày</td><td>Ngày nhập đơn</td></tr></tbody></table>`,
         "",
-        hpPhone("Tìm kiếm", hpField("Từ khóa", "PR-15592478", "scan") + `<div class="hp-pair">${hpField("SLOG", "Tất cả", "select")}${hpField("Loại hoàn", "Tất cả", "select")}</div><div class="hp-btns"><span class="hp-btn pri">Tìm</span></div><div class="hp-row"><span>2945068 · Circle K</span><span class="hp-badge b-done">Đã ĐB</span></div>`, "search"));
-      const s7 = hpSection("hp-queue", 8, C.red, "Đơn lỗi / đơn chưa gửi được", "Cách đọc hàng chờ",
+        hpPhone(hpTab("search"), seg("vtd") + hpField("Từ khóa", "PR-15592478", "scan") + `<div class="hp-pair">${hpField("SLOG", "Tất cả", "select")}${hpField("Loại hoàn", "Tất cả", "select")}</div><div class="hp-pair">${hpField("Từ ngày", "01/10/2026")}${hpField("Đến ngày", "10/10/2026")}</div><div class="hp-btns"><span class="hp-btn pri">Tìm</span></div>`, "search"));
+      const s6b = hpSection("hp-search-pn", 7, C.amber, "Tìm kiếm Phạm Nguyên", "Chứng từ + sản phẩm hoàn PN",
+        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("search")} ở thanh dưới cùng.</b></li><li><b>Chọn shop Phạm Nguyên ở ô "Chọn shop tìm kiếm".</b><small>App nhớ shop đã chọn cho lần sau.</small></li><li><b>Quét hoặc nhập Mã đơn GHTK / Số đơn hàng.</b><small>Nhập một phần mã cũng tìm được. Muốn xem theo bộ lọc thì để trống ô này.</small></li><li><b>Chọn thêm bộ lọc nếu cần: Loại hoàn, Phân loại, Loại siêu thị, User thao tác, Ngày nhập từ, đến.</b><small>Chọn nhiều bộ lọc thì đơn phải thỏa tất cả. Để trống bộ lọc nào thì không lọc theo mục đó.</small></li><li><b>Bấm Tìm.</b><small>Đơn mới nhất ở trên cùng. Bấm "Xóa lọc" để bỏ hết bộ lọc.</small></li><li><b>Đọc dòng kết quả: Ngày · Mã đơn · Khách hàng · nhãn CT / SP.</b></li><li><b>Bấm vào một đơn để xem đủ thông tin.</b><small>Gồm Thông tin đơn, Chứng từ (xác thực, trạng thái, mã ecom CT, ngày bàn giao, đã tạo SV, ảnh) và từng Sản phẩm hoàn (mã vật tư, số lượng, phân loại, tình trạng, HSD, kích thước, ảnh).</small></li><li><b>Bấm "Quay lại kết quả" để về danh sách.</b></li></ol>
+        <table class="hp-table" style="--c:${C.amber};margin-top:12px"><thead><tr><th>Bộ lọc Phạm Nguyên</th><th>Tìm như thế nào</th></tr></thead><tbody>
+          <tr><td>Mã đơn GHTK / Số đơn hàng</td><td>Khớp Mã đơn GHTK hoặc Số đơn hàng, nhập một phần mã cũng được</td></tr>
+          <tr><td>Loại hoàn = Chứng từ</td><td>Đơn đã thao tác chứng từ trên app</td></tr>
+          <tr><td>Loại hoàn = Sản phẩm</td><td>Đơn có ít nhất 1 sản phẩm hoàn</td></tr>
+          <tr><td>Phân loại</td><td>Đơn có sản phẩm Hoàn trả hoặc Hàng thu hồi</td></tr>
+          <tr><td>Loại siêu thị, User thao tác</td><td>Danh sách tự lấy từ dữ liệu có sẵn</td></tr>
+          <tr><td>Ngày nhập từ / đến</td><td>Ngày thao tác chứng từ trên app, hoặc ngày hoàn trả sản phẩm</td></tr></tbody></table>
+        <table class="hp-table" style="--c:${C.amber};margin-top:12px"><thead><tr><th>Nhãn</th><th>Nghĩa</th></tr></thead><tbody>
+          <tr><td>${ctOk}</td><td>Chứng từ đã nhận</td></tr>
+          <tr><td>${ctNo}</td><td>Chứng từ chưa nhận</td></tr>
+          <tr><td>${sp(1)} / ${sp(2)}</td><td>Đơn có 1 sản phẩm / 2 sản phẩm hoàn</td></tr></tbody></table>`,
+        tip("Khác Tìm kiếm VTD", "Tìm kiếm Phạm Nguyên tìm ngay trên dữ liệu đã tải về máy, không cần mạng. Không thấy đơn mới: làm theo mục 8 để tải lại dữ liệu."),
+        hpPhone(hpTab("search"), seg("pn") + hpField("Mã đơn GHTK / Số đơn hàng", "2959", "scan") + `<div class="hp-pair">${hpField("Loại hoàn", "Tất cả", "select")}${hpField("Phân loại", "Tất cả", "select")}</div><div class="hp-btns"><span class="hp-btn pri">Tìm</span></div>` + hpRow("05/10", "2959467", "7-ELEVEN (MB)", ctOk + sp(1)) + hpRow("05/10", "2960639", "BRG - NEW- Hà Nội", ctNo) + hpRow("03/10", "2945068", "Circle K Hà Nội", sp(2)), "search"));
+      const s7 = hpSection("hp-queue", 9, C.red, "Đơn lỗi / đơn chưa gửi được", "Cách đọc hàng chờ",
         `<p style="margin:0 0 10px;font-size:14px;line-height:1.5">Đơn đã bấm OK nằm trong <b>hàng chờ</b> trên máy cho tới khi gửi xong. Xem ở <b>Cài đặt → Cài đặt khác → Quản lý vận hành → Queue đang chờ</b> (nếu tài khoản có quyền).</p>
         <ol class="hp-steps" style="margin-bottom:12px"><li><b>Bấm tab ${hpTab("settings")} → Cài đặt khác → Quản lý vận hành → Queue đang chờ.</b></li><li><b>Xem cột Trạng thái của từng đơn</b><small>Đối chiếu với bảng trạng thái bên dưới.</small></li><li><b>Đơn ở trạng thái error: đọc lỗi ở cột Bước/Lỗi, xử lý theo bảng lỗi bên dưới.</b></li><li><b>Bấm "Chạy lại sync".</b><small>Đơn treo ở syncing quá lâu thì bấm "Mở khóa đơn treo" trước.</small></li><li><b>Quay lại Trang chủ, kiểm tra ô Lỗi đã về 0.</b></li></ol>
         <table class="hp-table" style="--c:${C.red}"><thead><tr><th>Trạng thái</th><th>Nghĩa</th><th>Cần làm</th></tr></thead><tbody>
@@ -2197,17 +2236,17 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
           <tr><td>Đang nhận ảnh, vui lòng đợi</td><td>Chờ ảnh hiện đủ rồi mới bấm OK.</td></tr></tbody></table>`,
         danger("Không tự nhập lại đơn đang lỗi", "Sẽ tạo trùng. Admin có thể yêu cầu máy bạn gửi lại từ xa."),
         "");
-      const sCache = hpSection("hp-cache", 7, C.teal, "App thiếu dữ liệu: tải lại dữ liệu trên máy", "Khi tra không thấy đơn, SKU",
+      const sCache = hpSection("hp-cache", 8, C.teal, "App thiếu dữ liệu: tải lại dữ liệu trên máy", "Khi tra không thấy đơn, SKU",
         `<p style="margin:0 0 10px;font-size:14px;line-height:1.5">App giữ sẵn một bản dữ liệu trên máy (danh sách đơn PN, SKU VTD, SKU Phạm Nguyên) để tra cứu nhanh, kể cả khi mạng yếu. Bản này tự cập nhật mỗi ngày; khi thấy thiếu thì tải lại bằng tay.</p>
         <ol class="hp-steps"><li><b>Kiểm tra khi nào cần tải lại.</b><small>Quét mã ở ${hpTab("docops")} báo không thấy đơn dù đơn đã có · Không thấy SKU mới · Thông tin đơn hiện ra cũ, sai.</small></li><li><b>Bấm tab ${hpTab("settings")} → Cài đặt khác → Cập nhật app.</b></li><li><b>Xem khung "Dữ liệu trên máy này".</b><small>Mỗi dòng (Master SKU VTD, SKU Phạm Nguyên, Đơn PN) có trạng thái và số đã tải / tổng.</small></li><li><b>Bấm "Tải lại cache máy này", giữ app mở và có mạng.</b><small>Chờ tới khi app báo "Đã kết thúc lượt kiểm tra cache".</small></li><li><b>Quay lại màn nhập, quét lại mã.</b></li></ol>`,
         tip("Chưa thấy nút Tải lại cache?", "Tài khoản chưa được cấp quyền; liên hệ admin để cấp quyền hoặc nhờ admin tải giúp.") + warn("Cần có mạng", "Không có mạng thì app giữ nguyên dữ liệu cũ, không xoá gì."),
         hpPhone("Cài đặt", `<div class="hp-card"><b>Dữ liệu trên máy này</b>Master SKU VTD: Xong · 1.240/1.240<br>SKU Phạm Nguyên: Xong · 386/386<br>Đơn PN: Đang tải · 2.100/2.544</div><div class="hp-btns"><span class="hp-btn pri">Tải lại cache máy này</span></div>`, "settings"));
-      const faq = [["Bấm OK rồi có cần chờ không?", "Không. Đơn đã lưu trên máy, app tự gửi lên hệ thống."], ["Trang chủ chưa thấy đơn vừa nhập?", "Đơn đang được gửi. Bấm nút tải lại ở góc trên sau ít phút."], ["Chụp nhầm ảnh thì sao?", "Xoá ảnh ở phần xem trước rồi chụp lại trước khi bấm OK. Mỗi nhóm ảnh tối đa 8 ảnh."], ["Dòng chữ chạy trên đầu màn hình là gì?", "Là thông báo chung của app, không phải lỗi."], ["Quét mã không thấy đơn hoặc SKU?", "Đơn hoặc SKU mới có thể chưa có trong dữ liệu trên máy. Làm theo mục 7: tải lại cache máy này."], ["Gặp lỗi không có trong bảng?", "Chụp màn hình hàng chờ hoặc thông báo lỗi, gửi người phụ trách app."]];
-      const s8 = `<section class="hp-sec hp-faq" id="hp-faq" style="--c:${C.blue}"><div class="hp-sec-head"><span class="hp-num">9</span><h3>Hỏi đáp nhanh</h3><span class="hp-sub">Bấm vào câu hỏi để xem</span></div><div style="padding:6px 14px 14px">${faq.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join("")}</div></section>`;
+      const faq = [["Bấm OK rồi có cần chờ không?", "Không. Đơn đã lưu trên máy, app tự gửi lên hệ thống."], ["Trang chủ chưa thấy đơn vừa nhập?", "Đơn đang được gửi. Bấm nút tải lại ở góc trên sau ít phút."], ["Chụp nhầm ảnh thì sao?", "Xoá ảnh ở phần xem trước rồi chụp lại trước khi bấm OK. Mỗi nhóm ảnh tối đa 8 ảnh."], ["Dòng chữ chạy trên đầu màn hình là gì?", "Là thông báo chung của app, không phải lỗi."], ["Quét mã không thấy đơn hoặc SKU?", "Đơn hoặc SKU mới có thể chưa có trong dữ liệu trên máy. Làm theo mục 8: tải lại cache máy này."], ["Gặp lỗi không có trong bảng?", "Chụp màn hình hàng chờ hoặc thông báo lỗi, gửi người phụ trách app."]];
+      const s8 = `<section class="hp-sec hp-faq" id="hp-faq" style="--c:${C.blue}"><div class="hp-sec-head"><span class="hp-num">10</span><h3>Hỏi đáp nhanh</h3><span class="hp-sub">Bấm vào câu hỏi để xem</span></div><div style="padding:6px 14px 14px">${faq.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join("")}</div></section>`;
       el("view").innerHTML = `<div class="hp">
         <div class="hp-hero"><h2>Hướng dẫn sử dụng app Chứng từ FF</h2><p>Cách nhập từng màn, màn hình mẫu và cách xử lý đơn lỗi. Bấm một chủ đề để đi tới mục đó.</p><span class="hp-ver">Phiên bản ${html(APP_VERSION)}</span></div>
         <div class="hp-toc">${toc.map(([id, c, t, d]) => `<button type="button" style="--c:${c}" onclick="${go(id)}"><b>${t}</b><small>${d}</small></button>`).join("")}</div>
-        ${s1}${s2}${s3}${s4}${s5}${s6}${sCache}${s7}${s8}
+        ${s1}${s2}${s3}${s4}${s5}${s6}${s6b}${sCache}${s7}${s8}
         <div class="hp-foot">Màn hình mẫu chỉ để minh hoạ. Chưa hiểu logic, vui lòng liên hệ người phụ trách app.</div>
       </div>`;
     }
@@ -4863,7 +4902,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.21";
+    const APP_VERSION = "5.9.22";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -9673,8 +9712,164 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         <section class="section"><h2>Chi tiết TH Truemilk trong ngày</h2>${returnThTodayTable(returnThRows)}</section>
           <section class="section"><h2>Chi tiết Phạm Nguyên trong ngày</h2>${docOpsTodayTable(docOpsRows)}</section>`;
     }
+    // ===== Tìm kiếm Phạm Nguyên: tìm trên dữ liệu đã tải về máy (đơn PN + hàng hoàn PN), chỉ xem =====
+    let pnReturnsMemory = null;
+    function pnSearchAllowed(){ return canScreen("docops"); }
+    function searchShopValue(){
+      if (!pnSearchAllowed()) return "vtd";
+      if (!live.searchShop) { try { live.searchShop = localStorage.getItem("vtd_search_shop") || "vtd"; } catch (err) { live.searchShop = "vtd"; } }
+      return live.searchShop === "pn" ? "pn" : "vtd";
+    }
+    function searchShopToggle(){
+      if (!pnSearchAllowed()) return "";
+      const shop = searchShopValue();
+      return `<div class="pns-shop"><span>Chọn shop tìm kiếm</span><div class="pns-seg"><button type="button" class="${shop === "vtd" ? "on" : ""}" onclick="setSearchShop('vtd')">VTD</button><button type="button" class="${shop === "pn" ? "on" : ""}" onclick="setSearchShop('pn')">Phạm Nguyên</button></div></div>`;
+    }
+    function setSearchShop(shop){
+      live.searchShop = shop === "pn" ? "pn" : "vtd";
+      try { localStorage.setItem("vtd_search_shop", live.searchShop); } catch (err) {}
+      live.pnDetailKey = "";
+      search();
+    }
+    function pnDateIso(value){
+      const text = String(value || "");
+      const a = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (a) return `${a[3]}-${a[2].padStart(2, "0")}-${a[1].padStart(2, "0")}`;
+      const b = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+      return b ? b[0] : "";
+    }
+    function pnDateShow(iso){ return iso ? iso.slice(8) + "/" + iso.slice(5, 7) : ""; }
+    function pnKey(value){ return String(value || "").trim().toLowerCase(); }
+    async function pnReturnsRows(){
+      if (pnReturnsMemory) return pnReturnsMemory;
+      try { pnReturnsMemory = (await keySyncRead("pnReturns")) || []; } catch (err) { pnReturnsMemory = []; }
+      return pnReturnsMemory;
+    }
+    // Gộp mỗi đơn: chứng từ (Chứng từ_full) + các dòng hàng hoàn (Hoàn sản phẩm), nối theo Số đơn hàng hoặc Mã đơn GHTK.
+    async function pnSearchOrders(){
+      await hydrateDocOpsLookupCache();
+      const rets = await pnReturnsRows();
+      const map = new Map(), byGhtk = new Map();
+      docOpsLookupRowsCache().forEach(d => {
+        const key = pnKey(d.orderNo) || (d.maDonGhtk ? "g:" + pnKey(d.maDonGhtk) : "");
+        if (!key || map.has(key)) return;
+        const o = {key, orderNo:d.orderNo || "", ghtk:d.maDonGhtk || "", customer:d.customer || "", po:d.po || "", store:d.storeType || "", doc:d, items:[], users:new Set(d.user ? [d.user] : []), docDate:d.thoiGian ? pnDateIso(d.thoiGian) : "", itemDates:[]};
+        map.set(key, o);
+        if (o.ghtk) byGhtk.set(pnKey(o.ghtk), o);
+      });
+      rets.forEach(r => {
+        let o = (r.orderNo && map.get(pnKey(r.orderNo))) || (r.maDon && byGhtk.get(pnKey(r.maDon)));
+        if (!o) {
+          const key = pnKey(r.orderNo) || "g:" + pnKey(r.maDon);
+          o = map.get(key);
+          if (!o) { o = {key, orderNo:r.orderNo || "", ghtk:r.maDon || "", customer:r.customer || "", po:r.po || "", store:r.storeType || "", doc:null, items:[], users:new Set(), docDate:"", itemDates:[]}; map.set(key, o); if (o.ghtk) byGhtk.set(pnKey(o.ghtk), o); }
+        }
+        o.items.push(r);
+        if (r.user) o.users.add(r.user);
+        const d = pnDateIso(r.ngayHoanTra || r.thoiGian);
+        if (d) o.itemDates.push(d);
+        if (!o.store) o.store = r.storeType || "";
+        if (!o.customer) o.customer = r.customer || "";
+      });
+      map.forEach(o => { o.date = [o.docDate, ...o.itemDates].filter(Boolean).sort().pop() || ""; });
+      return [...map.values()];
+    }
+    function pnFilters(){ return live.pnSearch || (live.pnSearch = {code:"", type:"", cls:"", store:"", user:"", from:"", to:""}); }
+    async function runPnSearch(){
+      const f = pnFilters();
+      ["code", "type", "cls", "store", "user", "from", "to"].forEach(k => { const node = el("pns_" + k); if (node) f[k] = String(node.value || "").trim(); });
+      live.pnLoading = true; live.pnRan = true; search();
+      try {
+        const all = await pnSearchOrders(), q = pnKey(f.code);
+        live.pnOptions = {stores:[...new Set(all.map(o => o.store).filter(Boolean))].sort(), users:[...new Set(all.flatMap(o => [...o.users]).filter(Boolean))].sort()};
+        live.pnResults = all.filter(o =>
+          (!q || pnKey(o.orderNo).includes(q) || pnKey(o.ghtk).includes(q)) &&
+          (!f.type || (f.type === "Chứng từ" ? !!(o.doc && o.doc.thoiGian) : o.items.length > 0)) &&
+          (!f.cls || o.items.some(i => i.classification === f.cls)) &&
+          (!f.store || o.store === f.store) &&
+          (!f.user || o.users.has(f.user)) &&
+          (!f.from && !f.to || [o.docDate, ...o.itemDates].some(d => d && (!f.from || d >= f.from) && (!f.to || d <= f.to)))
+        ).sort((a, b) => (b.date || "").localeCompare(a.date || "") || String(b.orderNo).localeCompare(String(a.orderNo)));
+      } catch (err) {
+        live.pnResults = []; toast("Không đọc được dữ liệu trên máy: " + String(err && err.message || err), "err");
+      } finally { live.pnLoading = false; search(); }
+    }
+    async function pnSearchOptionsOnce(){
+      if (live.pnOptions || live.pnOptionsLoading) return;
+      live.pnOptionsLoading = true;
+      try { const all = await pnSearchOrders(); live.pnOptions = {stores:[...new Set(all.map(o => o.store).filter(Boolean))].sort(), users:[...new Set(all.flatMap(o => [...o.users]).filter(Boolean))].sort()}; }
+      catch (err) { live.pnOptions = {stores:[], users:[]}; }
+      finally { live.pnOptionsLoading = false; if (view === "search" && searchShopValue() === "pn" && !live.pnDetailKey) search(); }
+    }
+    function pnSearchScanned(value){ const node = el("pns_code"); if (node) node.value = value || ""; runPnSearch(); }
+    function clearPnSearch(){ live.pnSearch = null; live.pnResults = []; live.pnRan = false; search(); }
+    function pnOpenLink(url){
+      if (!url) return;
+      if (window.VTDNative && typeof window.VTDNative.openUrl === "function") window.VTDNative.openUrl(url); else window.open(url, "_blank");
+    }
+    function pnSearchView(){
+      el("view").className = "content";
+      if (live.pnDetailKey) return pnDetailView();
+      const f = pnFilters(), opts = live.pnOptions || {stores:[], users:[]};
+      if (!live.pnOptions) setTimeout(pnSearchOptionsOnce, 0);
+      const sel = (id, value, list) => `<select id="pns_${id}"><option value="">Tất cả</option>${list.map(x => `<option ${x === value ? "selected" : ""}>${html(x)}</option>`).join("")}</select>`;
+      const rows = live.pnResults || [], shown = rows.slice(0, 300);
+      const list = live.pnLoading ? `<div class="lookup search-loading"><div class="inline-spinner"></div><span>Đang tìm trên dữ liệu máy...</span></div>`
+        : !live.pnRan ? `<div class="lookup">Nhập mã hoặc chọn bộ lọc rồi bấm Tìm. Để trống tất cả rồi bấm Tìm là xem toàn bộ.</div>`
+        : !rows.length ? `<div class="lookup">Không có đơn phù hợp. Thử bỏ bớt bộ lọc, hoặc tải lại dữ liệu trên máy.</div>`
+        : `<div class="pns-sum"><span>${rows.length.toLocaleString("vi-VN")} đơn${rows.length > shown.length ? ` · hiện ${shown.length} đơn mới nhất, thêm bộ lọc để thu gọn` : ""}</span><span><i class="pns-dot ok">CT</i> đã nhận <i class="pns-dot no">CT</i> chưa <i class="pns-dot sp">2SP</i> 2 sản phẩm</span></div>
+          <div class="pns-list">${shown.map(o => `<button type="button" class="pns-it" onclick="openPnDetail('${html(o.key).replace(/'/g, "&#39;")}')"><span class="pns-date">${html(pnDateShow(o.date)) || "--/--"}</span><span class="pns-no">${html(o.orderNo || o.ghtk)}</span><span class="pns-kh">${html(o.customer || "-")}</span><span class="pns-tg">${o.doc ? `<i class="pns-dot ${/^đã nhận/i.test(o.doc.xacThuc || "") ? "ok" : "no"}">CT</i>` : ""}${o.items.length ? `<i class="pns-dot sp">${o.items.length > 1 ? o.items.length + "SP" : "SP"}</i>` : ""}</span></button>`).join("")}</div>
+          <div class="muted" style="text-align:center;margin-top:6px;font-size:12px">Bấm vào đơn để xem đủ thông tin</div>`;
+      const docP = keyedProgress("docOpsLookup"), retP = keyedProgress("docOpsReturns");
+      el("view").innerHTML = `<section class="section">
+          ${searchShopToggle()}
+          <div class="search-filter-grid">
+            <label>Mã đơn GHTK / Số đơn hàng<div class="scan-row"><input id="pns_code" value="${html(f.code)}" placeholder="Quét hoặc nhập mã" onkeydown="if(event.key==='Enter')runPnSearch()"><button class="scan-btn" type="button" title="Quét mã" aria-label="Quét mã" onclick="openCodeScanner('pns_code', 'pnSearchScanned')">${scanIcon("Quét mã")}</button></div></label>
+            <div class="search-filter-row">
+              <label>Loại hoàn<select id="pns_type"><option value="">Tất cả</option>${["Chứng từ", "Sản phẩm"].map(x => `<option ${x === f.type ? "selected" : ""}>${x}</option>`).join("")}</select></label>
+              <label>Phân loại<select id="pns_cls"><option value="">Tất cả</option>${["Hoàn trả", "Hàng thu hồi"].map(x => `<option ${x === f.cls ? "selected" : ""}>${x}</option>`).join("")}</select></label>
+            </div>
+            <div class="search-filter-row">
+              <label>Loại siêu thị${sel("store", f.store, opts.stores)}</label>
+              <label>User thao tác${sel("user", f.user, opts.users)}</label>
+            </div>
+            <div class="search-filter-row">
+              <label>Ngày nhập từ<input id="pns_from" type="date" value="${html(f.from)}"></label>
+              <label>Đến<input id="pns_to" type="date" value="${html(f.to)}"></label>
+            </div>
+          </div>
+          <div class="center-action" style="gap:8px"><button type="button" onclick="clearPnSearch()">Xóa lọc</button><button class="primary" onclick="runPnSearch()" ${live.pnLoading ? "disabled" : ""}>Tìm</button></div>
+        </section>
+        <section class="section"><h2>Kết quả</h2>${list}
+          <div class="muted" style="font-size:12px;margin-top:10px">Dữ liệu trên máy: Đơn PN ${Number(docP.downloaded || 0).toLocaleString("vi-VN")}, Hàng hoàn PN ${Number(retP.downloaded || 0).toLocaleString("vi-VN")} dòng. Thiếu dữ liệu: Cài đặt → Cài đặt khác → Cập nhật app → Tải lại cache máy này.</div>
+        </section>`;
+    }
+    function openPnDetail(key){ live.pnDetailKey = key; search(); window.scrollTo(0, 0); }
+    function closePnDetail(){ live.pnDetailKey = ""; search(); }
+    function pnDetailView(){
+      const o = (live.pnResults || []).find(x => x.key === live.pnDetailKey);
+      if (!o) { live.pnDetailKey = ""; return pnSearchView(); }
+      const kv = rows => `<div class="pns-kv">${rows.map(([k, v]) => `<span>${html(k)}</span><span>${v === undefined || v === null || v === "" ? "-" : v}</span>`).join("")}</div>`;
+      const t = v => html(v || "");
+      const link = (url, label) => url ? `<button type="button" class="pns-link" onclick="pnOpenLink('${html(url).replace(/'/g, "&#39;")}')">${label}</button>` : "";
+      const d = o.doc;
+      const queued = localQueue().filter(q => q && q.status !== "done" && q.kind === "docOps" && [o.orderNo, o.ghtk, o.po].filter(Boolean).map(pnKey).includes(pnKey(q.payload && q.payload.maDon)));
+      const sv = d && /^(true|có|x|1)$/i.test(String(d.daTaoSv || "").trim());
+      el("view").innerHTML = `<section class="section">
+          <button type="button" onclick="closePnDetail()">← Quay lại kết quả</button>
+          <h2 style="margin-top:12px">Đơn ${t(o.orderNo || o.ghtk)}</h2>
+          ${queued.length ? `<div class="lookup" style="margin-bottom:10px"><strong>Máy này còn ${queued.length} lượt lưu đang chờ gửi</strong><span>Trạng thái: ${queued.map(q => html(q.status || "pending")).join(", ")}</span></div>` : ""}
+          <h3 class="pns-h"><span>📄</span>Thông tin đơn</h3>
+          ${kv([["Số đơn hàng", t(o.orderNo)], ["Mã đơn GHTK", t(o.ghtk)], ["Khách hàng", t(o.customer)], ["Mã PO", t(o.po)], ["Loại siêu thị", t(o.store)], ["Ngày lên đơn", t(d && d.ngayLenDon)], ["Địa chỉ", t(d && d.address)]])}
+          <h3 class="pns-h"><span>🧾</span>Chứng từ</h3>
+          ${d ? kv([["Xác thực hóa đơn", t(d.xacThuc)], ["Trạng thái", t(d.status)], ["Mã ecom CT", t(d.maEcomCt)], ["Ghi chú chứng từ", t(d.note)], ["Note", t(d.noteKhac)], ["Ngày bàn giao CT", t(d.ngayBanGiao)], ["Đã tạo SV", d.daTaoSv === "" || d.daTaoSv === undefined ? "-" : (sv ? "Có" : "Chưa")], ["Thời gian thao tác", t(d.thoiGian)], ["User thao tác", t(d.user)], ["Ảnh chứng từ", link(d.linkAnh, "Xem ảnh") || "-"]]) : `<div class="muted">Đơn này không có chứng từ.</div>`}
+          <h3 class="pns-h"><span>📦</span>Sản phẩm hoàn (${o.items.length})</h3>
+          ${o.items.length ? o.items.map(i => `<div class="pns-card"><div class="pns-card-t">${t(i.name || i.material)}</div>${kv([["Mã vật tư", t(i.material)], ["Barcode", t(i.barcode)], ["Số lượng", t(i.qty)], ["Phân loại", t(i.classification)], ["Tình trạng", t(i.status)], ["Ghi chú", t(i.note)], ["Hạn sử dụng", t(i.expiry)], ["Kích thước", t(i.size)], ["Khối lượng", t(i.weight)], ["CBM", t(i.cbm)], ["Ngày hoàn trả", t(i.ngayHoanTra)], ["User thao tác", t(i.user)], ["Ngày bàn giao", t(i.ngayBanGiao)], ["Ảnh sản phẩm", link(i.image, "Xem ảnh") || "-"]])}</div>`).join("") : `<div class="muted">Đơn này không có sản phẩm hoàn.</div>`}
+        </section>`;
+    }
     function search(){
       el("view").className = "content";
+      if (searchShopValue() === "pn") return pnSearchView();
       const data = searchRan ? live.searchResults : [];
       const f = live.searchFilters || {query:"", slog:"Tất cả", loaiHoan:"Tất cả", fromDate:"", toDate:""};
       const resultContent = live.searchLoading
@@ -9683,6 +9878,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       const resultTotal = Number(live.searchTotal || data.length || 0);
       el("view").innerHTML = `
         <section class="section">
+          ${searchShopToggle()}
           <div class="search-filter-grid">
             <label>Từ khóa<div class="scan-row"><input id="qSearch" value="${html(f.query || "")}" placeholder="Mã đơn, serial, PO, số HĐ, OD..."><button class="scan-btn" type="button" title="Quét mã" aria-label="Quét mã" onclick="openCodeScanner('qSearch')">${scanIcon("Quét mã")}</button></div></label>
             <div class="search-filter-row">
@@ -11280,11 +11476,11 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       if (keySyncState.opening) return keySyncState.opening;
       keySyncState.opening = new Promise((resolve,reject) => {
         if (!window.indexedDB) return reject(new Error('Máy không mở được IndexedDB.'));
-        const req = indexedDB.open('VTD_KEYED_CACHE_V1',2);
+        const req = indexedDB.open('VTD_KEYED_CACHE_V1',3);
         let expired = false;
         const timer = setTimeout(() => { expired=true; reject(new Error('Mở cache DB quá lâu.')); },15000);
         req.onupgradeneeded = () => {
-          for (const name of ['records','masterSku','pnSku']) if(!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name,{keyPath:'syncKey'});
+          for (const name of ['records','masterSku','pnSku','pnReturns']) if(!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name,{keyPath:'syncKey'});
           if(!req.result.objectStoreNames.contains('meta')) req.result.createObjectStore('meta',{keyPath:'key'});
         };
         req.onblocked = () => { clearTimeout(timer); expired=true; reject(new Error('Cache DB bị khóa bởi phiên app khác.')); };
@@ -11380,7 +11576,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
     }
     async function keySyncCall(type,params) {
       await keySyncIdle();
-      const res=type==='masterSku' ? await api('masterSkuKeySync',Object.assign({_silent:true},params)) : await docOpsApi('keySync',Object.assign({_silent:true},params));
+      const res=type==='masterSku' ? await api('masterSkuKeySync',Object.assign({_silent:true},params)) : await docOpsApi(type==='docOpsReturns'?'returnsSync':'keySync',Object.assign({_silent:true},params));
       if (!res || !res.ok || res.protocol!==1) {
         const err=new Error(res && res.message || 'API chưa hỗ trợ đối soát theo mã.');
         err.sourceChanged=!!(res && res.changed);throw err;
@@ -11415,7 +11611,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       return {missing,changed,mapped,matched:entries.length-missing.length-changed.length};
     }
     async function keySyncReconcile(type) {
-      const store=type==='masterSku'?'masterSku':'records';
+      const store=type==='masterSku'?'masterSku':type==='docOpsReturns'?'pnReturns':'records';
       await keySyncProgress(type,{status:'checking',lastError:''});
       const manifest=await keySyncManifest(type);
       const rows=await keySyncRead(store), diff=keySyncDiff(manifest.entries,rows);
@@ -11430,12 +11626,12 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         if (!Array.isArray(res.records) || res.records.length!==batch.length || new Set(res.records.map(r=>r.syncKey)).size!==batch.length) throw new Error('API trả thiếu hoặc trùng đơn/SKU.');
         for (const row of res.records) {
           if (!wanted.has(row.syncKey) || wanted.get(row.syncKey).version!==row.contentVersion) throw new Error('Dữ liệu tải không khớp danh sách đối soát.');
-          if (type!=='masterSku' && pnSyncKey(row)!==row.syncKey) throw new Error('Khóa đơn không khớp dữ liệu.');
+          if (type==='docOpsLookup' && pnSyncKey(row)!==row.syncKey) throw new Error('Khóa đơn không khớp dữ liệu.');
           if (type==='masterSku' && 'MATERIAL:'+String(row.code).trim().toLowerCase()!==row.syncKey) throw new Error('Khóa mã vật tư không khớp dữ liệu.');
         }
         await keySyncWrite(store,res.records);
         const committed=await keySyncRead(store), remaining=keySyncDiff(manifest.entries,committed);
-        if (type!=='masterSku') docOpsLookupMemory=committed;
+        if (type==='docOpsLookup') docOpsLookupMemory=committed;
         await keySyncProgress(type,Object.assign({},base,{status:'downloading',downloaded:committed.length,matched:remaining.matched,missing:remaining.missing.length,changed:remaining.changed.length}));
       }
       // This call verifies that the source did not change during downloads.
@@ -11448,6 +11644,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         await keySyncWrite(store,[],actual.filter(r=>!valid.has(r.syncKey)).map(r=>r.syncKey));
       }
       if (type==='masterSku') await keySyncPublishProducts();
+      else if (type==='docOpsReturns') { pnReturnsMemory=null; live.pnOptions=null; }
       else {
         docOpsLookupMemory=await keySyncRead(store);
         await docOpsLookupWriteMeta({lastRow:manifest.lastRow,count:docOpsLookupMemory.length,sourceEpoch:String(manifest.sourceEpoch || "legacy")});
@@ -11475,8 +11672,8 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       try { localStorage.setItem(PRODUCT_CACHE_KEY,JSON.stringify({version:PRODUCT_CACHE_VERSION,products:rows,total:rows.length,updatedAt:new Date().toISOString()})); } catch(err) {}
     }
     function ownCachePanelHtml(){
-      return '<div id="ownCacheStatus" class="lookup"><strong>Dữ liệu trên máy này</strong>'+['masterSku','docOpsSku','docOpsLookup'].map(type=>{
-        const p=keyedProgress(type), label=type==='masterSku'?'Master SKU VTD':type==='docOpsSku'?'SKU Phạm Nguyên':'Đơn PN';
+      return '<div id="ownCacheStatus" class="lookup"><strong>Dữ liệu trên máy này</strong>'+['masterSku','docOpsSku','docOpsLookup','docOpsReturns'].map(type=>{
+        const p=keyedProgress(type), label=type==='masterSku'?'Master SKU VTD':type==='docOpsSku'?'SKU Phạm Nguyên':type==='docOpsReturns'?'Hàng hoàn PN':'Đơn PN';
         return '<div>'+html(label)+': '+html(cacheStatusLabel(p.status))+' · '+Number(p.downloaded || 0)+'/'+Number(p.total || 0)+(p.lastError?'<div>'+html(p.lastError)+'</div>':'')+(p.reportError?'<div>'+html(p.reportError)+'</div>':'')+'</div>';
       }).join('')+((canAdminConfig() || canAction('downloadCache'))?'<button onclick="downloadOwnCache()">Tải lại cache máy này</button>':'<small>Liên hệ admin để cấp quyền tải lại cache máy này.</small>')+'</div>';
     }
@@ -11489,7 +11686,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       toast('Đang tải lại dữ liệu máy này…','ok');
       await keySyncBackground();
       if(view==='settings')settings();
-      const errors=['masterSku','docOpsSku','docOpsLookup'].filter(t=>keyedProgress(t).status==='error');
+      const errors=['masterSku','docOpsSku','docOpsLookup','docOpsReturns'].filter(t=>keyedProgress(t).status==='error');
       toast(errors.length?'Có dữ liệu tải lỗi. Xem trạng thái trên máy.':'Đã kết thúc lượt kiểm tra cache.',errors.length?'err':'ok');
     }
     async function keySyncBackground() {
@@ -11499,8 +11696,8 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       keySyncState.active=true;
       const force=!!keySyncState.forceDaily;
       try {
-        for (const type of ['masterSku','docOpsLookup']) {
-          if (type==='docOpsLookup' && !docOpsApiUrl()) continue;
+        for (const type of ['masterSku','docOpsLookup','docOpsReturns']) {
+          if (type!=='masterSku' && !docOpsApiUrl()) continue;
           try {
             const attempt=await keySyncRead('meta','attempt:v2:'+type);
             if(!force && attempt && attempt.day===todayApiDateText())continue;

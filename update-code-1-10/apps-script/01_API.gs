@@ -27,7 +27,7 @@ function doPost(e) {
     const body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
     const action = String(body.action || "").trim();
     const params = body.params || {};
-    const map = {keySync: apiKeySync_, init: apiInit_, lookup: apiLookup_, page: apiPage_, today: apiToday_, skuSync: apiSkuSync_, skuInit: apiSkuInit_, skuPage: apiSkuPage_, save: apiSave_};
+    const map = {keySync: apiKeySync_, init: apiInit_, lookup: apiLookup_, page: apiPage_, today: apiToday_, skuSync: apiSkuSync_, skuInit: apiSkuInit_, skuPage: apiSkuPage_, save: apiSave_, returnsSync: apiReturnsSync_};
     if (!map[action]) return json_({ok: false, message: "Action khong hop le: " + action});
     return json_(map[action](params));
   } catch (err) {
@@ -613,7 +613,12 @@ function recordFromRow_(row, col, rowNumber) {
     status: clean_(pick_(row, col, ["trang thai"])),
     thoiGian,
     time: thoiGian,
-    user: clean_(pick_(row, col, ["user thao tac"]))
+    user: clean_(pick_(row, col, ["user thao tac"])),
+    // Thêm cho màn Tìm kiếm Phạm Nguyên trên app.
+    ngayBanGiao: clean_(pick_(row, col, ["ngay ban giao ct"])),
+    daTaoSv: clean_(pick_(row, col, ["da tao sv"])),
+    maEcomCt: clean_(pick_(row, col, ["ma ecom ct"])),
+    noteKhac: clean_(pick_(row, col, ["note"]))
   };
   const content = Object.assign({},record); delete content.rowNumber;
   record.syncKey=record.orderNo ? "ORDER:"+ks_key(record.orderNo) : record.maDonGhtk ? "GHTK:"+ks_key(record.maDonGhtk) : "";
@@ -872,4 +877,36 @@ function apiSkuSync_(params) {
   }
   const versions=(params || {}).versions || {};
   return {ok:true,protocol:1,total:records.length,entries:records.map(r=>({key:r.syncKey,version:r.contentVersion,rowNumber:r.rowNumber})),records:records.filter(r=>versions[r.syncKey]!==r.contentVersion)};
+}
+/* Hàng hoàn sản phẩm (tab Hoàn sản phẩm) cho màn Tìm kiếm Phạm Nguyên trên app: cùng cơ chế đối soát theo mã như keySync.
+ * Khóa mỗi dòng = __PN_ITEM_ID (dòng app tạo) hoặc Số đơn hàng/Mã đơn + Mã vật tư + số dòng (dòng nhập tay). */
+function apiReturnsSync_(params) {
+  const sh = productReturnSheet_(), lastRow = sh.getLastRow(), lastCol = Math.max(1, sh.getLastColumn());
+  const headers = sh.getRange(1, 1, 1, lastCol).getDisplayValues()[0], col = headerMap_(headers);
+  const idCol = headers.indexOf('__PN_ITEM_ID') + 1;
+  const values = lastRow > 1 ? sh.getRange(2, 1, lastRow - 1, lastCol).getDisplayValues() : [];
+  const records = [], seen = Object.create(null);
+  values.forEach((row, index) => {
+    const p = aliases => clean_(pick_(row, col, aliases));
+    const rec = {
+      rowNumber: index + 2,
+      ngayHoanTra: p(['ngay hoan tra']), thoiGian: p(['thoi gian']),
+      maDon: p(['ma don', 'ma don ghtk']), customer: p(['ten khach hang', 'khach hang']),
+      orderNo: p(['so don hang', 'od']), po: p(['ma po', 'po']),
+      material: p(['ma vat tu']), barcode: p(['barcode']), name: p(['ten san pham', 'ten vat tu']),
+      qty: p(['so luong']), status: p(['tinh trang ff', 'tinh trang']), note: p(['ghi chu']),
+      classification: p(['phan loai']), expiry: p(['han su dung']), size: p(['kich thuoc']), weight: p(['khoi luong']),
+      storeType: p(['loai sieu thi']), image: p(['hinh anh', 'link anh']), user: p(['user thao tac', 'user']),
+      cbm: p(['cbm']), ngayBanGiao: p(['ngay ban giao'])
+    };
+    if (!rec.material && !rec.name && !rec.maDon && !rec.orderNo) return;
+    const itemId = idCol ? clean_(row[idCol - 1]) : '';
+    let key = itemId ? 'ITEM:' + ks_key(itemId) : 'ROW:' + ks_key(rec.orderNo || rec.maDon) + ':' + ks_key(rec.material || rec.name) + ':' + rec.rowNumber;
+    if (seen[key]) key += ':' + rec.rowNumber;
+    seen[key] = true;
+    const content = Object.assign({}, rec); delete content.rowNumber;
+    rec.syncKey = key; rec.contentVersion = ks_hash(content);
+    records.push(rec);
+  });
+  return ks_reply(ks_pack(records, [], CONFIG.spreadsheetId + ':' + CONFIG.productReturnSheetName, lastRow), params);
 }

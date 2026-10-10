@@ -960,4 +960,16 @@ test('New docs in Chứng từ_full (from Booking) get borders',()=>{
  assert.ok(calls.some(c=>c.indexOf('Chứng từ_full:')===0),JSON.stringify(calls));
  assert.ok(calls.some(c=>c.indexOf('Chứng từ_FF:')===0),JSON.stringify(calls));
 });
+test('returnsSync lists Hoàn sản phẩm rows with stable keys and paging like keySync',()=>{
+ const e=environment();seed(e);e.c.pnMigrateFull();
+ const h=headers['Hoàn sản phẩm'],H=e.sheets.get('Hoàn sản phẩm');
+ const mk=(no,mat,cls)=>{const r=Array(h.length).fill('');r[h.indexOf('Số đơn hàng')]=no;r[h.indexOf('Mã vật tư')]=mat;r[h.indexOf('Tên sản phẩm')]='SP '+mat;r[h.indexOf('Phân loại')]=cls;r[h.indexOf('Ngày hoàn trả')]='05/10/2026';return r;};
+ H.rows.push(mk('1','M1','Hoàn trả'),mk('1','M2','Hàng thu hồi'),Array(h.length).fill(''));
+ const m=e.c.apiReturnsSync_({offset:0});
+ assert.equal(m.ok,true);assert.equal(m.protocol,1);assert.equal(m.total,2);assert.equal(m.duplicateCount,0);
+ const got=e.c.apiReturnsSync_({version:m.version,keys:m.entries.map(x=>x.key)});
+ assert.equal(got.records.length,2);assert.equal(got.records[1].classification,'Hàng thu hồi');assert.equal(got.records[0].orderNo,'1');
+ const ks=e.c.apiKeySync_({offset:0}),one=e.c.apiKeySync_({version:ks.version,keys:[ks.entries[0].key]}).records[0];
+ assert.ok('maEcomCt' in one && 'ngayBanGiao' in one && 'daTaoSv' in one && 'noteKhac' in one);
+});
 console.log('RESULT '+passed+' tests passed.');
