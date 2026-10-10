@@ -4905,7 +4905,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.24";
+    const APP_VERSION = "5.9.25";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -7012,21 +7012,21 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
           (skuState && (skuState.productIndex || skuState.productSearch || skuState.qty || skuState.type || skuState.newMaterial || skuState.newName || (skuState.items || []).length)) ||
           (live && ((live.docFiles || []).length || (live.productFiles || []).length || live.inputSaving))
         );
-        if (hasInputDraft) return {route:"#input", code: inputCode, label: live && live.inputSaving ? "Don dang luu/dang dong bo" : "Don dang thao tac do"};
+        if (hasInputDraft) return {route:"#input", code: inputCode, label: live && live.inputSaving ? "Đơn đang lưu/đang đồng bộ" : "Đơn đang thao tác dở"};
         const returnCode = String((typeof el === "function" && el("returnThMaDon") ? el("returnThMaDon").value : "") || (returnThState && returnThState.maDon) || "").trim();
         const hasReturnDraft = !!(
           returnCode ||
           (returnThState && (returnThState.product || returnThState.productSearch || returnThState.customProduct || returnThState.newSubSku || returnThState.newName || returnThState.newUnit || returnThState.qty || returnThState.note || (returnThState.items || []).length || returnThState.saving || returnThState.creatingSku)) ||
           (live && (live.returnThFiles || []).length)
         );
-        if (hasReturnDraft) return {route:"#returnth", code: returnCode, label: returnThState && returnThState.saving ? "Don TH dang luu/dang dong bo" : "Don TH dang thao tac do"};
+        if (hasReturnDraft) return {route:"#returnth", code: returnCode, label: returnThState && returnThState.saving ? "Đơn TH đang lưu/đang đồng bộ" : "Đơn TH đang thao tác dở"};
         const docOpsCode = String((typeof el === "function" && el("docOpsMaDon") ? el("docOpsMaDon").value : "") || (docOpsState && docOpsState.maDon) || "").trim();
         const hasDocOpsDraft = !!(
           docOpsCode ||
           (docOpsState && (docOpsState.returnType || docOpsState.note || docOpsState.productSearch || docOpsState.quantity || docOpsState.productNote || docOpsState.productOtherNote || docOpsState.classification || (docOpsState.productNotes || []).length || docOpsState.expiryDate || docOpsState.lengthCm || docOpsState.widthCm || docOpsState.heightCm || docOpsState.weightGram || (docOpsState.items || []).length || docOpsState.saving)) ||
           (live && ((live.docOpsFiles || []).length || (live.docOpsProductFiles || []).length))
         );
-        if (hasDocOpsDraft) return {route:"#docops", code:docOpsCode, label:docOpsState && docOpsState.saving ? "Don PN dang luu/dang dong bo" : "Don PN dang thao tac do"};
+        if (hasDocOpsDraft) return {route:"#docops", code:docOpsCode, label:docOpsState && docOpsState.saving ? "Đơn PN đang lưu/đang đồng bộ" : "Đơn PN đang thao tác dở"};
       } catch (err) {}
       return null;
     }
