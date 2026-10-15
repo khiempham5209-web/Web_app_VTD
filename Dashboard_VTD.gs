@@ -28,7 +28,8 @@ const DASH_CONFIG = {
     spreadsheetId: "1V39AVE2JfEtMPYqnG1-J75fKPDXU37fCnJ9Na3UXOco",
     sheetNames: ["Chứng từ_full", "Chứng từ_FF"],   // dùng sheet đầu tiên tồn tại
     productSheet: "Hoàn sản phẩm",
-    doneStatuses: ["da nhan chung tu", "shop huy od"]
+    statusSheet: "Chứng từ_FF",                 // tab chính: tháng hiện tại + tháng cũ chưa nhận
+    openStatuses: ["chua nhan chung tu"]        // giá trị cột Xác thực hóa đơn được tính là "chưa nhận"
   },
   th: {
     // Tab "Hàng hoàn" của file TH Truemilk (cùng file với script FFPL tồn kho). Để trống ID = bỏ qua TH.
@@ -224,51 +225,64 @@ function dash_collectPn_(add, now) {
   const ss = SpreadsheetApp.openById(cfg.spreadsheetId);
   let sh = null;
   for (let i = 0; i < cfg.sheetNames.length && !sh; i++) sh = ss.getSheetByName(cfg.sheetNames[i]);
-  const backlog = {total: 0, over7: 0, buckets: [0, 0, 0, 0], byStore: {}, byStatus: {}, openByStatus: {}, oldest: []};
+  const backlog = {total: 0, over7: 0, buckets: [0, 0, 0, 0], byStore: {}, byStatus: {}, oldest: [], statusSheet: ""};
+  const pnCols = col => ({
+    ma: dash_col_(col, ["ma don ghtk", "ma don"], -1),
+    od: dash_col_(col, ["so don hang", "od"], -1),
+    khach: dash_col_(col, ["khach hang"], -1),
+    store: dash_col_(col, ["loai sieu thi"], -1),
+    // Trạng thái chứng từ nằm ở cột "Xác thực hóa đơn": Chưa nhận / Đã nhận chứng từ / Shop hủy OD
+    status: dash_col_(col, ["xac thuc hoa don"], -1),
+    time: dash_col_(col, ["thoi gian"], -1),
+    user: dash_col_(col, ["user thao tac"], -1),
+    lenDon: dash_col_(col, ["ngay len don"], -1)
+  });
+
+  // 1) Thao tác chứng từ theo ngày: đọc tab full (mọi tháng)
   if (sh && sh.getLastRow() > 1) {
     const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
-    const col = vtdApp_headerMap_(values[0]);
-    const c = {
-      ma: dash_col_(col, ["ma don ghtk", "ma don"], -1),
-      od: dash_col_(col, ["so don hang", "od"], -1),
-      khach: dash_col_(col, ["khach hang"], -1),
-      store: dash_col_(col, ["loai sieu thi"], -1),
-      status: dash_col_(col, ["trang thai"], -1),
-      time: dash_col_(col, ["thoi gian"], -1),
-      user: dash_col_(col, ["user thao tac"], -1),
-      lenDon: dash_col_(col, ["ngay len don"], -1)
-    };
+    const c = pnCols(vtdApp_headerMap_(values[0]));
+    for (let r = 1; r < values.length; r++) {
+      const row = values[r];
+      const get = i => i >= 0 ? row[i] : "";
+      const ma = String(get(c.ma) || get(c.od) || "");
+      if (!ma || !get(c.user)) continue;
+      const actKey = vtdApp_dateKey_(get(c.time));
+      if (!actKey) continue;
+      const store = String(get(c.store) || "Khác").trim() || "Khác";
+      const user = dash_user_(get(c.user));
+      add("PN", actKey, dash_hour_(get(c.time)), store, "Chứng từ", user, 1, {
+        at: actKey + " " + dash_hhmm_(get(c.time)), src: "PN", ma: ma, kenh: store, loai: "Chứng từ", user: user
+      });
+    }
+  }
+
+  // 2) Tồn chứng từ chưa nhận: đọc tab chính (khớp với bảng "Xác thực hóa đơn" trên sheet tổng)
+  const stSh = ss.getSheetByName(cfg.statusSheet) || sh;
+  if (stSh && stSh.getLastRow() > 1) {
+    backlog.statusSheet = stSh.getName();
+    const values = stSh.getRange(1, 1, stSh.getLastRow(), stSh.getLastColumn()).getValues();
+    const c = pnCols(vtdApp_headerMap_(values[0]));
+    if (c.status < 0) throw new Error("Tab " + stSh.getName() + " không có cột Xác thực hóa đơn");
     const todayMs = dash_dayMs_(now);
     for (let r = 1; r < values.length; r++) {
       const row = values[r];
       const get = i => i >= 0 ? row[i] : "";
-      const store = String(get(c.store) || "Khác").trim() || "Khác";
-      const status = String(get(c.status) || "").trim();
-      const statusKey = vtdApp_norm_(status);
       const ma = String(get(c.ma) || get(c.od) || "");
       if (!ma) continue;
-      backlog.byStatus[status || "Chưa có trạng thái"] = (backlog.byStatus[status || "Chưa có trạng thái"] || 0) + 1;
+      const status = String(get(c.status) || "").trim();
+      const statusLabel = status || "(trống)";
+      backlog.byStatus[statusLabel] = (backlog.byStatus[statusLabel] || 0) + 1;
+      if (cfg.openStatuses.indexOf(vtdApp_norm_(status)) < 0) continue;
 
-      // Thao tác chứng từ (có user + thời gian thao tác)
-      const user = dash_user_(get(c.user));
-      const actKey = vtdApp_dateKey_(get(c.time));
-      if (actKey && get(c.user)) {
-        add("PN", actKey, dash_hour_(get(c.time)), store, "Chứng từ", user, 1, {
-          at: actKey + " " + dash_hhmm_(get(c.time)), src: "PN", ma: ma, kenh: store, loai: "Chứng từ", user: user
-        });
-      }
-
-      // Tồn chứng từ chưa nhận
-      if (cfg.doneStatuses.indexOf(statusKey) >= 0) continue;
+      const store = String(get(c.store) || "Khác").trim() || "Khác";
       const lenKey = vtdApp_dateKey_(get(c.lenDon));
-      if (!lenKey) continue;
-      const days = Math.max(0, Math.round((todayMs - dash_dayMs_(lenKey)) / 86400000));
+      const days = lenKey ? Math.max(0, Math.round((todayMs - dash_dayMs_(lenKey)) / 86400000)) : -1;
       backlog.total++;
-      const openKey = status || "(trống)";
-      backlog.openByStatus[openKey] = (backlog.openByStatus[openKey] || 0) + 1;
+      backlog.byStore[store] = (backlog.byStore[store] || 0) + 1;
+      if (days < 0) continue;            // thiếu Ngày lên đơn: vẫn đếm vào tổng, không xếp tuổi
       if (days > 7) backlog.over7++;
       backlog.buckets[days <= 3 ? 0 : days <= 7 ? 1 : days <= 15 ? 2 : 3]++;
-      backlog.byStore[store] = (backlog.byStore[store] || 0) + 1;
       backlog.oldest.push({ma: ma, khach: String(get(c.khach) || ""), kenh: store, ngay: lenKey, days: days, status: status});
     }
     backlog.oldest.sort((a, b) => b.days - a.days);

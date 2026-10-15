@@ -990,8 +990,8 @@ tbody tr:hover td { background: var(--surface-2); }
       return '<div class="age"><span class="k">' + AGE_LABELS[i] + '</span><span class="v">' + n(v) + '</span><span class="bar" style="background:' + AGE_COLORS[i] + ";width:" + Math.max(4, v / max * 100) + '%"></span></div>';
     }).join("");
     var rows = bl.oldest || [];
-    var st = bl.openByStatus || null;
-    var stHtml = st ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:2px 4px 8px;font-size:12px;color:var(--fg-3)"><span>Trạng thái đang tính là chưa nhận:</span>'
+    var st = bl.statusSheet ? bl.byStatus : null;
+    var stHtml = st ? '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:2px 4px 8px;font-size:12px;color:var(--fg-3)"><span>Xác thực hóa đơn · tab ' + esc(bl.statusSheet) + ":</span>"
       + Object.keys(st).sort(function (a, b) { return st[b] - st[a]; }).map(function (k) { return '<span class="pill">' + esc(k) + " · <b>" + n(st[k]) + "</b></span>"; }).join("") + "</div>" : "";
     $("oldest").innerHTML = stHtml + (rows.length ? '<table><thead><tr><th>Mã đơn</th><th>Khách hàng</th><th>Siêu thị</th><th>Lên đơn</th><th class="n">Số ngày</th></tr></thead><tbody>'
       + rows.map(function (r) {
