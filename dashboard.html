@@ -24,6 +24,10 @@
   --s-vtd: #2a78d6;
   --s-pn: #eb6834;
   --s-th: #1baf7a;
+  --c4: #eda100;
+  --m-order: #4a3aa7;
+  --m-recv: #e87ba4;
+  --m-hand: #008300;
   --good: #0ca30c;
   --warning: #fab219;
   --serious: #ec835a;
@@ -46,7 +50,7 @@
     color-scheme: dark;
     --bg: #0e141c; --surface: #161e29; --surface-2: #1b2531; --line: #253141; --line-strong: #314054;
     --fg: #eef2f7; --fg-2: #b2bdcb; --fg-3: #8592a3; --accent: #35b8bd; --accent-soft: #123338;
-    --s-vtd: #3987e5; --s-pn: #d95926; --s-th: #199e70;
+    --s-vtd: #3987e5; --s-pn: #d95926; --s-th: #199e70; --c4: #c98500; --m-order: #9085e9; --m-recv: #d55181; --m-hand: #2f9e2f;
     --good-ink: #4cc94c; --critical-ink: #f07a7a;
     --seq-0: #1b2531; --seq-1: #184f95; --seq-2: #1c5cab; --seq-3: #2a78d6; --seq-4: #5598e7; --seq-5: #9ec5f4;
     --shadow: none;
@@ -56,7 +60,7 @@
   color-scheme: dark;
   --bg: #0e141c; --surface: #161e29; --surface-2: #1b2531; --line: #253141; --line-strong: #314054;
   --fg: #eef2f7; --fg-2: #b2bdcb; --fg-3: #8592a3; --accent: #35b8bd; --accent-soft: #123338;
-  --s-vtd: #3987e5; --s-pn: #d95926; --s-th: #199e70;
+  --s-vtd: #3987e5; --s-pn: #d95926; --s-th: #199e70; --c4: #c98500; --m-order: #9085e9; --m-recv: #d55181; --m-hand: #2f9e2f;
   --good-ink: #4cc94c; --critical-ink: #f07a7a;
   --seq-0: #1b2531; --seq-1: #184f95; --seq-2: #1c5cab; --seq-3: #2a78d6; --seq-4: #5598e7; --seq-5: #9ec5f4;
   --shadow: none;
@@ -158,9 +162,39 @@ main { padding-block: 16px 40px; display: grid; gap: 16px; }
 }
 
 /* ---------- KPI ---------- */
-.kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.kpis { display: grid; grid-template-columns: repeat(var(--kpi-n, 6), minmax(0, 1fr)); gap: 12px; }
 @media (max-width: 1200px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 620px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.shop-seg button { display: inline-flex; align-items: center; gap: 6px; }
+.shop-seg .sw { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+.health.wide { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 760px) { .health.wide { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.bl-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 760px) { .bl-split { grid-template-columns: minmax(0, 1fr); } }
+.bl-total { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.bl-total b { font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.bl-total span { font-size: 12px; color: var(--fg-3); }
+.mini-h { font-size: 12px; font-weight: 600; color: var(--fg-2); margin: 0 0 6px; }
+.date-range { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-3); }
+.date-range input, .search {
+  padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--fg); font: inherit; font-size: 13px;
+}
+.search { width: 180px; max-width: 100%; }
+.seg-sm button { padding: 3px 9px; font-size: 12px; }
+.ostats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 760px) { .ostats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ostat { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ostat .k { font-size: 12px; color: var(--fg-2); display: flex; align-items: center; gap: 6px; }
+.ostat .k i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.ostat .v { font-size: 22px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.ostat .s { font-size: 12px; color: var(--fg-3); display: flex; gap: 6px; flex-wrap: wrap; }
+.cond-row { display: grid; gap: 5px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.cond-row:last-child { border-bottom: 0; }
+.cond-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.cond-top .rate { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cond-bar { display: flex; height: 10px; border-radius: 4px; overflow: hidden; background: var(--surface-2); gap: 2px; }
+.cond-bar span { height: 100%; }
+.cond-issues { display: flex; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--fg-3); }
 .kpi {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow);
   padding: 13px 14px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; position: relative;
@@ -306,8 +340,12 @@ tbody tr:hover td { background: var(--surface-2); }
         <button type="button" data-range="90">90 ngày</button>
         <button type="button" data-range="month">Tháng này</button>
         <button type="button" data-range="lastmonth">Tháng trước</button>
+        <button type="button" data-range="custom">Tùy chọn</button>
       </div>
-      <div class="srcs" id="srcToggles" aria-label="Nguồn"></div>
+      <span class="date-range" id="customRange" hidden>
+        <input type="date" id="fFrom" aria-label="Từ ngày"><span>–</span><input type="date" id="fTo" aria-label="Đến ngày">
+      </span>
+      <div class="seg shop-seg" id="shopSeg" role="group" aria-label="Shop"></div>
       <label class="sel">Kênh / SLOG
         <select id="fKenh"><option value="">Tất cả</option></select>
       </label>
@@ -319,8 +357,12 @@ tbody tr:hover td { background: var(--surface-2); }
           <option value="prev">Kỳ liền trước</option>
           <option value="week">Cùng kỳ tuần trước</option>
           <option value="month">Cùng kỳ tháng trước</option>
+          <option value="custom">Khoảng tự chọn…</option>
         </select>
       </label>
+      <span class="date-range" id="cmpRange" hidden>
+        <input type="date" id="cFrom" aria-label="So sánh từ ngày"><span>–</span><input type="date" id="cTo" aria-label="So sánh đến ngày">
+      </span>
       <span class="range-label" id="rangeLabel"></span>
     </div>
   </div>
@@ -330,6 +372,25 @@ tbody tr:hover td { background: var(--surface-2); }
   <div id="banner"></div>
   <main>
     <section class="kpis" id="kpis" aria-label="Chỉ số chính"></section>
+
+    <section class="card" id="ordersCard">
+      <div class="card-h">
+        <h2>Đơn lên · Chứng từ đã nhận · Bàn giao về shop</h2>
+        <span class="sub" id="ordersSub"></span>
+        <div class="right">
+          <div class="seg seg-sm" id="granSeg" role="group" aria-label="Gộp theo">
+            <button type="button" data-g="day">Ngày</button>
+            <button type="button" data-g="week">Tuần</button>
+            <button type="button" data-g="month">Tháng</button>
+          </div>
+          <button class="toggle-view" id="ordersTableBtn" type="button">Xem dạng bảng</button>
+        </div>
+      </div>
+      <div class="ostats" id="ordersStats"></div>
+      <div class="legend" id="ordersLegend"></div>
+      <div class="chart" id="ordersChart"></div>
+      <div class="tbl-wrap" id="ordersTable" hidden></div>
+    </section>
 
     <div class="grid">
       <section class="card c8">
@@ -350,7 +411,7 @@ tbody tr:hover td { background: var(--surface-2); }
 
     <div class="grid">
       <section class="card c5">
-        <div class="card-h"><h2>Loại hoàn</h2><span class="sub">theo nguồn</span></div>
+        <div class="card-h"><h2>Loại hoàn</h2><span class="sub" id="loaiSub">theo nguồn</span></div>
         <div class="hbars" id="loaiBars"></div>
       </section>
       <section class="card c7">
@@ -362,17 +423,25 @@ tbody tr:hover td { background: var(--surface-2); }
       </section>
     </div>
 
-    <p class="section-label">Vận hành</p>
+    <p class="section-label">Chất lượng hàng hoàn</p>
     <div class="grid">
+      <section class="card c5">
+        <div class="card-h"><h2>Tình trạng hoàn &amp; tỷ lệ lỗi</h2><span class="sub" id="condSub"></span></div>
+        <div id="condBody"></div>
+      </section>
       <section class="card c7">
         <div class="card-h">
-          <h2>Chứng từ Phạm Nguyên chưa nhận</h2>
-          <span class="sub">tính từ ngày lên đơn, không theo bộ lọc thời gian</span>
+          <h2>Sản phẩm hoàn</h2><span class="sub" id="prodSub"></span>
+          <div class="right"><input type="search" id="prodSearch" class="search" placeholder="Tìm sản phẩm" aria-label="Tìm sản phẩm"></div>
         </div>
-        <div class="aging" id="aging"></div>
-        <div class="tbl-wrap" id="oldest"></div>
+        <div class="tbl-wrap" id="prodTable"></div>
       </section>
-      <section class="card c5">
+    </div>
+
+    <p class="section-label">Vận hành</p>
+    <div class="grid" id="opsGrid">
+      <div id="backlogCards" style="display:contents"></div>
+      <section class="card c5" id="healthCard">
         <div class="card-h"><h2>Sức khỏe hệ thống</h2><span class="sub">trạng thái hiện tại</span></div>
         <div class="health" id="health"></div>
         <div>
@@ -419,19 +488,31 @@ tbody tr:hover td { background: var(--surface-2); }
   var AGE_LABELS = ["0–3 ngày", "4–7 ngày", "8–15 ngày", "Trên 15 ngày"];
   var AGE_COLORS = ["var(--seq-2)", "var(--warning)", "var(--serious)", "var(--critical)"];
 
+  var SHOPS = [{key: "all", label: "Tất cả shop"}].concat(SOURCES);
+  // Màu xếp chồng theo loại hoàn khi xem 1 shop (lúc đó không còn phân biệt nguồn bằng màu)
+  var LOAI_COLORS = ["var(--s-vtd)", "var(--s-pn)", "var(--s-th)", "var(--c4)"];
+
   var state = {
-    mode: "demo", data: null, range: "30", srcOn: {VTD: true, PN: true, TH: true},
-    kenh: "", user: "", cmp: "prev", userSort: {key: "total", dir: -1}, trendTable: false
+    mode: "demo", data: null, range: "30", shop: "all", srcOn: {VTD: true, PN: true, TH: true},
+    kenh: "", user: "", cmp: "prev", userSort: {key: "total", dir: -1}, trendTable: false,
+    from: "", to: "", cFrom: "", cTo: "", gran: "day", ordersTable: false, prodQuery: ""
   };
   try {
     var saved = JSON.parse(localStorage.getItem("vtd_dash_prefs") || "{}");
-    if (saved.range) state.range = saved.range;
-    if (saved.cmp) state.cmp = saved.cmp;
-    if (saved.srcOn) state.srcOn = Object.assign(state.srcOn, saved.srcOn);
+    ["range", "cmp", "from", "to", "cFrom", "cTo", "gran"].forEach(function (k) { if (saved[k]) state[k] = saved[k]; });
+    if (saved.shop && (saved.shop === "all" || SRC[saved.shop])) state.shop = saved.shop;
   } catch (e) {}
   function savePrefs() {
-    try { localStorage.setItem("vtd_dash_prefs", JSON.stringify({range: state.range, srcOn: state.srcOn, cmp: state.cmp})); } catch (e) {}
+    try {
+      localStorage.setItem("vtd_dash_prefs", JSON.stringify({range: state.range, shop: state.shop, cmp: state.cmp,
+        from: state.from, to: state.to, cFrom: state.cFrom, cTo: state.cTo, gran: state.gran}));
+    } catch (e) {}
   }
+  function applyShop() {
+    SOURCES.forEach(function (s) { state.srcOn[s.key] = state.shop === "all" || state.shop === s.key; });
+  }
+  applyShop();
+  function shopLabel() { return state.shop === "all" ? "tất cả shop" : SRC[state.shop].label; }
 
   /* ================= Tiện ích ================= */
   var $ = function (id) { return document.getElementById(id); };
@@ -499,21 +580,72 @@ tbody tr:hover td { background: var(--surface-2); }
       });
     }
     recent.sort(function (a, b) { return a.at < b.at ? 1 : -1; });
-    var oldest = [], stores = ["Aeon", "Winmart", "Lotte", "Co.opmart"];
-    for (var j = 0; j < 12; j++) {
-      var days = Math.max(8, 34 - j * 2 - Math.floor(rnd() * 3));
-      oldest.push({ma: "S" + Math.floor(300000000 + rnd() * 99999999), khach: ["Aeon Long Biên", "Winmart Times City", "Lotte Ba Đình", "Co.opmart Hà Đông"][j % 4],
-        kenh: stores[j % 4], ngay: addDays(today, -days), days: days, status: j % 3 ? "Chưa nhận" : "Đã gửi shop"});
+    function demoOldest(prefix, stores, names) {
+      var out = [];
+      for (var j = 0; j < 12; j++) {
+        var days = Math.max(8, 34 - j * 2 - Math.floor(rnd() * 3));
+        out.push({ma: prefix + Math.floor(300000000 + rnd() * 99999999), khach: names[j % names.length],
+          kenh: stores[j % stores.length], ngay: addDays(today, -days), days: days, status: "Chưa nhận chứng từ"});
+      }
+      return out;
     }
+    // Chỉ số khác: lên đơn, bàn giao, tình trạng, sản phẩm
+    var mf = {};
+    function addM(metric, date, src, kenh, loai, qty) {
+      var k = [metric, date, src, kenh, loai].join("|");
+      var f = mf[k] || (mf[k] = [date, src, kenh, loai, "", -1, 0, 0, metric]);
+      f[6] += 1; f[7] += qty;
+    }
+    var vtdStores = [["Winmart", .38], ["Aeon", .22], ["BHX", .2], ["Lotte", .12], ["Khac", .08]];
+    var products = {
+      VTD: ["Sữa bột Vinamilk Optimum Gold 3 800g", "Sữa tươi Vinamilk 100% 1L", "Sữa chua Vinamilk lốc 4", "Ông Thọ đỏ 380g", "Probi hũ 65ml lốc 5", "Sữa đặc Ngôi Sao Phương Nam 380g", "Dielac Grow Plus 900g", "Susu IQ 110ml lốc 4"],
+      PN: ["Nước mắm Nam Ngư 500ml", "Hạt nêm Knorr 400g", "Dầu ăn Neptune 1L", "Mì Hảo Hảo thùng 30", "Tương ớt Chinsu 250g", "Bột giặt Omo 3kg"],
+      TH: ["TH true MILK ít đường 180ml", "TH true MILK có đường 1L", "TH true YOGURT 100g", "TH true JUICE milk 300ml"]
+    };
+    var condVtdDoc = [["Bình thường", .9], ["Rách/nhàu", .04], ["Thiếu chữ ký", .035], ["Sai thông tin", .025]];
+    var condProd = [["Bình thường", .78], ["Móp méo", .08], ["Hết hạn sử dụng", .05], ["Hàng cận date", .05], ["Vỏ bị xé/hở", .04]];
+    function pickW(list) { return list[pick(list.map(function (x) { return x[1]; }))][0]; }
+    for (var dd = 130; dd >= 0; dd--) {
+      var dt = addDays(today, -dd), dwk = dowIdx(dt), f2 = dwk === 6 ? 0.1 : dwk === 5 ? 0.7 : 1;
+      var nO = {VTD: pois(165 * f2), PN: pois(48 * f2), TH: pois(30 * f2)};
+      for (var o = 0; o < nO.VTD; o++) addM("order", dt, "VTD", pickW(vtdStores), "Lên đơn", 1);
+      for (o = 0; o < nO.PN; o++) addM("order", dt, "PN", pickW(pnStore), "Lên đơn", 1);
+      for (o = 0; o < nO.TH; o++) addM("order", dt, "TH", "TH Truemilk", "Lên đơn", 1);
+      var nH = pois(36 * f2);
+      for (o = 0; o < nH; o++) addM("handover", dt, "PN", pickW(pnStore), "Bàn giao", 1);
+      var nH2 = pois(120 * f2);
+      for (o = 0; o < nH2; o++) addM("handover", dt, "VTD", pickW(vtdStores), "Bàn giao", 1);
+      var nC = pois(90 * f2);
+      for (o = 0; o < nC; o++) addM("cond", dt, "VTD", "Chứng từ", pickW(condVtdDoc), 1);
+      ["VTD", "PN", "TH"].forEach(function (src) {
+        var nP = pois((src === "VTD" ? 45 : src === "PN" ? 14 : 16) * f2);
+        for (var q = 0; q < nP; q++) {
+          var st = pickW(condProd), qty = 1 + Math.floor(rnd() * (src === "TH" ? 24 : 6));
+          var list = products[src], name = list[Math.min(list.length - 1, Math.floor(Math.pow(rnd(), 1.6) * list.length))];
+          if (dd <= 100) addM("product", dt, src, name, st, qty);
+          addM("cond", dt, src, "Sản phẩm", st, qty);
+        }
+      });
+    }
+    var pnBacklog = {total: 264, over7: 61, buckets: [148, 55, 39, 22], byStore: {Winmart: 171, TMart: 38, Aeon: 24, Lotte: 18, Khác: 13},
+      byStatus: {"Đã nhận chứng từ": 2719, "Chưa nhận chứng từ": 264, "Shop hủy OD": 45}, statusSheet: "Chứng từ_FF", hasHandover: true,
+      method: "theo cột Xác thực hóa đơn = Chưa nhận chứng từ",
+      oldest: demoOldest("S", ["Winmart", "TMart", "Aeon", "Lotte"], ["Winmart Times City", "TMart Cầu Giấy", "Aeon Long Biên", "Lotte Ba Đình"])};
+    var vtdBacklog = {total: 412, over7: 133, buckets: [190, 89, 81, 52], byStore: {Winmart: 160, Aeon: 92, BHX: 70, Lotte: 51, Khac: 39},
+      byStatus: {"Đã nhận (có trên app)": 3880, "Chưa nhận chứng từ": 412}, statusSheet: "Full das chứng từ VTD / TongHop", hasHandover: true,
+      method: "đơn lên trong 60 ngày chưa có bản Chứng từ trên app",
+      oldest: demoOldest("GHN", ["Winmart", "Aeon", "BHX", "Lotte"], ["WM+ Hoàng Mai", "Aeon Hà Đông", "Bách Hóa Xanh Q7", "Lotte Tây Hồ"])};
     return {
       updatedAt: today + " " + pad(nowHour) + ":05:00",
       today: today,
       viewer: "",
       facts: Object.keys(facts).map(function (k) { return facts[k]; }),
+      mfacts: Object.keys(mf).map(function (k) { return mf[k]; }),
       snapshot: {
         freshness: {VTD: today, PN: today, TH: addDays(today, -1)},
         sync: {pending: 7, errHangHoan: 2, errChungTu: 1, queueErrors: 3},
-        pnBacklog: {total: 186, over7: 47, buckets: [92, 47, 31, 16], byStore: {Aeon: 52, Winmart: 71, Lotte: 33, "Co.opmart": 30}, oldest: oldest},
+        pnBacklog: pnBacklog,
+        backlogs: {VTD: vtdBacklog, PN: pnBacklog},
         recent: recent.slice(0, 30),
         errors: [],
         thConfigured: true
@@ -644,8 +776,12 @@ tbody tr:hover td { background: var(--surface-2); }
   }
   function afterLoad() {
     var d = state.data;
-    d.facts = (d.facts || []).map(function (f) { f[0] = normDateKey(f[0]); f[5] = Number(f[5]); if (isNaN(f[5])) f[5] = -1; return f; })
-      .filter(function (f) { return f[0]; });
+    // Tách thao tác (op) khỏi các chỉ số khác (lên đơn, bàn giao, tình trạng, sản phẩm); chạy lại an toàn
+    var all = (d.facts || []).concat(d.mfacts || []).map(function (f) {
+      f[0] = normDateKey(f[0]); f[5] = Number(f[5]); if (isNaN(f[5])) f[5] = -1; f[8] = f[8] || "op"; return f;
+    }).filter(function (f) { return f[0]; });
+    d.facts = all.filter(function (f) { return f[8] === "op"; });
+    d.mfacts = all.filter(function (f) { return f[8] !== "op"; });
     if (d.today) d.today = normDateKey(d.today) || vnToday();
     $("updated").innerHTML = "Cập nhật <span class=\"num\">" + esc(String(d.updatedAt || "").slice(11, 16) || "—") + "</span> · " + esc(d.updatedAt ? dmyFull(d.updatedAt.slice(0, 10)) : "");
     fillSelects();
@@ -655,7 +791,11 @@ tbody tr:hover td { background: var(--surface-2); }
   /* ================= Lọc ================= */
   function rangeKeys() {
     var t = state.data.today, r = state.range, from, to = t;
-    if (r === "today") from = t;
+    if (r === "custom") {
+      from = state.from || addDays(t, -6); to = state.to || t;
+      if (to > t) to = t;
+      if (from > to) { var sw = from; from = to; to = sw; }
+    } else if (r === "today") from = t;
     else if (r === "month") from = t.slice(0, 8) + "01";
     else if (r === "lastmonth") {
       var d = parseKey(t.slice(0, 8) + "01"); d.setDate(0); to = keyOf(d); from = to.slice(0, 8) + "01";
@@ -664,7 +804,11 @@ tbody tr:hover td { background: var(--surface-2); }
     var cmp = state.cmp;
     if (cmp === "week" && len > 7) cmp = "prev";       // dài hơn 1 tuần thì cùng kỳ tuần trước sẽ chồng lên kỳ hiện tại
     var pFrom, pTo, pName;
-    if (cmp === "week") { pFrom = addDays(from, -7); pTo = addDays(to, -7); pName = "cùng kỳ tuần trước"; }
+    if (cmp === "custom") {
+      pFrom = state.cFrom || addDays(from, -len); pTo = state.cTo || addDays(from, -1);
+      if (pFrom > pTo) { var sw2 = pFrom; pFrom = pTo; pTo = sw2; }
+      pName = "khoảng so sánh";
+    } else if (cmp === "week") { pFrom = addDays(from, -7); pTo = addDays(to, -7); pName = "cùng kỳ tuần trước"; }
     else if (cmp === "month") { pFrom = shiftMonth(from, -1); pTo = shiftMonth(to, -1); pName = "cùng kỳ tháng trước"; }
     else { pFrom = addDays(from, -len); pTo = addDays(from, -1); pName = "kỳ liền trước"; }
     return {from: from, to: to, len: len, pFrom: pFrom, pTo: pTo, pName: pName, cmp: cmp,
@@ -687,7 +831,10 @@ tbody tr:hover td { background: var(--surface-2); }
 
   function fillSelects() {
     var kenh = {}, users = {};
-    state.data.facts.forEach(function (f) { kenh[f[2]] = f[1]; users[f[4]] = (users[f[4]] || 0) + f[6]; });
+    state.data.facts.forEach(function (f) {
+      if (!state.srcOn[f[1]]) return;
+      kenh[f[2]] = f[1]; users[f[4]] = (users[f[4]] || 0) + f[6];
+    });
     var ks = Object.keys(kenh).sort(function (a, b) { return kenh[a] === kenh[b] ? a.localeCompare(b) : SOURCES.findIndex(function (s) { return s.key === kenh[a]; }) - SOURCES.findIndex(function (s) { return s.key === kenh[b]; }); });
     $("fKenh").innerHTML = '<option value="">Tất cả</option>' + ks.map(function (k) { return '<option value="' + esc(k) + '">' + esc(k) + " · " + esc(SRC[kenh[k]] ? SRC[kenh[k]].label : kenh[k]) + "</option>"; }).join("");
     var us = Object.keys(users).sort(function (a, b) { return users[b] - users[a]; });
@@ -701,7 +848,7 @@ tbody tr:hover td { background: var(--surface-2); }
   function render() {
     var R = rangeKeys();
     document.querySelectorAll("#rangeSeg button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.range === state.range)); });
-    document.querySelectorAll("#srcToggles button").forEach(function (b) { b.setAttribute("aria-pressed", String(!!state.srcOn[b.dataset.src])); });
+    document.querySelectorAll("#shopSeg button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.shop === state.shop)); });
     $("rangeLabel").textContent = R.len === 1 ? dmyFull(R.from) : dmyFull(R.from) + " – " + dmyFull(R.to) + " · " + R.len + " ngày";
 
     var cur = [], prev = [];
@@ -712,17 +859,33 @@ tbody tr:hover td { background: var(--surface-2); }
     var wk = $("fCmp").querySelector('option[value="week"]');
     wk.disabled = R.len > 7;
     $("fCmp").value = R.cmp;
+    $("customRange").hidden = state.range !== "custom";
+    $("cmpRange").hidden = state.cmp !== "custom";
+    var minKey = addDays(state.data.today, -199);
+    [["fFrom", R.from], ["fTo", R.to], ["cFrom", R.pFrom], ["cTo", R.pTo]].forEach(function (p) {
+      var inp = $(p[0]); inp.min = minKey; inp.max = state.data.today; if (document.activeElement !== inp) inp.value = p[1];
+    });
     renderKpis(R, cur, prev);
+    renderOrders(R);
+    renderCond(R);
+    renderProducts(R);
     renderTrend(R, cur, prev);
     renderKenh(cur);
     renderLoai(cur);
     renderHeat(cur);
-    renderBacklog();
+    renderBacklogs();
     renderHealth();
     renderUsers(R, cur);
     renderRecent();
-    $("footNote").textContent = "Số thao tác = số lần nhập trên app (1 đơn/1 chứng từ/1 dòng sản phẩm). Kỳ so sánh = cùng số ngày liền trước. "
-      + (state.mode === "live" ? "Số liệu tổng hợp lại mỗi 10 phút từ RAW_IN_FULL, Chứng từ_full, Hoàn sản phẩm và sheet TH." : "Đang xem dữ liệu mẫu, không phải số thật.");
+    $("footNote").textContent = "Số thao tác = số lần nhập trên app (1 đơn/1 chứng từ/1 dòng sản phẩm). "
+      + "Chứng từ chưa nhận là số hiện tại, không theo bộ lọc thời gian. "
+      + (state.mode === "live" ? "Số liệu tổng hợp lại mỗi 10 phút từ RAW_IN_FULL, Full das chứng từ VTD, Chứng từ_FF/_full, Hoàn sản phẩm và tab Hàng hoàn TH." : "Đang xem dữ liệu mẫu, không phải số thật.");
+  }
+
+  // Bản tổng hợp cũ chỉ có pnBacklog — vẫn đọc được
+  function getBacklogs() {
+    var snap = state.data.snapshot || {};
+    return snap.backlogs || {PN: snap.pnBacklog || null};
   }
 
   function sumBy(rows, idx, val) { var o = {}; rows.forEach(function (f) { o[f[idx]] = (o[f[idx]] || 0) + f[val == null ? 6 : val]; }); return o; }
@@ -759,19 +922,62 @@ tbody tr:hover td { background: var(--surface-2); }
     var c = sumBy(cur, 1), p = sumBy(prev, 1);
     var tc = total(cur), tp = total(prev);
     var qtyCur = cur.reduce(function (a, f) { return a + (f[3] === "Sản phẩm" || f[3] === "Hàng hoàn" ? f[7] : 0); }, 0);
-    var snap = state.data.snapshot || {}, bl = snap.pnBacklog || {}, sy = snap.sync || {};
+    var snap = state.data.snapshot || {}, sy = snap.sync || {}, bls = getBacklogs();
     var errs = (sy.errHangHoan || 0) + (sy.errChungTu || 0);
     var perDay = tc / Math.max(1, R.len);
-    var tiles = [
-      {lbl: "Tổng thao tác", val: n(tc), foot: deltaHtml(tc, tp), spark: sparkSvg(dailySeries(cur, R), "var(--accent)")},
-      {lbl: "VTD", sw: "var(--s-vtd)", val: state.srcOn.VTD ? n(c.VTD) : "—", foot: state.srcOn.VTD ? deltaHtml(c.VTD || 0, p.VTD || 0) : "<span>đang ẩn</span>", spark: state.srcOn.VTD ? sparkSvg(dailySeries(cur, R, "VTD"), "var(--s-vtd)") : ""},
-      {lbl: "Phạm Nguyên", sw: "var(--s-pn)", val: state.srcOn.PN ? n(c.PN) : "—", foot: state.srcOn.PN ? deltaHtml(c.PN || 0, p.PN || 0) : "<span>đang ẩn</span>", spark: state.srcOn.PN ? sparkSvg(dailySeries(cur, R, "PN"), "var(--s-pn)") : ""},
-      {lbl: "TH Truemilk", sw: "var(--s-th)", val: state.srcOn.TH ? n(c.TH) : "—", foot: state.srcOn.TH ? deltaHtml(c.TH || 0, p.TH || 0) : "<span>đang ẩn</span>", spark: state.srcOn.TH ? sparkSvg(dailySeries(cur, R, "TH"), "var(--s-th)") : ""},
-      {lbl: "PN chưa nhận chứng từ", val: n(bl.total), cls: bl.over7 ? "warnk" : "",
-        foot: '<span class="delta" style="color:var(--critical-ink)">' + n(bl.over7) + "</span><span>quá 7 ngày</span>"},
-      {lbl: "Lỗi đồng bộ", val: n(errs), cls: errs ? "alert" : "",
-        foot: "<span>" + n(sy.pending) + " đang chờ · " + n(sy.queueErrors) + " lỗi hàng đợi</span>"}
-    ];
+    var sh = state.shop;
+
+    function srcTile(key, label) {
+      var s = SRC[key];
+      return {lbl: label || s.label, sw: s.color, val: n(c[key]), foot: deltaHtml(c[key] || 0, p[key] || 0), spark: sparkSvg(dailySeries(cur, R, key), s.color)};
+    }
+    // Ô theo loại hoàn trong 1 shop: đếm thao tác (hoặc số lượng với hàng hoàn)
+    function loaiTile(key, loai, label, useQty) {
+      var idx = useQty ? 7 : 6;
+      var cv = 0, pv = 0;
+      cur.forEach(function (f) { if (f[1] === key && f[3] === loai) cv += f[idx]; });
+      prev.forEach(function (f) { if (f[1] === key && f[3] === loai) pv += f[idx]; });
+      return {lbl: label, val: n(cv), foot: deltaHtml(cv, pv)};
+    }
+    function backlogTile(key, label) {
+      var bl = bls[key];
+      if (!bl) return {lbl: label, val: "—", foot: "<span>chưa có số</span>"};
+      return {lbl: label, val: n(bl.total), cls: bl.over7 ? "warnk" : "",
+        foot: '<span class="delta" style="color:var(--critical-ink)">' + n(bl.over7) + "</span><span>quá 7 ngày</span>"};
+    }
+    var syncTile = {lbl: "Lỗi đồng bộ VTD", val: n(errs), cls: errs ? "alert" : "",
+      foot: "<span>" + n(sy.pending) + " đang chờ · " + n(sy.queueErrors) + " lỗi hàng đợi</span>"};
+
+    var tiles;
+    if (sh === "VTD") {
+      tiles = [srcTile("VTD", "Thao tác VTD"), loaiTile("VTD", "Chứng từ", "Chứng từ đã nhận"), loaiTile("VTD", "Sản phẩm", "Sản phẩm hoàn"),
+        loaiTile("VTD", "Thu hồi", "Thu hồi"), backlogTile("VTD", "VTD chưa nhận chứng từ"), syncTile];
+    } else if (sh === "PN") {
+      var stores = {}; cur.forEach(function (f) { if (f[1] === "PN" && f[3] === "Chứng từ") stores[f[2]] = 1; });
+      tiles = [srcTile("PN", "Thao tác Phạm Nguyên"), loaiTile("PN", "Chứng từ", "Chứng từ đã nhận"), loaiTile("PN", "Sản phẩm", "Sản phẩm hoàn (số lượng)", true),
+        {lbl: "Siêu thị có chứng từ", val: n(Object.keys(stores).length), foot: "<span>trong khoảng đang xem</span>"},
+        backlogTile("PN", "PN chưa nhận chứng từ")];
+    } else if (sh === "TH") {
+      var days = {}; cur.forEach(function (f) { if (f[1] === "TH") days[f[0]] = 1; });
+      var thQty = 0, thQtyPrev = 0;
+      cur.forEach(function (f) { if (f[1] === "TH") thQty += f[7]; });
+      prev.forEach(function (f) { if (f[1] === "TH") thQtyPrev += f[7]; });
+      var lastTh = (snap.freshness || {}).TH;
+      tiles = [srcTile("TH", "Dòng hàng hoàn TH"), {lbl: "Số lượng hoàn", val: n(thQty), foot: deltaHtml(thQty, thQtyPrev)},
+        {lbl: "Ngày có hàng hoàn", val: n(Object.keys(days).length), foot: "<span>trên " + n(R.len) + " ngày đang xem</span>"},
+        {lbl: "Lần nhập gần nhất", val: lastTh ? esc(dmy(lastTh)) : "—", foot: "<span>" + (lastTh ? esc(dmyFull(lastTh)) : "chưa có dữ liệu") + "</span>"}];
+    } else {
+      var vb = bls.VTD, pb = bls.PN;
+      var blTotal = (vb ? vb.total : 0) + (pb ? pb.total : 0), blOver = (vb ? vb.over7 : 0) + (pb ? pb.over7 : 0);
+      tiles = [
+        {lbl: "Tổng thao tác", val: n(tc), foot: deltaHtml(tc, tp), spark: sparkSvg(dailySeries(cur, R), "var(--accent)")},
+        srcTile("VTD"), srcTile("PN"), srcTile("TH"),
+        {lbl: "Chứng từ chưa nhận", val: n(blTotal), cls: blOver ? "warnk" : "",
+          foot: "<span>VTD " + (vb ? n(vb.total) : "—") + " · PN " + (pb ? n(pb.total) : "—") + ' · </span><span class="delta" style="color:var(--critical-ink)">' + n(blOver) + "</span><span>quá 7 ngày</span>"},
+        syncTile
+      ];
+    }
+    $("kpis").style.setProperty("--kpi-n", tiles.length);
     $("kpis").innerHTML = tiles.map(function (t) {
       return '<div class="kpi ' + (t.cls || "") + '"><div class="lbl">' + (t.sw ? '<span class="sw" style="background:' + t.sw + '"></span>' : "") + esc(t.lbl)
         + '</div><div class="val">' + t.val + '</div><div class="foot">' + t.foot + "</div>" + (t.spark || "") + "</div>";
@@ -807,14 +1013,25 @@ tbody tr:hover td { background: var(--surface-2); }
       var i = hourly ? f[5] : diffDays(R.pFrom, f[0]);
       cmpVals[i] = (cmpVals[i] || 0) + f[6];
     });
-    $("trendTitle").textContent = hourly ? "Thao tác theo giờ" : "Thao tác theo ngày";
-    var srcs = SOURCES.filter(function (s) { return state.srcOn[s.key]; });
+    $("trendTitle").textContent = (hourly ? "Thao tác theo giờ" : "Thao tác theo ngày") + (state.shop === "all" ? "" : " · " + SRC[state.shop].label);
+    // Tất cả shop: chồng theo shop. Một shop: chồng theo loại hoàn (tối đa 3 loại + Khác)
+    var srcs, seriesOf;
+    if (state.shop === "all") {
+      srcs = SOURCES.slice();
+      seriesOf = function (f) { return srcs.findIndex(function (s) { return s.key === f[1]; }); };
+    } else {
+      var lt = sumBy(cur, 3), loais = Object.keys(lt).sort(function (a, b) { return lt[b] - lt[a]; });
+      var keep = loais.length > 4 ? loais.slice(0, 3) : loais;
+      srcs = keep.map(function (l, i) { return {key: l, label: l, color: LOAI_COLORS[i]}; });
+      if (loais.length > 4) srcs.push({key: "__other", label: "Khác", color: LOAI_COLORS[3]});
+      seriesOf = function (f) { var i = keep.indexOf(f[3]); return i >= 0 ? i : (loais.length > 4 ? srcs.length - 1 : -1); };
+    }
     var cats = [], idx = {};
     if (hourly) { for (var h = 7; h <= 20; h++) { idx[h] = cats.length; cats.push({key: h, label: pad(h) + "h", full: pad(h) + ":00–" + pad(h) + ":59"}); } }
     else { for (var k = R.from; k <= R.to; k = addDays(k, 1)) { idx[k] = cats.length; cats.push({key: k, label: dmy(k), full: DOW[dowIdx(k)] + ", " + dmyFull(k), dow: dowIdx(k)}); } }
     var vals = srcs.map(function () { return cats.map(function () { return 0; }); });
     cur.forEach(function (f) {
-      var si = srcs.findIndex(function (s) { return s.key === f[1]; });
+      var si = seriesOf(f);
       if (si < 0) return;
       var ci = hourly ? idx[f[5]] : idx[f[0]];
       if (ci == null) return;
@@ -945,6 +1162,12 @@ tbody tr:hover td { background: var(--surface-2); }
       var segs = SOURCES.filter(function (s) { return by[k][s.key]; }).map(function (s) { return {v: by[k][s.key], color: s.color, label: s.label}; });
       return {label: k, value: segs.reduce(function (a, s) { return a + s.v; }, 0), segs: segs};
     }).sort(function (a, b) { return b.value - a.value; });
+    // Một shop: tô theo loại, cùng màu với biểu đồ theo ngày
+    if (state.shop !== "all") rows.forEach(function (r, i) {
+      var color = rows.length > 4 && i >= 3 ? LOAI_COLORS[3] : LOAI_COLORS[Math.min(i, 3)];
+      r.segs = [{v: r.value, color: color, label: r.label}];
+    });
+    $("loaiSub").textContent = state.shop === "all" ? "màu theo shop" : SRC[state.shop].label;
     var max = rows.length ? rows[0].value : 1;
     $("loaiBars").innerHTML = hbarsHtml(rows, max, {pctOf: total(cur)});
     bindHbarTips($("loaiBars"));
@@ -981,23 +1204,236 @@ tbody tr:hover td { background: var(--surface-2); }
     $("heat").onmouseleave = hideTip;
   }
 
-  /* ---- Tồn PN ---- */
-  function renderBacklog() {
-    var bl = (state.data.snapshot || {}).pnBacklog;
-    if (!bl) { $("aging").innerHTML = ""; $("oldest").innerHTML = '<div class="empty">Chưa có số tồn chứng từ Phạm Nguyên.</div>'; return; }
+  /* ---- Đơn lên · Chứng từ đã nhận · Bàn giao ---- */
+  var MEASURES = [
+    {key: "order", label: "Đơn lên", color: "var(--m-order)"},
+    {key: "recv", label: "Chứng từ đã nhận", color: "var(--m-recv)"},
+    {key: "hand", label: "Bàn giao về shop", color: "var(--m-hand)"}
+  ];
+  function bucketOf(k, g) {
+    if (g === "month") return k.slice(0, 7);
+    if (g === "week") return addDays(k, -dowIdx(k));        // thứ Hai đầu tuần
+    return k;
+  }
+  function bucketLabel(b, g, short) {
+    if (g === "month") { var p = b.split("-"); return (short ? "T" : "Tháng ") + Number(p[1]) + "/" + p[0].slice(short ? 2 : 0); }
+    if (g === "week") return (short ? "" : "Tuần ") + dmy(b) + (short ? "" : "–" + dmy(addDays(b, 6)));
+    return short ? dmy(b) : DOW[dowIdx(b)] + ", " + dmyFull(b);
+  }
+  // Ba chỉ số theo ngày trong [a, b] cho các shop đang xem
+  function measureDaily(a, b) {
+    var out = {order: {}, recv: {}, hand: {}};
+    state.data.mfacts.forEach(function (f) {
+      if (f[0] < a || f[0] > b || !state.srcOn[f[1]]) return;
+      var m = f[8] === "order" ? "order" : f[8] === "handover" ? "hand" : null;
+      if (m) out[m][f[0]] = (out[m][f[0]] || 0) + f[6];
+    });
+    state.data.facts.forEach(function (f) {
+      if (f[0] < a || f[0] > b || !state.srcOn[f[1]] || f[3] !== "Chứng từ") return;
+      out.recv[f[0]] = (out.recv[f[0]] || 0) + f[6];
+    });
+    return out;
+  }
+  function sumObj(o) { var s = 0; for (var k in o) s += o[k]; return s; }
+
+  function renderOrders(R) {
+    document.querySelectorAll("#granSeg button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.g === state.gran)); });
+    var g = state.gran, cur = measureDaily(R.from, R.to), prv = measureDaily(R.pFrom, R.pTo);
+    var bls = getBacklogs();
+    var shops = SOURCES.filter(function (s) { return state.srcOn[s.key]; }).map(function (s) { return s.key; });
+    var hasRecv = shops.some(function (k) { return k !== "TH"; });
+    var hasHand = shops.some(function (k) { return bls[k] && bls[k].hasHandover; }) || sumObj(cur.hand) > 0;
+    var ms = MEASURES.filter(function (m) { return m.key === "order" || (m.key === "recv" && hasRecv) || (m.key === "hand" && hasHand); });
+
+    // Ô so sánh
+    var tot = {}, ptot = {};
+    ms.forEach(function (m) { tot[m.key] = sumObj(cur[m.key]); ptot[m.key] = sumObj(prv[m.key]); });
+    var stats = ms.map(function (m) {
+      return '<div class="ostat"><span class="k"><i style="background:' + m.color + '"></i>' + esc(m.label) + '</span><span class="v">' + n(tot[m.key])
+        + '</span><span class="s">' + deltaHtml(tot[m.key], ptot[m.key]) + "</span></div>";
+    });
+    if (hasRecv) {
+      var rate = tot.order ? tot.recv / tot.order * 100 : 0, prate = ptot.order ? ptot.recv / ptot.order * 100 : 0;
+      var dp = rate - prate;
+      stats.push('<div class="ostat"><span class="k">Tỷ lệ nhận CT / đơn lên</span><span class="v">' + (tot.order ? rate.toFixed(1).replace(".", ",") + "%" : "—")
+        + '</span><span class="s">' + (ptot.order ? '<span class="delta">' + (dp >= 0 ? "▲ +" : "▼ ") + dp.toFixed(1).replace(".", ",") + " điểm</span><span>vs " + esc(R.pLabel) + "</span>" : "<span>chưa có số kỳ so sánh</span>") + "</span></div>");
+    }
+    $("ordersStats").innerHTML = stats.join("");
+    $("ordersSub").textContent = shopLabel() + " · đơn lên theo Ngày lên đơn, chứng từ theo ngày nhập trên app, bàn giao theo Ngày bàn giao CT";
+
+    // Gộp theo ngày / tuần / tháng
+    var buckets = [], bidx = {};
+    for (var k = R.from; k <= R.to; k = addDays(k, 1)) { var b = bucketOf(k, g); if (bidx[b] == null) { bidx[b] = buckets.length; buckets.push(b); } }
+    var vals = ms.map(function () { return buckets.map(function () { return 0; }); });
+    ms.forEach(function (m, mi) { for (var day in cur[m.key]) { var bi = bidx[bucketOf(day, g)]; if (bi != null) vals[mi][bi] += cur[m.key][day]; } });
+
+    $("ordersLegend").innerHTML = ms.map(function (m) { return '<span><i style="background:' + m.color + '"></i>' + esc(m.label) + "</span>"; }).join("")
+      + (g !== "day" ? '<span style="color:var(--fg-3)">· kỳ đầu/cuối có thể không đủ ' + (g === "week" ? "tuần" : "tháng") + "</span>" : "");
+
+    // Bảng: mới nhất trước, kèm chênh lệch so với kỳ liền trước trong bảng
+    $("ordersTable").innerHTML = '<table><thead><tr><th>' + (g === "day" ? "Ngày" : g === "week" ? "Tuần" : "Tháng") + "</th>"
+      + ms.map(function (m) { return '<th class="n">' + esc(m.label) + "</th>"; }).join("") + (hasRecv ? '<th class="n">Tỷ lệ nhận</th>' : "") + "</tr></thead><tbody>"
+      + buckets.map(function (bk, i) {
+        return "<tr><td>" + esc(bucketLabel(bk, g)) + "</td>" + ms.map(function (m, mi) {
+          var v = vals[mi][i], pv = i > 0 ? vals[mi][i - 1] : null;
+          var d = pv != null && pv ? Math.round((v - pv) / pv * 100) : null;
+          return '<td class="n">' + n(v) + (d != null ? ' <small style="color:var(--fg-3)">' + (d >= 0 ? "+" : "") + d + "%</small>" : "") + "</td>";
+        }).join("") + (hasRecv ? '<td class="n">' + (vals[0][i] ? (vals[1][i] / vals[0][i] * 100).toFixed(0) + "%" : "—") + "</td>" : "") + "</tr>";
+      }).reverse().join("") + "</tbody></table>";
+    $("ordersTable").hidden = !state.ordersTable; $("ordersChart").hidden = state.ordersTable;
+    $("ordersTableBtn").textContent = state.ordersTable ? "Xem biểu đồ" : "Xem dạng bảng";
+
+    // Cột nhóm: mỗi kỳ 1 nhóm, mỗi chỉ số 1 cột
+    var el = $("ordersChart");
+    var W = Math.max(280, el.clientWidth || 900), H = 240, ml = 44, mr = 8, mt = 10, mb = 26;
+    var iw = W - ml - mr, ih = H - mt - mb;
+    var max = niceMax(Math.max.apply(null, [1].concat.apply([1], vals)));
+    var step = iw / buckets.length, gw = Math.min(step * 0.78, 22 * ms.length + 8), bw = Math.max(1.5, (gw - 2 * (ms.length - 1)) / ms.length);
+    var y = function (v) { return mt + ih - v / max * ih; };
+    var svg = '<svg viewBox="0 0 ' + W + " " + H + '" height="' + H + '" role="img" aria-label="Đơn lên, chứng từ đã nhận, bàn giao theo ' + (g === "day" ? "ngày" : g === "week" ? "tuần" : "tháng") + '"><g class="axis">';
+    for (var t = 0; t <= 4; t++) {
+      var tv = max / 4 * t, ty = y(tv);
+      svg += '<line class="' + (t ? "grid-line" : "base-line") + '" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + ty + '" y2="' + ty + '"/><text x="' + (ml - 8) + '" y="' + (ty + 4) + '" text-anchor="end">' + n(tv) + "</text>";
+    }
+    var every = Math.ceil(buckets.length / Math.max(2, Math.floor(iw / 56)));
+    buckets.forEach(function (bk, i) {
+      if (i % every !== 0 && i !== buckets.length - 1) return;
+      if (i !== buckets.length - 1 && buckets.length - 1 - i < every) return;
+      svg += '<text x="' + (ml + step * i + step / 2) + '" y="' + (H - 8) + '" text-anchor="middle">' + esc(bucketLabel(bk, g, true)) + "</text>";
+    });
+    svg += "</g><g>";
+    buckets.forEach(function (bk, i) {
+      var x0 = ml + step * i + (step - gw) / 2;
+      ms.forEach(function (m, mi) {
+        var v = vals[mi][i]; if (v <= 0) return;
+        var x = x0 + mi * (bw + 2), yy = y(v), hgt = mt + ih - yy, r = Math.min(3, bw / 2, hgt);
+        svg += '<path d="M' + x + " " + (yy + hgt) + "V" + (yy + r) + "Q" + x + " " + yy + " " + (x + r) + " " + yy + "H" + (x + bw - r) + "Q" + (x + bw) + " " + yy + " " + (x + bw) + " " + (yy + r) + "V" + (yy + hgt) + 'Z" fill="' + m.color + '"/>';
+      });
+    });
+    svg += "</g><g>";
+    buckets.forEach(function (bk, i) { svg += '<rect class="hover-col" data-i="' + i + '" x="' + (ml + step * i) + '" y="' + mt + '" width="' + step + '" height="' + ih + '"/>'; });
+    el.innerHTML = svg + "</g></svg>";
+    var on = null;
+    el.onmousemove = function (e) {
+      var tg = e.target.closest && e.target.closest(".hover-col");
+      if (on && on !== tg) on.classList.remove("on");
+      if (!tg) { hideTip(); on = null; return; }
+      tg.classList.add("on"); on = tg;
+      var i = +tg.dataset.i;
+      showTip('<div class="t">' + esc(bucketLabel(buckets[i], g)) + "</div>" + ms.map(function (m, mi) {
+        return '<div class="r"><span><i style="background:' + m.color + '"></i>' + esc(m.label) + "</span><b>" + n(vals[mi][i]) + "</b></div>";
+      }).join("") + (hasRecv && vals[0][i] ? '<div class="r tot"><span>Tỷ lệ nhận / đơn lên</span><b>' + (vals[1][i] / vals[0][i] * 100).toFixed(0) + "%</b></div>" : ""), e.clientX, e.clientY);
+    };
+    el.onmouseleave = function () { hideTip(); if (on) on.classList.remove("on"); on = null; };
+  }
+
+  /* ---- Tình trạng hoàn & tỷ lệ lỗi ---- */
+  function isNormal(s) { var x = String(s || "").toLowerCase(); return /bình thường|binh thuong|nguyên vẹn|nguyen ven|^tốt$|^ok$|^đạt$/.test(x); }
+  function isBlank(s) { return !s || /^\(.*\)$/.test(String(s)); }
+  function condAgg(a, b) {
+    var g = {};
+    state.data.mfacts.forEach(function (f) {
+      if (f[8] !== "cond" || f[0] < a || f[0] > b || !state.srcOn[f[1]]) return;
+      var k = f[1] + "|" + f[2], o = g[k] || (g[k] = {src: f[1], group: f[2], normal: 0, issue: 0, blank: 0, issues: {}});
+      var q = f[7] || f[6];
+      if (isBlank(f[3])) o.blank += q;
+      else if (isNormal(f[3])) o.normal += q;
+      else { o.issue += q; o.issues[f[3]] = (o.issues[f[3]] || 0) + q; }
+    });
+    return g;
+  }
+  function renderCond(R) {
+    var cur = condAgg(R.from, R.to), prv = condAgg(R.pFrom, R.pTo);
+    var keys = Object.keys(cur).sort(function (a, b) { return SOURCES.findIndex(function (s) { return s.key === cur[a].src; }) - SOURCES.findIndex(function (s) { return s.key === cur[b].src; }) || a.localeCompare(b); });
+    $("condSub").textContent = "tỷ lệ lỗi = không bình thường / có ghi tình trạng · vs " + R.pLabel;
+    if (!keys.length) { $("condBody").innerHTML = '<div class="empty">Chưa có dữ liệu tình trạng trong khoảng này.</div>'; return; }
+    $("condBody").innerHTML = keys.map(function (k) {
+      var o = cur[k], p = prv[k], s = SRC[o.src];
+      var known = o.normal + o.issue, all = known + o.blank || 1;
+      var rate = known ? o.issue / known * 100 : 0;
+      var prate = p && (p.normal + p.issue) ? p.issue / (p.normal + p.issue) * 100 : null;
+      var dp = prate != null ? rate - prate : null;
+      var unit = o.group === "Sản phẩm" ? "sản phẩm" : "chứng từ";
+      var top = Object.keys(o.issues).sort(function (a, b) { return o.issues[b] - o.issues[a]; }).slice(0, 4);
+      return '<div class="cond-row"><div class="cond-top"><span class="src-tag"><i style="background:' + s.color + '"></i>' + esc(s.label) + " · " + esc(o.group) + "</span>"
+        + '<span style="color:var(--fg-3);font-size:12px">' + n(all) + " " + unit + "</span>"
+        + '<span class="rate" style="color:' + (rate >= 10 ? "var(--critical-ink)" : "var(--fg)") + '">' + rate.toFixed(1).replace(".", ",") + "% lỗi</span>"
+        + (dp != null ? '<span class="delta" style="font-size:12px">' + (dp > 0 ? "▲ +" : dp < 0 ? "▼ " : "") + dp.toFixed(1).replace(".", ",") + " điểm</span>" : "") + "</div>"
+        + '<div class="cond-bar" title="Bình thường ' + n(o.normal) + " · Lỗi " + n(o.issue) + " · Chưa ghi " + n(o.blank) + '">'
+        + '<span style="width:' + (o.normal / all * 100) + '%;background:var(--good)"></span><span style="width:' + (o.issue / all * 100) + '%;background:var(--critical)"></span><span style="width:' + (o.blank / all * 100) + '%;background:var(--line-strong)"></span></div>'
+        + '<div class="cond-issues">' + (top.length ? top.map(function (t) { return '<span class="pill"><i style="background:var(--critical)"></i>' + esc(t) + " · <b>" + n(o.issues[t]) + "</b></span>"; }).join("") : "<span>Không có lỗi</span>")
+        + (o.blank ? '<span class="pill">Chưa ghi tình trạng · <b>' + n(o.blank) + "</b></span>" : "") + "</div></div>";
+    }).join("") + '<div class="legend" style="margin-top:8px"><span><i style="background:var(--good)"></i>Bình thường</span><span><i style="background:var(--critical)"></i>Có lỗi</span><span><i style="background:var(--line-strong)"></i>Chưa ghi</span></div>';
+  }
+
+  /* ---- Sản phẩm hoàn ---- */
+  function renderProducts(R) {
+    var by = {};
+    state.data.mfacts.forEach(function (f) {
+      if (f[8] !== "product" || f[0] < R.from || f[0] > R.to || !state.srcOn[f[1]]) return;
+      var k = f[1] + "|" + f[2], o = by[k] || (by[k] = {src: f[1], name: f[2], qty: 0, lines: 0, issueQty: 0, knownQty: 0, statuses: {}});
+      o.qty += f[7]; o.lines += f[6];
+      if (!isBlank(f[3])) { o.knownQty += f[7]; if (!isNormal(f[3])) { o.issueQty += f[7]; o.statuses[f[3]] = (o.statuses[f[3]] || 0) + f[7]; } }
+    });
+    var rows = Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) { return b.qty - a.qty; });
+    var totalQty = rows.reduce(function (a, r) { return a + r.qty; }, 0);
+    var q = String(state.prodQuery || "").toLowerCase().trim();
+    var shown = (q ? rows.filter(function (r) { return r.name.toLowerCase().indexOf(q) >= 0; }) : rows).slice(0, 15);
+    $("prodSub").textContent = n(rows.length) + " sản phẩm · " + n(totalQty) + " đơn vị hoàn" + (R.from < addDays(state.data.today, -99) ? " · sản phẩm chỉ lưu 100 ngày gần nhất" : "");
+    if (!shown.length) { $("prodTable").innerHTML = '<div class="empty">' + (q ? "Không có sản phẩm khớp “" + esc(q) + "”." : "Chưa có sản phẩm hoàn trong khoảng này.") + "</div>"; return; }
+    var maxQ = shown[0].qty || 1;
+    $("prodTable").innerHTML = '<table><thead><tr><th>Sản phẩm</th><th class="n">Số lượng</th><th class="n">Số lần</th><th class="n">Tỷ lệ lỗi</th><th>Lỗi thường gặp</th></tr></thead><tbody>'
+      + shown.map(function (r) {
+        var s = SRC[r.src], rate = r.knownQty ? r.issueQty / r.knownQty * 100 : null;
+        var top = Object.keys(r.statuses).sort(function (a, b) { return r.statuses[b] - r.statuses[a]; }).slice(0, 2);
+        return '<tr><td><div style="display:flex;flex-direction:column;gap:3px;min-width:180px"><span>' + esc(r.name) + '</span><span style="display:flex;align-items:center;gap:8px"><span class="src-tag"><i style="background:' + s.color + '"></i>' + esc(s.label) + '</span><span class="share" style="flex:1;max-width:160px"><span style="width:' + (r.qty / maxQ * 100) + "%;background:" + s.color + '"></span></span></span></div></td>'
+          + '<td class="n"><b>' + n(r.qty) + '</b></td><td class="n">' + n(r.lines) + '</td><td class="n" style="color:' + (rate != null && rate >= 10 ? "var(--critical-ink)" : "inherit") + '">' + (rate == null ? "—" : rate.toFixed(0) + "%") + "</td>"
+          + "<td>" + (top.length ? top.map(function (t) { return '<span class="pill" style="margin:1px 2px">' + esc(t) + " · " + n(r.statuses[t]) + "</span>"; }).join("") : '<span style="color:var(--fg-3)">–</span>') + "</td></tr>";
+      }).join("") + "</tbody></table>";
+  }
+
+  /* ---- Chứng từ chưa nhận (mỗi shop 1 bảng riêng) ---- */
+  function backlogCardHtml(key, bl, span, wide) {
+    var s = SRC[key];
+    var head = '<div class="card-h"><h2><span class="src-tag" style="font-size:14px;color:var(--fg)"><i style="background:' + s.color + '"></i>Chứng từ ' + esc(s.label) + " chưa nhận</span></h2>"
+      + '<span class="sub">' + (bl ? esc(bl.method || "") : "") + "</span></div>";
+    if (!bl) return '<section class="card ' + span + '">' + head + '<div class="empty">Chưa có số chứng từ chưa nhận của ' + esc(s.label) + ". Admin cần dán bản Dashboard_VTD.gs mới và chạy dashBuild.</div></section>";
     var max = Math.max.apply(null, bl.buckets.concat([1]));
-    $("aging").innerHTML = bl.buckets.map(function (v, i) {
+    var aging = '<div class="aging">' + bl.buckets.map(function (v, i) {
       return '<div class="age"><span class="k">' + AGE_LABELS[i] + '</span><span class="v">' + n(v) + '</span><span class="bar" style="background:' + AGE_COLORS[i] + ";width:" + Math.max(4, v / max * 100) + '%"></span></div>';
-    }).join("");
+    }).join("") + "</div>";
+    var st = bl.byStatus || {};
+    var stKeys = Object.keys(st).sort(function (a, b) { return st[b] - st[a]; });
+    var stHtml = stKeys.length ? '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--fg-3)"><span>Đối chiếu · ' + esc(bl.statusSheet || "") + ":</span>"
+      + stKeys.map(function (k) { return '<span class="pill">' + esc(k) + " · <b>" + n(st[k]) + "</b></span>"; }).join("") + "</div>" : "";
+    var bs = bl.byStore || {}, bsKeys = Object.keys(bs).sort(function (a, b) { return bs[b] - bs[a]; });
+    var storeRows = bsKeys.slice(0, 6).map(function (k) { return {label: k, value: bs[k], segs: [{v: bs[k], color: s.color, label: "Chưa nhận"}]}; });
+    if (bsKeys.length > 6) { var rest = bsKeys.slice(6).reduce(function (a, k) { return a + bs[k]; }, 0); storeRows.push({label: "Khác (" + (bsKeys.length - 6) + ")", value: rest, segs: [{v: rest, color: "var(--fg-3)", label: "Gộp"}]}); }
+    var stores = '<div><p class="mini-h">Theo loại siêu thị</p><div class="hbars bl-bars">' + hbarsHtml(storeRows, storeRows.length ? storeRows[0].value : 1, {pctOf: bl.total}) + "</div></div>";
     var rows = bl.oldest || [];
-    var st = bl.statusSheet ? bl.byStatus : null;
-    var stHtml = st ? '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:2px 4px 8px;font-size:12px;color:var(--fg-3)"><span>Xác thực hóa đơn · tab ' + esc(bl.statusSheet) + ":</span>"
-      + Object.keys(st).sort(function (a, b) { return st[b] - st[a]; }).map(function (k) { return '<span class="pill">' + esc(k) + " · <b>" + n(st[k]) + "</b></span>"; }).join("") + "</div>" : "";
-    $("oldest").innerHTML = stHtml + (rows.length ? '<table><thead><tr><th>Mã đơn</th><th>Khách hàng</th><th>Siêu thị</th><th>Lên đơn</th><th class="n">Số ngày</th></tr></thead><tbody>'
-      + rows.map(function (r) {
+    var table = rows.length ? '<div class="tbl-wrap"><p class="mini-h">Tồn lâu nhất</p><table><thead><tr><th>Mã đơn</th><th>Khách hàng</th><th>Siêu thị</th><th>Lên đơn</th><th class="n">Số ngày</th></tr></thead><tbody>'
+      + rows.slice(0, wide ? 12 : 8).map(function (r) {
         var sev = r.days > 15 ? "var(--critical)" : r.days > 7 ? "var(--serious)" : "var(--warning)";
         return '<tr><td class="mono">' + esc(r.ma) + "</td><td>" + esc(r.khach) + "</td><td>" + esc(r.kenh) + '</td><td class="num">' + esc(dmyFull(r.ngay)) + '</td><td class="n"><span class="pill"><i style="background:' + sev + '"></i>' + n(r.days) + " ngày</span></td></tr>";
-      }).join("") + "</tbody></table>" : '<div class="empty">Không còn chứng từ tồn.</div>');
+      }).join("") + "</tbody></table></div>" : '<div class="empty">Không còn chứng từ tồn.</div>';
+    var total = '<div class="bl-total"><b>' + n(bl.total) + "</b><span>chứng từ chưa nhận</span>"
+      + (bl.over7 ? '<span class="pill"><i style="background:var(--critical)"></i>' + n(bl.over7) + " quá 7 ngày</span>" : "") + "</div>";
+    return '<section class="card ' + span + '">' + head + total + aging + stHtml
+      + (wide ? '<div class="bl-split">' + stores + table + "</div>" : stores + table) + "</section>";
+  }
+
+  function renderBacklogs() {
+    var bls = getBacklogs(), sh = state.shop;
+    var keys = sh === "all" ? ["VTD", "PN"] : (sh === "VTD" || sh === "PN" ? [sh] : []);
+    var html;
+    if (keys.length === 2) html = backlogCardHtml("VTD", bls.VTD, "c6", false) + backlogCardHtml("PN", bls.PN, "c6", false);
+    else if (keys.length === 1) html = backlogCardHtml(keys[0], bls[keys[0]], "c12", true);
+    else html = "";
+    $("backlogCards").innerHTML = html;
+    $("backlogCards").querySelectorAll(".bl-bars").forEach(bindHbarTips);
+    // Sức khỏe hệ thống: cạnh nhau khi không có bảng tồn, cả hàng khi có
+    $("healthCard").className = "card c12";
+    $("health").classList.toggle("wide", true);
   }
 
   /* ---- Sức khỏe ---- */
@@ -1006,19 +1442,21 @@ tbody tr:hover td { background: var(--surface-2); }
   var ICON_WARN = '<svg class="status-ico" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17v.5"/></svg>';
   function renderHealth() {
     var snap = state.data.snapshot || {}, sy = snap.sync || {};
-    var cells = [
+    // Đồng bộ VTD chỉ liên quan VTD; shop khác chỉ xem độ mới dữ liệu
+    var cells = state.srcOn.VTD ? [
       {k: "Lỗi đồng bộ Hàng hoàn", v: sy.errHangHoan, s: "FFHN | Hoan VITA", bad: sy.errHangHoan > 0},
       {k: "Lỗi đồng bộ Chứng từ", v: sy.errChungTu, s: "FFHN | Chung tu VTD", bad: sy.errChungTu > 0},
       {k: "Đang chờ đồng bộ", v: sy.pending, s: "RAW_IN_M3", warn: sy.pending > 20},
       {k: "Lỗi hàng đợi máy", v: sy.queueErrors, s: "báo từ điện thoại", warn: sy.queueErrors > 0}
-    ];
+    ] : [];
+    $("health").hidden = !cells.length;
     $("health").innerHTML = cells.map(function (c) {
       var ico = c.bad ? ICON_BAD : c.warn ? ICON_WARN : ICON_OK;
       var word = c.bad ? "Cần xử lý" : c.warn ? "Theo dõi" : "Ổn";
       return '<div class="hcell"><span class="k">' + ico + esc(c.k) + '</span><span class="v">' + n(c.v) + '</span><span class="s">' + word + " · " + esc(c.s) + "</span></div>";
     }).join("");
     var fr = snap.freshness || {}, today = state.data.today;
-    $("fresh").innerHTML = SOURCES.map(function (s) {
+    $("fresh").innerHTML = SOURCES.filter(function (s) { return state.srcOn[s.key]; }).map(function (s) {
       var k = fr[s.key];
       if (s.key === "TH" && snap.thConfigured === false) return '<div class="fresh-row">' + ICON_WARN + '<span class="src-tag"><i style="background:' + s.color + '"></i>' + esc(s.label) + '</span><span class="when">chưa cấu hình nguồn</span></div>';
       if (!k) return '<div class="fresh-row">' + ICON_BAD + '<span class="src-tag"><i style="background:' + s.color + '"></i>' + esc(s.label) + '</span><span class="when">không có dữ liệu</span></div>';
@@ -1083,19 +1521,25 @@ tbody tr:hover td { background: var(--surface-2); }
   }
 
   /* ================= Sự kiện ================= */
-  $("srcToggles").innerHTML = SOURCES.map(function (s) {
-    return '<button type="button" class="src-toggle" data-src="' + s.key + '" aria-pressed="true"><span class="sw" style="background:' + s.color + '"></span>' + esc(s.label) + "</button>";
+  $("shopSeg").innerHTML = SHOPS.map(function (s) {
+    return '<button type="button" data-shop="' + s.key + '" aria-pressed="false">' + (s.color ? '<span class="sw" style="background:' + s.color + '"></span>' : "") + esc(s.label) + "</button>";
   }).join("");
   $("rangeSeg").onclick = function (e) { var b = e.target.closest("button"); if (!b) return; state.range = b.dataset.range; savePrefs(); render(); };
-  $("srcToggles").onclick = function (e) {
-    var b = e.target.closest("button"); if (!b) return;
-    var k = b.dataset.src, on = Object.keys(state.srcOn).filter(function (x) { return state.srcOn[x]; });
-    if (state.srcOn[k] && on.length === 1) return; // luôn giữ ít nhất 1 nguồn
-    state.srcOn[k] = !state.srcOn[k]; savePrefs(); render();
+  $("shopSeg").onclick = function (e) {
+    var b = e.target.closest("button"); if (!b || b.dataset.shop === state.shop) return;
+    state.shop = b.dataset.shop; state.kenh = ""; applyShop(); savePrefs();
+    if (state.data) { fillSelects(); render(); }
   };
   $("fKenh").onchange = function () { state.kenh = this.value; render(); };
   $("fUser").onchange = function () { state.user = this.value; render(); };
   $("fCmp").onchange = function () { state.cmp = this.value; savePrefs(); render(); };
+  function dateInput(id, key) {
+    $(id).onchange = function () { if (!this.value) return; state[key] = this.value; savePrefs(); render(); };
+  }
+  dateInput("fFrom", "from"); dateInput("fTo", "to"); dateInput("cFrom", "cFrom"); dateInput("cTo", "cTo");
+  $("granSeg").onclick = function (e) { var b = e.target.closest("button"); if (!b) return; state.gran = b.dataset.g; savePrefs(); render(); };
+  $("ordersTableBtn").onclick = function () { state.ordersTable = !state.ordersTable; render(); };
+  var pq; $("prodSearch").oninput = function () { var v = this.value; clearTimeout(pq); pq = setTimeout(function () { state.prodQuery = v; renderProducts(rangeKeys()); }, 150); };
   $("btnRefresh").onclick = load;
   $("btnCsv").onclick = exportCsv;
   $("trendTableBtn").onclick = function () { state.trendTable = !state.trendTable; render(); };
