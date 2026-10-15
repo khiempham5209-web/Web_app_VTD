@@ -61,7 +61,7 @@ function vtdApp_dashboardV2(params) {
 
   const last = factSh.getLastRow();
   const facts = last > 1 ? factSh.getRange(2, 1, last - 1, 8).getValues().map(r => [
-    String(r[0]), String(r[1]), String(r[2]), String(r[3]), String(r[4]), Number(r[5]) || 0, Number(r[6]) || 0, Number(r[7]) || 0
+    r[0] instanceof Date ? Utilities.formatDate(r[0], DASH_CONFIG.timezone, "yyyy-MM-dd") : String(r[0]), String(r[1]), String(r[2]), String(r[3]), String(r[4]), Number(r[5]) || 0, Number(r[6]) || 0, Number(r[7]) || 0
   ]) : [];
   let snapshot = {};
   try { snapshot = JSON.parse(String(snapSh.getRange(2, 2).getValue() || "{}")); } catch (err) { snapshot = {}; }
@@ -144,10 +144,18 @@ function dashBuild() {
     const ss = vtdApp_ss_();
     const factSh = dash_sheet_(ss, DASH_CONFIG.factSheet, ["Ngày", "Nguồn", "Kênh", "Loại", "User", "Giờ", "Số thao tác", "Số lượng"]);
     const rows = Object.keys(facts).map(k => facts[k]).sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    // Cột Ngày để dạng chữ, không cho Sheets tự đổi "2026-10-16" thành kiểu Ngày.
+    factSh.getRange("A:A").setNumberFormat("@");
     // Ghi dữ liệu mới trước, xóa phần đuôi cũ sau — không có lúc sheet trống.
     if (rows.length) factSh.getRange(2, 1, rows.length, 8).setValues(rows);
     const extra = factSh.getLastRow() - 1 - rows.length;
     if (extra > 0) factSh.getRange(rows.length + 2, 1, extra, 8).clearContent();
+
+    // Tóm tắt trong Execution log để tự kiểm tra sau mỗi lần chạy tay
+    const bySrc = {};
+    rows.forEach(r => bySrc[r[1]] = (bySrc[r[1]] || 0) + r[6]);
+    console.log("dashBuild: " + rows.length + " dòng tổng hợp; thao tác theo nguồn " + JSON.stringify(bySrc)
+      + "; dữ liệu mới nhất " + JSON.stringify(freshness) + (errors.length ? "; LỖI: " + errors.join(" | ") : ""));
 
     const snapSh = dash_sheet_(ss, DASH_CONFIG.snapshotSheet, ["Cập nhật lúc", "Snapshot JSON"]);
     snapSh.getRange(2, 1, 1, 2).setValues([[
@@ -216,7 +224,7 @@ function dash_collectPn_(add, now) {
   const ss = SpreadsheetApp.openById(cfg.spreadsheetId);
   let sh = null;
   for (let i = 0; i < cfg.sheetNames.length && !sh; i++) sh = ss.getSheetByName(cfg.sheetNames[i]);
-  const backlog = {total: 0, over7: 0, buckets: [0, 0, 0, 0], byStore: {}, byStatus: {}, oldest: []};
+  const backlog = {total: 0, over7: 0, buckets: [0, 0, 0, 0], byStore: {}, byStatus: {}, openByStatus: {}, oldest: []};
   if (sh && sh.getLastRow() > 1) {
     const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
     const col = vtdApp_headerMap_(values[0]);
@@ -256,6 +264,8 @@ function dash_collectPn_(add, now) {
       if (!lenKey) continue;
       const days = Math.max(0, Math.round((todayMs - dash_dayMs_(lenKey)) / 86400000));
       backlog.total++;
+      const openKey = status || "(trống)";
+      backlog.openByStatus[openKey] = (backlog.openByStatus[openKey] || 0) + 1;
       if (days > 7) backlog.over7++;
       backlog.buckets[days <= 3 ? 0 : days <= 7 ? 1 : days <= 15 ? 2 : 3]++;
       backlog.byStore[store] = (backlog.byStore[store] || 0) + 1;

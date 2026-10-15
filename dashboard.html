@@ -587,8 +587,20 @@ tbody tr:hover td { background: var(--surface-2); }
     afterLoad();
   }
 
+  // Sheets có thể tự đổi "2026-10-16" thành kiểu Ngày → về client thành "Fri Oct 16 2026 ...". Đưa về yyyy-MM-dd.
+  function normDateKey(v) {
+    var s = String(v == null ? "" : v).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) return m[3] + "-" + pad(m[2]) + "-" + pad(m[1]);
+    var d = new Date(s);
+    return isNaN(d.getTime()) ? "" : keyOf(d);
+  }
   function afterLoad() {
     var d = state.data;
+    d.facts = (d.facts || []).map(function (f) { f[0] = normDateKey(f[0]); f[5] = Number(f[5]); if (isNaN(f[5])) f[5] = -1; return f; })
+      .filter(function (f) { return f[0]; });
+    if (d.today) d.today = normDateKey(d.today) || vnToday();
     $("updated").innerHTML = "Cập nhật <span class=\"num\">" + esc(String(d.updatedAt || "").slice(11, 16) || "—") + "</span> · " + esc(d.updatedAt ? dmyFull(d.updatedAt.slice(0, 10)) : "");
     fillSelects();
     render();
@@ -932,11 +944,14 @@ tbody tr:hover td { background: var(--surface-2); }
       return '<div class="age"><span class="k">' + AGE_LABELS[i] + '</span><span class="v">' + n(v) + '</span><span class="bar" style="background:' + AGE_COLORS[i] + ";width:" + Math.max(4, v / max * 100) + '%"></span></div>';
     }).join("");
     var rows = bl.oldest || [];
-    $("oldest").innerHTML = rows.length ? '<table><thead><tr><th>Mã đơn</th><th>Khách hàng</th><th>Siêu thị</th><th>Lên đơn</th><th class="n">Số ngày</th></tr></thead><tbody>'
+    var st = bl.openByStatus || null;
+    var stHtml = st ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:2px 4px 8px;font-size:12px;color:var(--fg-3)"><span>Trạng thái đang tính là chưa nhận:</span>'
+      + Object.keys(st).sort(function (a, b) { return st[b] - st[a]; }).map(function (k) { return '<span class="pill">' + esc(k) + " · <b>" + n(st[k]) + "</b></span>"; }).join("") + "</div>" : "";
+    $("oldest").innerHTML = stHtml + (rows.length ? '<table><thead><tr><th>Mã đơn</th><th>Khách hàng</th><th>Siêu thị</th><th>Lên đơn</th><th class="n">Số ngày</th></tr></thead><tbody>'
       + rows.map(function (r) {
         var sev = r.days > 15 ? "var(--critical)" : r.days > 7 ? "var(--serious)" : "var(--warning)";
         return '<tr><td class="mono">' + esc(r.ma) + "</td><td>" + esc(r.khach) + "</td><td>" + esc(r.kenh) + '</td><td class="num">' + esc(dmyFull(r.ngay)) + '</td><td class="n"><span class="pill"><i style="background:' + sev + '"></i>' + n(r.days) + " ngày</span></td></tr>";
-      }).join("") + "</tbody></table>" : '<div class="empty">Không còn chứng từ tồn.</div>';
+      }).join("") + "</tbody></table>" : '<div class="empty">Không còn chứng từ tồn.</div>');
   }
 
   /* ---- Sức khỏe ---- */
