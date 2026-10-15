@@ -552,32 +552,78 @@ tbody tr:hover td { background: var(--surface-2); }
       useDemo("Bạn chưa đăng nhập app trên trình duyệt này. Đang hiển thị <strong>dữ liệu mẫu</strong>. Mở <a href=\"./#home\">app Chứng từ FF</a>, đăng nhập, rồi quay lại trang này.");
       return;
     }
-    var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
-    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 45000);
-    fetch(API_URL, {
-      method: "POST", cache: "no-store",
-      headers: {"Content-Type": "text/plain;charset=utf-8"},
-      body: JSON.stringify({action: "dashboardV2", params: {sessionToken: s.token}}),
-      signal: ctrl ? ctrl.signal : undefined
-    }).then(function (r) { return r.json(); }).then(function (res) {
-      clearTimeout(timer);
+    fetchDash(s.token, 0).then(function (res) {
       var payload = res && (res.data || res);
       if (!res || res.ok === false || !payload || !payload.facts) {
+        // Lỗi nghiệp vụ (hết phiên, chưa có quyền...) — thử lại không có ích
         var msg = (res && (res.message || res.error)) || "Máy chủ chưa trả về dữ liệu dashboard.";
         setMode("error", "Lỗi tải dữ liệu");
         useDemo("<strong>Không tải được số liệu thật:</strong> " + esc(msg) + " Đang hiển thị dữ liệu mẫu.", true);
         return;
       }
+      saveCache(payload);
       state.data = payload;
       setMode("live", "Dữ liệu thật");
       var errs = (payload.snapshot && payload.snapshot.errors) || [];
       banner(errs.length ? "warn" : "", errs.length ? "<strong>Một số nguồn chưa tổng hợp được:</strong> " + errs.map(esc).join("; ") : "");
       afterLoad();
     }).catch(function (err) {
-      clearTimeout(timer);
+      var why = err && err.name === "AbortError" ? "quá 45 giây không phản hồi"
+        : err && err.busy ? "máy chủ Google đang bận"
+        : "lỗi mạng";
+      var cached = readCache();
+      scheduleRetry();
+      if (cached) {
+        state.data = cached.payload;
+        setMode("error", "Số liệu lúc " + cached.savedAt.slice(11, 16));
+        banner("warn", "<strong>Chưa lấy được số mới</strong> (" + esc(why) + ", đã thử 3 lần). Đang hiện số liệu thật của lần tải lúc "
+          + esc(cached.savedAt.slice(11, 16) + " " + dmyFull(cached.savedAt.slice(0, 10))) + ". Tự thử lại sau 1 phút.");
+        afterLoad();
+        return;
+      }
       setMode("error", "Mất kết nối");
-      useDemo("<strong>Không kết nối được máy chủ</strong> (" + esc(err && err.name === "AbortError" ? "quá 45 giây" : (err && err.message) || "lỗi mạng") + "). Đang hiển thị dữ liệu mẫu. Bấm Tải lại để thử lại.", true);
+      useDemo("<strong>Không kết nối được máy chủ</strong> (" + esc(why) + ", đã thử 3 lần). Đang hiển thị dữ liệu mẫu. Tự thử lại sau 1 phút.", true);
     });
+  }
+
+  // Apps Script thỉnh thoảng trả trang lỗi HTML (máy chủ bận, vừa deploy) — thử lại 3 lần, giãn cách tăng dần
+  function fetchDash(token, attempt) {
+    var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 45000);
+    return fetch(API_URL, {
+      method: "POST", cache: "no-store",
+      headers: {"Content-Type": "text/plain;charset=utf-8"},
+      body: JSON.stringify({action: "dashboardV2", params: {sessionToken: token}}),
+      signal: ctrl ? ctrl.signal : undefined
+    }).then(function (r) { return r.text(); }).then(function (text) {
+      clearTimeout(timer);
+      try { return JSON.parse(text); }
+      catch (e) { var busy = new Error("busy"); busy.busy = true; throw busy; }
+    }, function (err) { clearTimeout(timer); throw err; }).catch(function (err) {
+      if (attempt >= 2 || (err && err.name === "AbortError")) throw err;
+      $("updated").textContent = "Máy chủ bận, đang thử lại (" + (attempt + 2) + "/3)…";
+      return new Promise(function (ok) { setTimeout(ok, attempt === 0 ? 1500 : 4000); }).then(function () { return fetchDash(token, attempt + 1); });
+    });
+  }
+
+  var retryTimer = null;
+  function scheduleRetry() { clearTimeout(retryTimer); retryTimer = setTimeout(function () { if (!document.hidden) load(); else scheduleRetry(); }, 60000); }
+
+  // Lưu bản số liệu thật gần nhất trên máy này, để lúc máy chủ bận vẫn có số thật thay vì dữ liệu mẫu
+  var CACHE_KEY = "vtd_dash_cache_v1";
+  function saveCache(payload) {
+    try {
+      var who = (readSession().user || {}).email || "";
+      localStorage.setItem(CACHE_KEY, JSON.stringify({who: who, savedAt: payload.updatedAt || (vnToday() + " 00:00"), payload: payload}));
+    } catch (e) {}
+  }
+  function readCache() {
+    try {
+      var c = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
+      var who = (readSession().user || {}).email || "";
+      if (!c || !c.payload || !c.payload.facts || c.who !== who) return null;
+      return c;
+    } catch (e) { return null; }
   }
 
   function useDemo(msg, keepModeChip) {
