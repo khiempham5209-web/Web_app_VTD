@@ -31,13 +31,15 @@ const DASH_CONFIG = {
     doneStatuses: ["da nhan chung tu", "shop huy od"]
   },
   th: {
-    // Điền ID file + tên sheet nơi API TH ghi dữ liệu hoàn. Để trống = bỏ qua TH.
-    spreadsheetId: "",
-    sheetName: "",
-    dateAliases: ["ngay hoan", "ngay hoan tra", "ngay", "date"],
-    timeAliases: ["thoi gian", "gio", "time"],
-    userAliases: ["user thao tac", "user", "nguoi nhap", "email"],
+    // Tab "Hàng hoàn" của file TH Truemilk (cùng file với script FFPL tồn kho). Để trống ID = bỏ qua TH.
+    spreadsheetId: "1TVck35ibO3zJ6lkKpHNyXckgLyjvUxEoLbMa-6kt-Pk",
+    sheetName: "Hàng hoàn",
+    headerRow: 3,          // tiêu đề nằm ở dòng 3 (giống FFPL.headerRows)
+    dateAliases: ["ngay thang", "ngay hoan", "ngay hoan tra", "ngay", "date"],
+    timeAliases: ["thoi gian", "gio", "time", "timestamp"],
+    userAliases: ["user thao tac", "user", "nguoi nhap", "nguoi thao tac", "email"],
     qtyAliases: ["so luong", "sl", "qty"],
+    maAliases: ["ma don", "ma don ghtk"],
     kenhAliases: ["kho", "kenh", "slog"]
   }
 };
@@ -291,17 +293,21 @@ function dash_collectTh_(add) {
   const cfg = DASH_CONFIG.th;
   if (!cfg.spreadsheetId || !cfg.sheetName) return;
   const sh = SpreadsheetApp.openById(cfg.spreadsheetId).getSheetByName(cfg.sheetName);
-  if (!sh || sh.getLastRow() < 2) return;
+  if (!sh) throw new Error("Không thấy tab " + cfg.sheetName);
+  const headerRow = Math.max(1, Number(cfg.headerRow) || 1);
+  if (sh.getLastRow() <= headerRow) return;
   const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
-  const col = vtdApp_headerMap_(values[0]);
+  const col = vtdApp_headerMap_(values[headerRow - 1]);
   const c = {
     date: dash_col_(col, cfg.dateAliases, -1),
     time: dash_col_(col, cfg.timeAliases, -1),
     user: dash_col_(col, cfg.userAliases, -1),
     qty: dash_col_(col, cfg.qtyAliases, -1),
+    ma: dash_col_(col, cfg.maAliases, -1),
     kenh: dash_col_(col, cfg.kenhAliases, -1)
   };
-  for (let r = 1; r < values.length; r++) {
+  if (c.date < 0 && c.time < 0) throw new Error("Tab " + cfg.sheetName + " thiếu cột Ngày tháng/Thời gian ở dòng " + headerRow);
+  for (let r = headerRow; r < values.length; r++) {
     const row = values[r];
     const dateKey = vtdApp_dateKey_(c.date >= 0 ? row[c.date] : "") || vtdApp_dateKey_(c.time >= 0 ? row[c.time] : "");
     if (!dateKey) continue;
@@ -309,7 +315,7 @@ function dash_collectTh_(add) {
     const kenh = String(c.kenh >= 0 ? row[c.kenh] : "").trim() || "TH Truemilk";
     add("TH", dateKey, dash_hour_(c.time >= 0 ? row[c.time] : ""), kenh, "Hàng hoàn", user,
       Number(c.qty >= 0 ? row[c.qty] : 0) || 0, {
-        at: dateKey + " " + dash_hhmm_(c.time >= 0 ? row[c.time] : ""), src: "TH", ma: "", kenh: kenh, loai: "Hàng hoàn", user: user
+        at: dateKey + " " + dash_hhmm_(c.time >= 0 ? row[c.time] : ""), src: "TH", ma: String(c.ma >= 0 ? row[c.ma] || "" : ""), kenh: kenh, loai: "Hàng hoàn", user: user
       });
   }
 }
