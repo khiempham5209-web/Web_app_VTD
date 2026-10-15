@@ -16,6 +16,9 @@
  *           cond (tình trạng hoàn, Kênh = Chứng từ/Sản phẩm) · product (sản phẩm hoàn, Kênh = tên SP)
  */
 
+// Đổi mỗi lần sửa file này — dashboard hiện số phiên bản để biết máy chủ đã chạy bản mới chưa
+const DASH_BUILD_VERSION = "2026-10-16c";
+
 const DASH_CONFIG = {
   days: 200,               // số ngày lịch sử cho thao tác / lên đơn / bàn giao / tình trạng
   productDays: 100,        // sản phẩm nhiều dòng hơn nên giữ ngắn hơn
@@ -87,6 +90,7 @@ function vtdApp_dashboardV2(params) {
   return vtdApp_ok_({
     updatedAt: String(snapSh.getRange(2, 1).getDisplayValue() || ""),
     today: Utilities.formatDate(new Date(), DASH_CONFIG.timezone, "yyyy-MM-dd"),
+    apiVersion: DASH_BUILD_VERSION,
     viewer: email,
     facts: facts,
     snapshot: snapshot
@@ -173,7 +177,9 @@ function dashBuild() {
       recent: recent.slice(0, DASH_CONFIG.recentLimit),
       errors: errors,
       thConfigured: !!(DASH_CONFIG.th.spreadsheetId && DASH_CONFIG.th.sheetName),
-      metrics: 2           // phiên bản dữ liệu: có cột Chỉ số
+      metrics: 2,          // phiên bản dữ liệu: có cột Chỉ số
+      buildVersion: DASH_BUILD_VERSION,
+      counts: {}
     };
 
     const ss = vtdApp_ss_();
@@ -190,7 +196,7 @@ function dashBuild() {
     if (extra > 0) factSh.getRange(rows.length + 2, 1, extra, 9).clearContent();
 
     // Tóm tắt trong Execution log để tự kiểm tra sau mỗi lần chạy tay
-    const sum = {};
+    const sum = snapshot.counts;
     rows.forEach(r => { const k = r[8] + ":" + r[1]; sum[k] = (sum[k] || 0) + r[6]; });
     console.log("dashBuild: " + rows.length + " dòng tổng hợp; " + JSON.stringify(sum)
       + "; thao tác mới nhất " + JSON.stringify(freshness) + (errors.length ? "; LỖI: " + errors.join(" | ") : ""));
@@ -209,10 +215,19 @@ function dashBuild() {
 
 /* ============================ Nguồn VTD ============================ */
 
+// Đọc cả RAW_IN_M3 (dữ liệu mới, app ghi trực tiếp) và RAW_IN_FULL (lịch sử); bỏ dòng trùng theo ID
 function dash_collectVtd_(add, metric) {
   const ss = vtdApp_ss_();
-  const sh = ss.getSheetByName(DASH_CONFIG.vtd.historySheet) || ss.getSheetByName(DASH_CONFIG.vtd.liveSheet);
-  if (!sh || sh.getLastRow() < 2) return {};
+  const received = {};
+  const seenIds = {};
+  [DASH_CONFIG.vtd.liveSheet, DASH_CONFIG.vtd.historySheet].forEach(name => {
+    const sh = ss.getSheetByName(name);
+    if (sh && sh.getLastRow() > 1) dash_collectVtdSheet_(sh, add, metric, received, seenIds);
+  });
+  return received;
+}
+
+function dash_collectVtdSheet_(sh, add, metric, received, seenIds) {
   const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
   const col = vtdApp_headerMap_(values[0]);
   // Cùng alias + vị trí dự phòng với vtdApp_compactRecord_
@@ -226,12 +241,16 @@ function dash_collectVtd_(add, metric) {
     tinhTrang: dash_col_(col, ["tinh trang chung tu", "tinh trang"], 8),
     od: dash_col_(col, ["od"], -1),
     hd: dash_col_(col, ["so hoa don", "invoice"], -1),
-    user: dash_col_(col, ["user_email", "user email", "email", "nguoi nhap", "user thao tac", "created by"], 11)
+    user: dash_col_(col, ["user_email", "user email", "email", "nguoi nhap", "user thao tac", "created by"], 11),
+    id: dash_col_(col, ["id", "raw_id"], 0)
   };
   // Khóa các đơn Chứng từ đã nhập trên app → dùng để biết đơn nào ở TongHop đã nhận
-  const received = {};
   for (let r = 1; r < values.length; r++) {
     const row = values[r];
+    if (row.join("") === "") continue;
+    const uid = String(row[c.id] || "").trim() || [row[c.ma], row[c.date], row[c.time], row[c.loai]].join("|");
+    if (seenIds[uid]) continue;
+    seenIds[uid] = true;
     const isDoc = vtdApp_norm_(row[c.loai]).indexOf("chung tu") >= 0;
     if (isDoc) {
       [c.ma, c.po, c.od, c.hd].forEach(i => { if (i >= 0) vtdApp_lookupKeys_(row[i]).forEach(k => received[k] = true); });
@@ -248,7 +267,6 @@ function dash_collectVtd_(add, metric) {
     // Tình trạng chứng từ (Bình thường / lỗi...) — chỉ áp dụng cho loại Chứng từ
     if (isDoc && c.tinhTrang >= 0) metric("cond", "VTD", dateKey, "Chứng từ", String(row[c.tinhTrang] || "").trim() || "(trống)", 1);
   }
-  return received;
 }
 
 // List_SKU_hoàn: sản phẩm hoàn VTD (Tên sản phẩm hoàn về, Số lượng, Tình trạng, Ngày)

@@ -696,8 +696,10 @@ tbody tr:hover td { background: var(--surface-2); }
       saveCache(payload);
       state.data = payload;
       setMode("live", "Dữ liệu thật");
+      var msgs = versionWarnings(payload);
       var errs = (payload.snapshot && payload.snapshot.errors) || [];
-      banner(errs.length ? "warn" : "", errs.length ? "<strong>Một số nguồn chưa tổng hợp được:</strong> " + errs.map(esc).join("; ") : "");
+      if (errs.length) msgs.push("<strong>Một số nguồn chưa tổng hợp được:</strong> " + errs.map(esc).join("; "));
+      banner(msgs.length ? "warn" : "", msgs.join("<br>"));
       afterLoad();
     }).catch(function (err) {
       var why = err && err.name === "AbortError" ? "quá 45 giây không phản hồi"
@@ -716,6 +718,22 @@ tbody tr:hover td { background: var(--surface-2); }
       setMode("error", "Mất kết nối");
       useDemo("<strong>Không kết nối được máy chủ</strong> (" + esc(why) + ", đã thử 3 lần). Đang hiển thị dữ liệu mẫu. Tự thử lại sau 1 phút.", true);
     });
+  }
+
+  // Phiên bản Dashboard_VTD.gs mà trang này cần (trùng DASH_BUILD_VERSION trong file .gs)
+  var EXPECTED_VERSION = "2026-10-16c";
+  function versionWarnings(p) {
+    var s = p.snapshot || {}, out = [];
+    var steps = ' Cách cập nhật: dán bản <a href="https://github.com/khiempham5209-web/Web_app_VTD/blob/main/Dashboard_VTD.gs" target="_blank" rel="noopener">Dashboard_VTD.gs mới</a> → Lưu → chạy <b>dashBuild</b> → Deploy → Manage deployments → ✏️ → <b>New version</b>.';
+    if (!p.apiVersion) out.push("<strong>Máy chủ đang chạy bản Dashboard_VTD.gs cũ</strong> (chưa deploy New version), nên chưa có Đơn lên, Bàn giao, Sản phẩm, VTD chưa nhận." + steps);
+    else if (p.apiVersion < EXPECTED_VERSION) out.push("<strong>Máy chủ đang chạy bản " + esc(p.apiVersion) + "</strong>, bản mới nhất là " + EXPECTED_VERSION + "." + steps);
+    else if (!s.buildVersion || s.buildVersion < EXPECTED_VERSION) out.push("<strong>Số tổng hợp còn từ bản cũ.</strong> Chạy tay <b>dashBuild</b> một lần (hoặc chờ tối đa 10 phút) để có đủ số mới.");
+    return out;
+  }
+  function diagText() {
+    var d = state.data, s = d.snapshot || {}, c = s.counts || {};
+    var parts = Object.keys(c).sort().map(function (k) { return k + " " + n(c[k]); });
+    return "Máy chủ: API " + (d.apiVersion || "cũ") + " · tổng hợp " + (s.buildVersion || "cũ") + (parts.length ? " · " + parts.join(", ") : "");
   }
 
   // Apps Script thỉnh thoảng trả trang lỗi HTML (máy chủ bận, vừa deploy) — thử lại 3 lần, giãn cách tăng dần
@@ -879,7 +897,8 @@ tbody tr:hover td { background: var(--surface-2); }
     renderRecent();
     $("footNote").textContent = "Số thao tác = số lần nhập trên app (1 đơn/1 chứng từ/1 dòng sản phẩm). "
       + "Chứng từ chưa nhận là số hiện tại, không theo bộ lọc thời gian. "
-      + (state.mode === "live" ? "Số liệu tổng hợp lại mỗi 10 phút từ RAW_IN_FULL, Full das chứng từ VTD, Chứng từ_FF/_full, Hoàn sản phẩm và tab Hàng hoàn TH." : "Đang xem dữ liệu mẫu, không phải số thật.");
+      + (state.mode === "demo" ? "Đang xem dữ liệu mẫu, không phải số thật."
+        : "Số liệu tổng hợp lại mỗi 10 phút từ RAW_IN_M3/FULL, List_SKU_hoàn, Full das chứng từ VTD, Chứng từ_FF/_full, Hoàn sản phẩm, Hàng hoàn và DS đơn all của TH. " + diagText());
   }
 
   // Bản tổng hợp cũ chỉ có pnBacklog — vẫn đọc được
