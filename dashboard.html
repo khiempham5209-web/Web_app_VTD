@@ -441,17 +441,8 @@ tbody tr:hover td { background: var(--surface-2); }
       </section>
     </div>
 
-    <div class="grid" id="pnExtra" hidden>
-      <section class="card c5">
-        <div class="card-h"><h2>Phân loại hàng hoàn PN</h2><span class="sub" id="pnClassSub"></span></div>
-        <div class="tbl-wrap" id="pnClass"></div>
-      </section>
-      <section class="card c7">
-        <div class="card-h"><h2>Ghi chú hàng hoàn PN</h2><span class="sub" id="pnNoteSub"></span></div>
-        <div class="legend" id="pnNoteLegend"></div>
-        <div class="hbars" id="pnNote"></div>
-      </section>
-    </div>
+    <!-- Phân loại & Ghi chú hàng hoàn: mỗi shop có dữ liệu 1 cặp bảng -->
+    <div class="grid" id="clsNoteGrid"></div>
 
     <p class="section-label">Vận hành</p>
     <div class="grid" id="opsGrid">
@@ -639,11 +630,11 @@ tbody tr:hover td { background: var(--surface-2); }
           var list = products[src], name = list[Math.min(list.length - 1, Math.floor(Math.pow(rnd(), 1.6) * list.length))];
           if (dd <= 100) addM("product", dt, src, name, st, qty);
           addM("cond", dt, src, "Sản phẩm", st, qty);
-          if (src === "PN") {
-            var cl = rnd() < 0.7 ? "Hoàn trả" : "Hàng thu hồi";
-            addM("pnclass", dt, "PN", cl, st, qty);
+          if (src !== "TH") {
+            var cl = src === "PN" ? (rnd() < 0.7 ? "Hoàn trả" : "Hàng thu hồi") : (rnd() < 0.8 ? "Sản phẩm" : "Thu hồi");
+            addM("cls", dt, src, cl, st, qty);
             var nts = st === "Bình thường" ? ["Bình thường"] : [st].concat(rnd() < 0.25 ? ["Khác"] : []);
-            nts.forEach(function (nt) { addM("pnnote", dt, "PN", nt, cl, qty); });
+            nts.forEach(function (nt) { addM("note", dt, src, nt, cl, qty); });
           }
         }
       });
@@ -742,7 +733,7 @@ tbody tr:hover td { background: var(--surface-2); }
   }
 
   // Phiên bản Dashboard_VTD.gs mà trang này cần (trùng DASH_BUILD_VERSION trong file .gs)
-  var EXPECTED_VERSION = "2026-10-16e";
+  var EXPECTED_VERSION = "2026-10-16f";
   function versionWarnings(p) {
     var s = p.snapshot || {}, out = [];
     var steps = ' Cách cập nhật: dán bản <a href="https://github.com/khiempham5209-web/Web_app_VTD/blob/main/Dashboard_VTD.gs" target="_blank" rel="noopener">Dashboard_VTD.gs mới</a> → Lưu → chạy <b>dashBuild</b> → Deploy → Manage deployments → ✏️ → <b>New version</b>.';
@@ -819,6 +810,7 @@ tbody tr:hover td { background: var(--surface-2); }
     var all = (d.facts || []).concat(d.mfacts || []).map(function (f) {
       f[0] = normDateKey(f[0]); f[5] = Number(f[5]); if (isNaN(f[5])) f[5] = -1; f[8] = f[8] || "op"; return f;
     }).filter(function (f) { return f[0]; });
+    all.forEach(function (f) { if (f[8] === "pnclass") f[8] = "cls"; else if (f[8] === "pnnote") f[8] = "note"; });
     d.facts = all.filter(function (f) { return f[8] === "op"; });
     d.mfacts = all.filter(function (f) { return f[8] !== "op"; });
     if (d.today) d.today = normDateKey(d.today) || vnToday();
@@ -908,7 +900,7 @@ tbody tr:hover td { background: var(--surface-2); }
     renderOrders(R);
     renderCond(R);
     renderProducts(R);
-    renderPnExtra(R);
+    renderClsNote(R);
     renderTrend(R, cur, prev);
     renderKenh(cur);
     renderLoai(cur);
@@ -1497,56 +1489,78 @@ tbody tr:hover td { background: var(--surface-2); }
       }).join("") + "</tbody></table>";
   }
 
-  /* ---- PN: Phân loại & Ghi chú (tab Hoàn sản phẩm) ---- */
-  function pnAgg(metricKey, a, b) {
+  /* ---- Phân loại & Ghi chú hàng hoàn (VTD: List_SKU_hoàn · PN: Hoàn sản phẩm · TH: Hàng hoàn) ---- */
+  function clsAgg(src, metricKey, a, b) {
     var o = {};
     state.data.mfacts.forEach(function (f) {
-      if (f[8] !== metricKey || f[1] !== "PN" || f[0] < a || f[0] > b) return;
+      if (f[8] !== metricKey || f[1] !== src || f[0] < a || f[0] > b) return;
       var r = o[f[2]] || (o[f[2]] = {qty: 0, lines: 0, by: {}});
       r.qty += f[7]; r.lines += f[6]; r.by[f[3]] = (r.by[f[3]] || 0) + f[7];
     });
     return o;
   }
-  function renderPnExtra(R) {
-    var show = state.shop === "PN";
-    $("pnExtra").hidden = !show;
-    if (!show) return;
-    var cls = pnAgg("pnclass", R.from, R.to), clsP = pnAgg("pnclass", R.pFrom, R.pTo);
+  function renderClsNote(R) {
+    // Shop đang xem và có dữ liệu phân loại/ghi chú (bất kỳ ngày nào) thì có 1 cặp bảng
+    var has = {};
+    state.data.mfacts.forEach(function (f) { if (f[8] === "cls" || f[8] === "note") has[f[1]] = 1; });
+    var shops = SOURCES.filter(function (s) { return state.srcOn[s.key] && has[s.key]; });
+    $("clsNoteGrid").innerHTML = shops.map(function (s) {
+      return '<section class="card c5"><div class="card-h"><h2><span class="src-tag" style="font-size:14px;color:var(--fg)"><i style="background:' + s.color + '"></i>Phân loại hàng hoàn · ' + esc(s.label) + '</span></h2><span class="sub" id="clsSub_' + s.key + '"></span></div><div class="tbl-wrap" id="cls_' + s.key + '"></div></section>'
+        + '<section class="card c7"><div class="card-h"><h2><span class="src-tag" style="font-size:14px;color:var(--fg)"><i style="background:' + s.color + '"></i>Ghi chú hàng hoàn · ' + esc(s.label) + '</span></h2><span class="sub" id="noteSub_' + s.key + '"></span></div><div class="legend" id="noteLegend_' + s.key + '"></div><div class="hbars" id="note_' + s.key + '"></div></section>';
+    }).join("");
+    shops.forEach(function (s) { renderClsNoteShop(R, s.key); });
+  }
+  function renderClsNoteShop(R, src) {
+    var cls = clsAgg(src, "cls", R.from, R.to), clsP = clsAgg(src, "cls", R.pFrom, R.pTo);
+    var notes = clsAgg(src, "note", R.from, R.to), notesP = clsAgg(src, "note", R.pFrom, R.pTo);
     var keys = Object.keys(cls).sort(function (a, b) { return cls[b].qty - cls[a].qty; });
-    var total = keys.reduce(function (a, k) { return a + cls[k].qty; }, 0);
-    $("pnClassSub").textContent = n(total) + " đơn vị sản phẩm · vs " + R.pLabel;
-    // Màu cố định theo phân loại để 2 bảng khớp nhau
-    var CLS_COLORS = {"Hoàn trả": LOAI_COLORS[0], "Hàng thu hồi": LOAI_COLORS[1]};
-    var colorOf = function (k) { return CLS_COLORS[k] || "var(--fg-3)"; };
+    // Tổng số lượng sản phẩm hoàn của shop (từ chỉ số tình trạng Sản phẩm); thiếu thì lấy tổng phân loại
+    var total = 0;
+    state.data.mfacts.forEach(function (f) { if (f[8] === "cond" && f[1] === src && f[2] === "Sản phẩm" && f[0] >= R.from && f[0] <= R.to) total += f[7]; });
+    if (!total) total = keys.reduce(function (a, k) { return a + cls[k].qty; }, 0);
+    // Màu theo thứ tự phân loại (lớn nhất trước); 2 bảng của cùng shop dùng chung
+    var order = keys.slice();
+    Object.keys(notes).forEach(function (k) { Object.keys(notes[k].by).forEach(function (c) { if (order.indexOf(c) < 0) order.push(c); }); });
+    var colorOf = function (k) { var i = order.indexOf(k); return i >= 0 && i < 4 ? LOAI_COLORS[i] : "var(--fg-3)"; };
+    var hasClsCol = state.data.mfacts.some(function (f) { return f[8] === "cls" && f[1] === src; });
+
+    $("clsSub_" + src).textContent = n(total) + " đơn vị sản phẩm · vs " + R.pLabel;
+    var clsEl = $("cls_" + src);
     if (!keys.length) {
-      $("pnClass").innerHTML = '<div class="empty">Chưa có dữ liệu phân loại trong khoảng này. Cần bản Dashboard_VTD.gs ' + EXPECTED_VERSION + " và chạy dashBuild.</div>";
+      clsEl.innerHTML = '<div class="empty">' + (hasClsCol ? "Không có dữ liệu phân loại trong khoảng này." : "Sheet nguồn của " + esc(SRC[src].label) + " không có cột Phân loại.") + "</div>";
     } else {
-      $("pnClass").innerHTML = '<table><thead><tr><th>Phân loại</th><th class="n">Số lượng</th><th>Tỷ trọng</th><th class="n">Số dòng</th><th class="n">Tỷ lệ lỗi</th><th class="n">So sánh</th></tr></thead><tbody>'
+      clsEl.innerHTML = '<table><thead><tr><th>Phân loại</th><th class="n">Số lượng</th><th>Tỷ trọng</th><th class="n">Số dòng</th><th class="n">Tỷ lệ lỗi</th><th class="n">So sánh</th></tr></thead><tbody>'
         + keys.map(function (k) {
           var r = cls[k], p = clsP[k] ? clsP[k].qty : 0, share = total ? r.qty / total * 100 : 0;
           var known = 0, issue = 0;
-          Object.keys(r.by).forEach(function (s) { if (isBlank(s)) return; known += r.by[s]; if (!isNormal(s)) issue += r.by[s]; });
+          Object.keys(r.by).forEach(function (st) { if (isBlank(st)) return; known += r.by[st]; if (!isNormal(st)) issue += r.by[st]; });
           var d = p ? Math.round((r.qty - p) / p * 100) : null;
           return '<tr><td><span class="src-tag" style="color:var(--fg)"><i style="background:' + colorOf(k) + '"></i>' + esc(k) + '</span></td><td class="n"><b>' + n(r.qty) + "</b></td>"
-            + '<td><div class="share" style="min-width:80px"><span style="width:' + share + "%;background:" + colorOf(k) + '"></span></div><small style="color:var(--fg-3)">' + share.toFixed(0) + "%</small></td>"
+            + '<td><div class="share" style="min-width:80px"><span style="width:' + Math.min(100, share) + "%;background:" + colorOf(k) + '"></span></div><small style="color:var(--fg-3)">' + share.toFixed(0) + "%</small></td>"
             + '<td class="n">' + n(r.lines) + '</td><td class="n">' + (known ? (issue / known * 100).toFixed(0) + "%" : "—") + "</td>"
             + '<td class="n"><span class="delta">' + (d == null ? "—" : (d >= 0 ? "▲ +" : "▼ ") + d + "%") + '</span> <small style="color:var(--fg-3)">(' + n(p) + ")</small></td></tr>";
         }).join("") + "</tbody></table>";
     }
-    // Ghi chú: 1 dòng sản phẩm có thể có nhiều ghi chú → tỷ lệ tính trên tổng số lượng, cộng lại có thể quá 100%
-    var notes = pnAgg("pnnote", R.from, R.to), notesP = pnAgg("pnnote", R.pFrom, R.pTo);
+
+    // Ghi chú: 1 dòng sản phẩm có thể có nhiều ghi chú → % tính trên tổng số lượng, cộng lại có thể quá 100%
     var nk = Object.keys(notes).sort(function (a, b) { return notes[b].qty - notes[a].qty; });
-    $("pnNoteSub").textContent = "số lượng sản phẩm có từng ghi chú · % trên tổng " + n(total) + " (1 sản phẩm có thể nhiều ghi chú)";
-    var clsKeys = {};
-    nk.forEach(function (k) { Object.keys(notes[k].by).forEach(function (c) { clsKeys[c] = 1; }); });
-    $("pnNoteLegend").innerHTML = Object.keys(clsKeys).map(function (c) { return '<span><i style="background:' + colorOf(c) + '"></i>' + esc(c) + "</span>"; }).join("");
-    var rows = nk.map(function (k) {
+    var hasNoteCol = state.data.mfacts.some(function (f) { return f[8] === "note" && f[1] === src; });
+    $("noteSub_" + src).textContent = "số lượng sản phẩm có từng ghi chú · % trên tổng " + n(total) + " (1 sản phẩm có thể nhiều ghi chú)";
+    var legendKeys = order.filter(function (c) { return nk.some(function (k) { return notes[k].by[c]; }); });
+    $("noteLegend_" + src).innerHTML = legendKeys.length > 1 || (legendKeys[0] && legendKeys[0].charAt(0) !== "(") ? legendKeys.map(function (c) { return '<span><i style="background:' + colorOf(c) + '"></i>' + esc(c) + "</span>"; }).join("") : "";
+    var rows = nk.slice(0, 10).map(function (k) {
       var r = notes[k], p = notesP[k] ? notesP[k].qty : 0, d = p ? Math.round((r.qty - p) / p * 100) : null;
       return {label: k + (d == null ? "" : "  (" + (d >= 0 ? "+" : "") + d + "%)"), value: r.qty,
-        segs: Object.keys(r.by).sort().map(function (c) { return {v: r.by[c], color: colorOf(c), label: c}; })};
+        segs: Object.keys(r.by).sort(function (a, b) { return order.indexOf(a) - order.indexOf(b); }).map(function (c) { return {v: r.by[c], color: colorOf(c), label: c}; })};
     });
-    $("pnNote").innerHTML = hbarsHtml(rows, rows.length ? rows[0].value : 1, {pctOf: total || 1});
-    bindHbarTips($("pnNote"));
+    if (nk.length > 10) {   // ghi chú tự do (VTD) có thể rất nhiều: gộp phần đuôi
+      var restQ = nk.slice(10).reduce(function (a, k) { return a + notes[k].qty; }, 0);
+      rows.push({label: "Ghi chú khác (" + (nk.length - 10) + ")", value: restQ, segs: [{v: restQ, color: "var(--fg-3)", label: "Gộp"}]});
+    }
+    var noteEl = $("note_" + src);
+    noteEl.innerHTML = rows.length ? hbarsHtml(rows, Math.max.apply(null, rows.map(function (r) { return r.value; }).concat([1])), {pctOf: total || 1})
+      : '<div class="empty">' + (hasNoteCol ? "Không có ghi chú trong khoảng này." : "Sheet nguồn của " + esc(SRC[src].label) + " không có cột Ghi chú.") + "</div>";
+    bindHbarTips(noteEl);
   }
 
   /* ---- Chứng từ chưa nhận (mỗi shop 1 bảng riêng) ---- */

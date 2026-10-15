@@ -14,13 +14,13 @@
  * _DASH_FACT: mỗi dòng = [Ngày, Nguồn, Kênh, Loại, User, Giờ, Số dòng, Số lượng, Chỉ số]
  *   Chỉ số: op (thao tác nhập trên app) · order (lên đơn) · handover (bàn giao CT về shop)
  *           cond (tình trạng hoàn, Kênh = Chứng từ/Sản phẩm) · product (sản phẩm hoàn, Kênh = tên SP)
- *           pnclass (PN: Kênh = Phân loại, Loại = Tình trạng) · pnnote (PN: Kênh = Ghi chú, Loại = Phân loại)
+ *           cls (Kênh = Phân loại, Loại = Tình trạng) · note (Kênh = Ghi chú, Loại = Phân loại) — VTD/PN/TH
  *
  * Tốc độ: mỗi sheet nguồn chỉ đọc đúng các cột cần (dash_read_), không đọc cả bảng.
  */
 
 // Đổi mỗi lần sửa file này — dashboard hiện số phiên bản để biết máy chủ đã chạy bản mới chưa
-const DASH_BUILD_VERSION = "2026-10-16e";
+const DASH_BUILD_VERSION = "2026-10-16f";
 
 const DASH_CONFIG = {
   days: 200,               // số ngày lịch sử cho thao tác / lên đơn / bàn giao / tình trạng
@@ -334,7 +334,9 @@ function dash_collectVtdProducts_(metric) {
     name: [["ten san pham hoan ve", "ten san pham hoan", "ten san pham", "sku"]],
     qty: [["so luong", "qty"]],
     status: [["tinh trang"]],
-    date: [["ngay", "date"]]
+    date: [["ngay", "date"]],
+    cls: [["phan loai", "type", "loai"]],
+    note: [["ghi chu", "note"]]
   });
   const c = d.c;
   if (c.name < 0 || c.date < 0) throw new Error("List_SKU_hoàn thiếu cột Tên sản phẩm hoặc Ngày");
@@ -346,6 +348,7 @@ function dash_collectVtdProducts_(metric) {
     const qty = Number(c.qty >= 0 ? row[c.qty] : 0) || 0;
     metric("product", "VTD", dateKey, name, status, qty);
     metric("cond", "VTD", dateKey, "Sản phẩm", status, qty);
+    dash_clsNote_(metric, "VTD", dateKey, c.cls >= 0 ? row[c.cls] : null, c.note >= 0 ? row[c.note] : null, status, qty);
   });
 }
 
@@ -529,9 +532,7 @@ function dash_collectPn_(add, now, metric) {
       if (name) metric("product", "PN", dateKey, name, status, qty);
       metric("cond", "PN", dateKey, "Sản phẩm", status, qty);
       // Phân loại (Hoàn trả / Hàng thu hồi) và Ghi chú (nhiều lựa chọn, nối bằng "; ")
-      const cls = String(get(row, c.cls) || "").trim() || "(chưa phân loại)";
-      metric("pnclass", "PN", dateKey, cls, status, qty);
-      dash_noteItems_(get(row, c.note)).forEach(note => metric("pnnote", "PN", dateKey, note, cls, qty));
+      dash_clsNote_(metric, "PN", dateKey, c.cls >= 0 ? get(row, c.cls) : null, c.note >= 0 ? get(row, c.note) : null, status, qty);
     });
   }
   return backlog;
@@ -546,7 +547,8 @@ function dash_collectTh_(add, metric) {
   if (!sh) throw new Error("Không thấy tab " + cfg.sheetName);
   const d = dash_read_(sh, {
     date: [cfg.dateAliases], time: [cfg.timeAliases], user: [cfg.userAliases], qty: [cfg.qtyAliases],
-    ma: [cfg.maAliases], kenh: [cfg.kenhAliases], name: [cfg.nameAliases], status: [cfg.statusAliases]
+    ma: [cfg.maAliases], kenh: [cfg.kenhAliases], name: [cfg.nameAliases], status: [cfg.statusAliases],
+    cls: [["phan loai", "loai hoan"]], note: [["ghi chu", "note"]]
   }, cfg.headerRow), c = d.c;
   if (c.date < 0 && c.time < 0) throw new Error("Tab " + cfg.sheetName + " thiếu cột Ngày tháng/Thời gian ở dòng " + cfg.headerRow);
   const get = (row, i) => i >= 0 ? row[i] : "";
@@ -563,7 +565,17 @@ function dash_collectTh_(add, metric) {
     const status = c.status >= 0 ? (String(row[c.status] || "").trim() || "(trống)") : "";
     if (name) metric("product", "TH", dateKey, name, status || "(không ghi tình trạng)", qty);
     if (status) metric("cond", "TH", dateKey, "Sản phẩm", status, qty);
+    dash_clsNote_(metric, "TH", dateKey, c.cls >= 0 ? row[c.cls] : null, c.note >= 0 ? row[c.note] : null, status || "(trống)", qty);
   });
+}
+
+// Phân loại + Ghi chú của 1 dòng sản phẩm hoàn. null = sheet không có cột đó → bỏ qua chỉ số đó.
+//   cls:  Kênh = Phân loại, Loại = Tình trạng    · note: Kênh = Ghi chú, Loại = Phân loại
+function dash_clsNote_(metric, src, dateKey, clsValue, noteValue, status, qty) {
+  if (clsValue === null && noteValue === null) return;
+  const cls = clsValue === null ? "(không có cột phân loại)" : (String(clsValue || "").trim() || "(chưa phân loại)");
+  if (clsValue !== null) metric("cls", src, dateKey, cls, status, qty);
+  if (noteValue !== null) dash_noteItems_(noteValue).forEach(note => metric("note", src, dateKey, note, cls, qty));
 }
 
 // DS đơn all: mỗi dòng 1 SKU của đơn → gộp theo mã đơn, ngày = Thời gian tạo
