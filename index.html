@@ -1641,7 +1641,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         {id:"store", name:"Thông tin ST", type:"Chart/Table", showIf:"screens.includes('store')", position:5, mobile:true},
         {id:"settings", name:"Cài đặt", type:"User settings", showIf:"role != ''", position:6, mobile:true},
         {id:"admin", name:"Admin / Cấu hình", type:"Admin", showIf:"role == 'Admin'", position:6, mobile:false},
-        {id:"ops", name:"Sync / Queue", type:"Ops", showIf:"can('viewSync')", position:7, mobile:false}
+        {id:"ops", name:"Sync / Queue", type:"Ops", showIf:"can('viewSync')", position:7, mobile:false}, {id:"dashview", name:"Dashboard", type:"Trang riêng", showIf:"screens.includes('dashview')", position:8, mobile:false}
       ],
       fields: [
         {name:"Mã đơn GHTK", key:"maDon", screen:"input", type:"Text/Scan", required:true, showIf:"always", editable:true},
@@ -2146,6 +2146,13 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         <label class="mq-check"><input type="checkbox" ${c.notifyAccents !== false ? "checked" : ""} onchange="setMarqueeValue('notifyAccents', this.checked)">Thông báo tiếng Việt có dấu (bỏ tích nếu máy nào hiện lỗi font)</label>
         <div class="config-actions" style="margin-top:14px"><button type="button" onclick="Object.assign(loginAppearanceConfig(), MARQUEE_DEFAULTS); saveAppConfig(false); applyMarquee(); settings()">Về mặc định</button><button type="button" class="primary" onclick="saveThemeConfigToSystem()">Áp dụng cho mọi máy</button></div>
       </section>`;
+    }
+    // Mở dashboard: trang riêng cùng tên miền nên dùng lại phiên đăng nhập của app.
+    function canOpenDashboard(){ return isSystemOwner() || canScreen("dashview"); }
+    function openDashboard(){ location.href = "dashboard.html"; }
+    function dashboardSettingsPanel(){
+      if (!canOpenDashboard()) return "";
+      return `<section class="section" style="padding:0"><button type="button" class="hp-settings-row" onclick="openDashboard()"><span class="hp-settings-icon">📊</span><span class="hp-settings-text"><b>Dashboard tổng hợp</b><small>Số liệu VTD, Phạm Nguyên, TH theo ngày, tuần, tháng</small></span><span class="hp-settings-arrow">›</span></button></section>`;
     }
     // Cuối màn Cài đặt: bấm vào dòng là mở hướng dẫn.
     function helpSettingsPanel(){
@@ -3558,6 +3565,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         </div>
         <div class="config-actions" style="margin-top:12px"><button class="primary" onclick="addConfigUser()">${editUser ? "Cập nhật user/quyền" : "Lưu user/quyền"}</button>${editUser ? `<button onclick="cancelEditUser()">Hủy sửa</button>` : ""}</div>
       </section>
+      ${dashboardAccessPanel()}
       <section class="section"><h2>User được cấp quyền</h2><div class="config-list">
         ${appConfig.users.map((u,i) => `<div class="config-card user-card">
           <div class="user-head">
@@ -4053,7 +4061,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
             ${canViewApiArea() ? settingsFold("API hệ thống", apiPanel, false) : ""}
           </div>
         </details>
-      </section>${helpSettingsPanel()}`;
+      </section>${dashboardSettingsPanel()}${helpSettingsPanel()}`;
       if (canViewDeviceArea() && !live.lookupCacheStatusLoaded) setTimeout(loadLookupCacheStatus, 0);
       if (canViewOpsArea() && !live.queueErrorsLoaded) setTimeout(loadQueueErrors, 0);
       if (canAdminUsers() && !live.forgotPassRequestsLoaded) setTimeout(loadForgotPassRequests, 0);
@@ -4756,6 +4764,29 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       toast(res.message || "Đã xóa tài khoản.", "ok");
       await loadAdminPermissions(false);
     }
+    function dashboardAccessPanel(){
+      const users = (appConfig.users || []).map((u, i) => ({u, i})).filter(x => x.u && x.u.email);
+      const isAdminUser = u => String(u.role || "").toLowerCase() === "admin";
+      const granted = users.filter(x => isAdminUser(x.u) || (x.u.screens || []).includes("dashview")).length;
+      return `<section class="section"><div class="config-title"><div><h2>Quyền xem Dashboard</h2><div class="muted">${granted}/${users.length} người được xem. Admin luôn xem được. Bật cho ai thì người đó thấy dòng "Dashboard tổng hợp" ở màn Cài đặt.</div></div><div class="config-actions"><button onclick="openDashboard()">Mở Dashboard</button></div></div>
+        <div class="config-list">${users.map(({u, i}) => {
+          const admin = isAdminUser(u);
+          const on = admin || (u.screens || []).includes("dashview");
+          return `<div class="config-card" style="display:flex;align-items:center;gap:10px;padding:10px 12px"><div style="flex:1;min-width:0"><div class="user-email">${html(u.email)}</div><div class="muted" style="font-size:12px">${html(u.role || "")}${u.active === false ? " · đang khóa" : ""}</div></div>${admin ? `<span class="tag on">Admin · luôn xem</span>` : `<button type="button" class="${on ? "primary" : ""}" onclick="toggleDashboardAccess(${i})">${on ? "Đang cho xem · Tắt" : "Không xem · Bật"}</button>`}</div>`;
+        }).join("") || `<div class="muted">Chưa có user. Bấm "Tải quyền server" ở trên.</div>`}</div>
+      </section>`;
+    }
+    async function toggleDashboardAccess(index){
+      if (!canAdminUsers()) return toast("Bạn không có quyền quản lý user.", "err");
+      const user = appConfig.users[index];
+      if (!user) return;
+      const previous = Array.isArray(user.screens) ? user.screens.slice() : [];
+      user.screens = previous.includes("dashview") ? previous.filter(x => x !== "dashview") : previous.concat("dashview");
+      const ok = await saveConfigUserToServer(user, false);
+      if (!ok) user.screens = previous;
+      saveAppConfig(false);
+      await loadAdminPermissions(false);
+    }
     async function toggleUser(index){
       if (!canAdminUsers()) return toast("Bạn không có quyền quản lý user.", "err");
       const user = appConfig.users[index];
@@ -4797,7 +4828,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       config.views = Array.isArray(config.views) ? config.views : cloneConfig(base.views || []);
       config.actions = Array.isArray(config.actions) ? config.actions : cloneConfig(base.actions || []);
       config.users = Array.isArray(config.users) ? config.users : cloneConfig(base.users || []);
-      ["settings", "returnth", "docops"].forEach(id => {
+      ["settings", "returnth", "docops", "dashview"].forEach(id => {
         const exists = config.views.some(v => v && v.id === id);
         const baseView = (base.views || []).find(v => v && v.id === id);
         if (!exists && baseView) config.views.push(cloneConfig(baseView));

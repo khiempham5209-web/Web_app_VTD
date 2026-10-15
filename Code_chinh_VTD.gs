@@ -5175,7 +5175,8 @@ function vtdApp_apiDispatch_(action, params) {
       dynamicReadRows: vtdApp_dynamicReadRows,
       dynamicSaveRow: vtdApp_dynamicSaveRow,
       activityPing: vtdApp_activityPing,
-      loginReport: vtdApp_loginReport
+      loginReport: vtdApp_loginReport,
+      dashboardV2: vtdApp_dashboardV2
     };
     if (!action || !map[action]) return vtdApp_fail_("Action khong hop le: " + action);
     return map[action](params);
