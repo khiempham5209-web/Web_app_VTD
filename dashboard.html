@@ -67,6 +67,8 @@
 }
 
 * { box-sizing: border-box; }
+/* Thuộc tính hidden luôn thắng các class đặt display (grid, flex...) */
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
   background: var(--bg); color: var(--fg);
