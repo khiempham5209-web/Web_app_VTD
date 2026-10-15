@@ -14,21 +14,24 @@
  * _DASH_FACT: mỗi dòng = [Ngày, Nguồn, Kênh, Loại, User, Giờ, Số dòng, Số lượng, Chỉ số]
  *   Chỉ số: op (thao tác nhập trên app) · order (lên đơn) · handover (bàn giao CT về shop)
  *           cond (tình trạng hoàn, Kênh = Chứng từ/Sản phẩm) · product (sản phẩm hoàn, Kênh = tên SP)
+ *
+ * Tốc độ: mỗi sheet nguồn chỉ đọc đúng các cột cần (dash_read_), không đọc cả bảng.
  */
 
 // Đổi mỗi lần sửa file này — dashboard hiện số phiên bản để biết máy chủ đã chạy bản mới chưa
-const DASH_BUILD_VERSION = "2026-10-16c";
+const DASH_BUILD_VERSION = "2026-10-16d";
 
 const DASH_CONFIG = {
   days: 200,               // số ngày lịch sử cho thao tác / lên đơn / bàn giao / tình trạng
   productDays: 100,        // sản phẩm nhiều dòng hơn nên giữ ngắn hơn
+  timeBudgetMs: 280000,    // quá thời gian này thì bỏ qua các bước còn lại, vẫn ghi số đã có (giới hạn Google: 6 phút)
   factSheet: "_DASH_FACT",
   snapshotSheet: "_DASH_SNAPSHOT",
   timezone: "Asia/Ho_Chi_Minh",
   recentLimit: 30,
   handoverAliases: ["ngay ban giao ct", "ngay ban giao"],
   vtd: {
-    // RAW_IN_FULL chứa toàn bộ lịch sử; RAW_IN_M3 dùng cho trạng thái đồng bộ
+    // RAW_IN_M3 (app ghi trực tiếp) + RAW_IN_FULL (lịch sử), bỏ trùng theo ID
     historySheet: "RAW_IN_FULL",
     liveSheet: "RAW_IN_M3",
     // Danh sách đơn lên + chứng từ chưa nhận: "Full das chung tu VTD" / TongHop (VTD_APP.fullCtSpreadsheetId)
@@ -120,7 +123,11 @@ function dashInstallTrigger() {
 
 function dashBuild() {
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(5000)) return;
+  if (!lock.tryLock(20000)) {
+    console.log("dashBuild: đang có một lượt dashBuild khác chạy (thường là trigger 10 phút). Chờ lượt đó xong rồi chạy lại.");
+    return;
+  }
+  const started = Date.now();
   try {
     const tz = DASH_CONFIG.timezone;
     const now = new Date();
@@ -132,41 +139,45 @@ function dashBuild() {
     const recent = [];
     const freshness = {};
     const errors = [];
+    const timings = {};
 
     const put = (metric, src, dateKey, kenh, loai, user, hour, qty) => {
       if (!dateKey || dateKey < (metric === "product" ? productFromKey : fromKey) || dateKey > todayKey) return;
-      const k = [metric, dateKey, src, kenh, loai, user, hour].join("|");
+      const k = metric + "|" + dateKey + "|" + src + "|" + kenh + "|" + loai + "|" + user + "|" + hour;
       const f = facts[k] || (facts[k] = [dateKey, src, kenh, loai, user, hour, 0, 0, metric]);
       f[6] += 1;
       f[7] += qty;
     };
-    // Thao tác nhập trên app (giữ chữ ký cũ)
+    // Thao tác nhập trên app
     const add = (src, dateKey, hour, kenh, loai, user, qty, recentRow) => {
       if (!dateKey) return;
       if (!freshness[src] || dateKey > freshness[src]) freshness[src] = dateKey;
       if (dateKey < fromKey) return;
       put("op", src, dateKey, kenh, loai, user, hour, qty);
-      if (recentRow) recent.push(recentRow);
+      if (recentRow && dateKey >= keyBack(3)) recent.push(recentRow);
     };
     // Chỉ số khác: lên đơn, bàn giao, tình trạng, sản phẩm
     const metric = (m, src, dateKey, kenh, loai, qty) => put(m, src, dateKey, String(kenh || "Khác").trim() || "Khác", String(loai || "").trim(), "", -1, Number(qty) || 0);
 
-    let sync = {};
-    let vtdReceived = null, vtdBacklog = null;
-    try { vtdReceived = dash_collectVtd_(add, metric); } catch (err) { errors.push("VTD: " + err); }
-    try { dash_collectVtdProducts_(metric); } catch (err) { errors.push("Sản phẩm VTD: " + err); }
-    try { sync = dash_vtdSync_(); } catch (err) { errors.push("Đồng bộ VTD: " + err); }
-    try { if (vtdReceived) vtdBacklog = dash_collectVtdBacklog_(now, vtdReceived, metric); } catch (err) { errors.push("VTD lên đơn/chưa nhận CT: " + err); }
-    let pnBacklog = null;
-    try { pnBacklog = dash_collectPn_(add, now, metric); } catch (err) { errors.push("Phạm Nguyên: " + err); }
-    try { dash_collectTh_(add, metric); } catch (err) { errors.push("TH: " + err); }
-    try { dash_collectThOrders_(metric); } catch (err) { errors.push("TH lên đơn: " + err); }
-    try {
-      if (typeof vtdApp_queueErrorSheet_ === "function") {
-        const q = vtdApp_queueErrorSheet_();
-        sync.queueErrors = Math.max(0, q.getLastRow() - 1);
-      }
-    } catch (err) {}
+    // Mỗi bước có đo thời gian; hết ngân sách thời gian thì bỏ qua bước còn lại
+    const step = (name, fn) => {
+      if (Date.now() - started > DASH_CONFIG.timeBudgetMs) { errors.push(name + ": bỏ qua vì hết thời gian chạy"); return null; }
+      const t = Date.now();
+      try { return fn(); }
+      catch (err) { errors.push(name + ": " + (err && err.message || err)); return null; }
+      finally { timings[name] = Math.round((Date.now() - t) / 100) / 10; }
+    };
+
+    const vtdReceived = step("VTD thao tác", () => dash_collectVtd_(add, metric));
+    const sync = step("VTD đồng bộ", () => dash_vtdSync_()) || {};
+    const vtdBacklog = vtdReceived ? step("VTD lên đơn/chưa nhận", () => dash_collectVtdBacklog_(now, vtdReceived, metric)) : null;
+    step("VTD sản phẩm", () => dash_collectVtdProducts_(metric));
+    const pnBacklog = step("Phạm Nguyên", () => dash_collectPn_(add, now, metric));
+    step("TH hàng hoàn", () => dash_collectTh_(add, metric));
+    step("TH lên đơn", () => dash_collectThOrders_(metric));
+    step("Lỗi hàng đợi", () => {
+      if (typeof vtdApp_queueErrorSheet_ === "function") sync.queueErrors = Math.max(0, vtdApp_queueErrorSheet_().getLastRow() - 1);
+    });
 
     recent.sort((a, b) => String(b.at).localeCompare(String(a.at)));
     const snapshot = {
@@ -179,9 +190,11 @@ function dashBuild() {
       thConfigured: !!(DASH_CONFIG.th.spreadsheetId && DASH_CONFIG.th.sheetName),
       metrics: 2,          // phiên bản dữ liệu: có cột Chỉ số
       buildVersion: DASH_BUILD_VERSION,
+      timings: timings,
       counts: {}
     };
 
+    const tWrite = Date.now();
     const ss = vtdApp_ss_();
     const factSh = dash_sheet_(ss, DASH_CONFIG.factSheet, ["Ngày", "Nguồn", "Kênh", "Loại", "User", "Giờ", "Số dòng", "Số lượng", "Chỉ số"]);
     const rows = Object.keys(facts).map(k => facts[k]).sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
@@ -194,23 +207,70 @@ function dashBuild() {
     }
     const extra = factSh.getLastRow() - 1 - rows.length;
     if (extra > 0) factSh.getRange(rows.length + 2, 1, extra, 9).clearContent();
+    timings["Ghi sheet"] = Math.round((Date.now() - tWrite) / 100) / 10;
 
-    // Tóm tắt trong Execution log để tự kiểm tra sau mỗi lần chạy tay
     const sum = snapshot.counts;
     rows.forEach(r => { const k = r[8] + ":" + r[1]; sum[k] = (sum[k] || 0) + r[6]; });
-    console.log("dashBuild: " + rows.length + " dòng tổng hợp; " + JSON.stringify(sum)
-      + "; thao tác mới nhất " + JSON.stringify(freshness) + (errors.length ? "; LỖI: " + errors.join(" | ") : ""));
-    if (vtdBacklog) console.log("VTD chưa nhận CT: " + vtdBacklog.total + " (" + vtdBacklog.method + "); cột TongHop: " + vtdBacklog.headers.join(" | "));
-    if (pnBacklog) console.log("PN chưa nhận CT: " + pnBacklog.total + "; " + JSON.stringify(pnBacklog.byStatus));
 
     const snapSh = dash_sheet_(ss, DASH_CONFIG.snapshotSheet, ["Cập nhật lúc", "Snapshot JSON"]);
     snapSh.getRange(2, 1, 1, 2).setValues([[
       Utilities.formatDate(now, tz, "yyyy-MM-dd HH:mm:ss"),
       JSON.stringify(snapshot)
     ]]);
+
+    // Tóm tắt trong Execution log để tự kiểm tra sau mỗi lần chạy tay
+    console.log("dashBuild " + DASH_BUILD_VERSION + ": xong trong " + Math.round((Date.now() - started) / 1000) + " giây; " + rows.length + " dòng tổng hợp");
+    console.log("Thời gian từng bước (giây): " + JSON.stringify(timings));
+    console.log("Số liệu đọc được: " + JSON.stringify(sum));
+    console.log("Thao tác mới nhất: " + JSON.stringify(freshness) + (errors.length ? " | LỖI: " + errors.join(" | ") : ""));
+    if (vtdBacklog) console.log("VTD chưa nhận CT: " + vtdBacklog.total + " (" + vtdBacklog.method + "); cột TongHop: " + vtdBacklog.headers.join(" | "));
+    if (pnBacklog) console.log("PN chưa nhận CT: " + pnBacklog.total + "; " + JSON.stringify(pnBacklog.byStatus));
   } finally {
     lock.releaseLock();
   }
+}
+
+/* ======================= Đọc sheet theo cột ======================= */
+
+// Chỉ đọc các cột cần dùng. spec = {khóa: [alias[], vị trí dự phòng?]}.
+// Trả về {header (đủ cột), c: {khóa: vị trí trong dòng rút gọn hoặc -1}, rows: dòng rút gọn (không có tiêu đề)}.
+function dash_read_(sh, spec, headerRow) {
+  headerRow = Math.max(1, Number(headerRow) || 1);
+  const lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
+  const out = {header: [], c: {}, rows: []};
+  if (lastCol < 1 || lastRow < headerRow) { Object.keys(spec).forEach(k => out.c[k] = -1); return out; }
+  out.header = sh.getRange(headerRow, 1, 1, lastCol).getValues()[0];
+  const col = vtdApp_headerMap_(out.header);
+  const idx = {}, need = [];
+  Object.keys(spec).forEach(k => {
+    let i = dash_col_(col, spec[k][0], spec[k].length > 1 ? spec[k][1] : -1);
+    if (i >= lastCol) i = -1;
+    idx[k] = i;
+    if (i >= 0 && need.indexOf(i) < 0) need.push(i);
+  });
+  need.sort((a, b) => a - b);
+  const pos = {};
+  need.forEach((i, j) => pos[i] = j);
+  Object.keys(spec).forEach(k => out.c[k] = idx[k] >= 0 ? pos[idx[k]] : -1);
+  const n = lastRow - headerRow;
+  if (n <= 0 || !need.length) return out;
+  // Gom các cột gần nhau thành 1 lần đọc
+  const runs = [];
+  need.forEach(i => {
+    const last = runs[runs.length - 1];
+    if (last && i - last.end <= 3) last.end = i; else runs.push({start: i, end: i});
+  });
+  const data = {};
+  runs.forEach(run => {
+    const vals = sh.getRange(headerRow + 1, run.start + 1, n, run.end - run.start + 1).getValues();
+    for (let j = run.start; j <= run.end; j++) if (pos[j] != null) data[j] = vals.map(r => r[j - run.start]);
+  });
+  for (let r = 0; r < n; r++) {
+    const row = new Array(need.length);
+    for (let j = 0; j < need.length; j++) row[j] = data[need[j]][r];
+    out.rows.push(row);
+  }
+  return out;
 }
 
 /* ============================ Nguồn VTD ============================ */
@@ -228,70 +288,64 @@ function dash_collectVtd_(add, metric) {
 }
 
 function dash_collectVtdSheet_(sh, add, metric, received, seenIds) {
-  const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
-  const col = vtdApp_headerMap_(values[0]);
   // Cùng alias + vị trí dự phòng với vtdApp_compactRecord_
-  const c = {
-    date: dash_col_(col, ["ngay hoan tra", "ngay nhap"], 1),
-    time: dash_col_(col, ["thoi gian nhap hoan", "thoi gian", "timestamp"], 2),
-    ma: dash_col_(col, ["ma don", "ma don ghn", "ma don ghtk", "madon"], 3),
-    slog: dash_col_(col, ["slog"], 4),
-    loai: dash_col_(col, ["loai hoan", "loai st"], 6),
-    po: dash_col_(col, ["ma po chung tu hoan", "ma po"], 7),
-    tinhTrang: dash_col_(col, ["tinh trang chung tu", "tinh trang"], 8),
-    od: dash_col_(col, ["od"], -1),
-    hd: dash_col_(col, ["so hoa don", "invoice"], -1),
-    user: dash_col_(col, ["user_email", "user email", "email", "nguoi nhap", "user thao tac", "created by"], 11),
-    id: dash_col_(col, ["id", "raw_id"], 0)
-  };
-  // Khóa các đơn Chứng từ đã nhập trên app → dùng để biết đơn nào ở TongHop đã nhận
-  for (let r = 1; r < values.length; r++) {
-    const row = values[r];
-    if (row.join("") === "") continue;
-    const uid = String(row[c.id] || "").trim() || [row[c.ma], row[c.date], row[c.time], row[c.loai]].join("|");
-    if (seenIds[uid]) continue;
+  const d = dash_read_(sh, {
+    id: [["id", "raw_id"], 0],
+    date: [["ngay hoan tra", "ngay nhap"], 1],
+    time: [["thoi gian nhap hoan", "thoi gian", "timestamp"], 2],
+    ma: [["ma don", "ma don ghn", "ma don ghtk", "madon"], 3],
+    slog: [["slog"], 4],
+    loai: [["loai hoan", "loai st"], 6],
+    po: [["ma po chung tu hoan", "ma po"], 7],
+    tinhTrang: [["tinh trang chung tu", "tinh trang"], 8],
+    user: [["user_email", "user email", "email", "nguoi nhap", "user thao tac", "created by"], 11],
+    od: [["od"]],
+    hd: [["so hoa don", "invoice"]]
+  });
+  const c = d.c;
+  const get = (row, i) => i >= 0 ? row[i] : "";
+  d.rows.forEach(row => {
+    if (row.join("") === "") return;
+    const uid = String(get(row, c.id) || "").trim() || [get(row, c.ma), get(row, c.date), get(row, c.time), get(row, c.loai)].join("|");
+    if (seenIds[uid]) return;
     seenIds[uid] = true;
-    const isDoc = vtdApp_norm_(row[c.loai]).indexOf("chung tu") >= 0;
-    if (isDoc) {
-      [c.ma, c.po, c.od, c.hd].forEach(i => { if (i >= 0) vtdApp_lookupKeys_(row[i]).forEach(k => received[k] = true); });
-    }
-    const dateKey = vtdApp_dateKey_(row[c.date]) || vtdApp_dateKey_(row[c.time]);
-    if (!dateKey) continue;
-    const hour = dash_hour_(row[c.time]);
-    const user = dash_user_(row[c.user]);
-    const kenh = String(row[c.slog] || "Khác").trim() || "Khác";
-    const loai = String(row[c.loai] || "Khác").trim() || "Khác";
-    add("VTD", dateKey, hour, kenh, loai, user, 1, {
-      at: dateKey + " " + dash_hhmm_(row[c.time]), src: "VTD", ma: String(row[c.ma] || ""), kenh: kenh, loai: loai, user: user
+    // Khóa các đơn Chứng từ đã nhập trên app → dùng để biết đơn nào ở TongHop đã nhận
+    const isDoc = vtdApp_norm_(get(row, c.loai)).indexOf("chung tu") >= 0;
+    if (isDoc) [c.ma, c.po, c.od, c.hd].forEach(i => { if (i >= 0) vtdApp_lookupKeys_(row[i]).forEach(k => received[k] = true); });
+    const dateKey = dash_key_(get(row, c.date)) || dash_key_(get(row, c.time));
+    if (!dateKey) return;
+    const user = dash_user_(get(row, c.user));
+    const kenh = String(get(row, c.slog) || "Khác").trim() || "Khác";
+    const loai = String(get(row, c.loai) || "Khác").trim() || "Khác";
+    add("VTD", dateKey, dash_hour_(get(row, c.time)), kenh, loai, user, 1, {
+      at: dateKey + " " + dash_hhmm_(get(row, c.time)), src: "VTD", ma: String(get(row, c.ma) || ""), kenh: kenh, loai: loai, user: user
     });
     // Tình trạng chứng từ (Bình thường / lỗi...) — chỉ áp dụng cho loại Chứng từ
     if (isDoc && c.tinhTrang >= 0) metric("cond", "VTD", dateKey, "Chứng từ", String(row[c.tinhTrang] || "").trim() || "(trống)", 1);
-  }
+  });
 }
 
 // List_SKU_hoàn: sản phẩm hoàn VTD (Tên sản phẩm hoàn về, Số lượng, Tình trạng, Ngày)
 function dash_collectVtdProducts_(metric) {
   const sh = vtdApp_ss_().getSheetByName(VTD_APP.skuSheet);
   if (!sh || sh.getLastRow() < 2) return;
-  const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
-  const col = vtdApp_headerMap_(values[0]);
-  const c = {
-    name: dash_col_(col, ["ten san pham hoan ve", "ten san pham hoan", "ten san pham", "sku"], -1),
-    qty: dash_col_(col, ["so luong", "qty"], -1),
-    status: dash_col_(col, ["tinh trang"], -1),
-    date: dash_col_(col, ["ngay", "date"], -1)
-  };
+  const d = dash_read_(sh, {
+    name: [["ten san pham hoan ve", "ten san pham hoan", "ten san pham", "sku"]],
+    qty: [["so luong", "qty"]],
+    status: [["tinh trang"]],
+    date: [["ngay", "date"]]
+  });
+  const c = d.c;
   if (c.name < 0 || c.date < 0) throw new Error("List_SKU_hoàn thiếu cột Tên sản phẩm hoặc Ngày");
-  for (let r = 1; r < values.length; r++) {
-    const row = values[r];
-    const dateKey = vtdApp_dateKey_(row[c.date]);
+  d.rows.forEach(row => {
+    const dateKey = dash_key_(row[c.date]);
     const name = String(row[c.name] || "").trim();
-    if (!dateKey || !name) continue;
+    if (!dateKey || !name) return;
     const status = String(c.status >= 0 ? row[c.status] : "").trim() || "(trống)";
     const qty = Number(c.qty >= 0 ? row[c.qty] : 0) || 0;
     metric("product", "VTD", dateKey, name, status, qty);
     metric("cond", "VTD", dateKey, "Sản phẩm", status, qty);
-  }
+  });
 }
 
 function dash_collectVtdBacklog_(now, received, metric) {
@@ -299,65 +353,60 @@ function dash_collectVtdBacklog_(now, received, metric) {
   const sh = SpreadsheetApp.openById(VTD_APP.fullCtSpreadsheetId).getSheetByName(cfg.fullCtSheet);
   if (!sh) throw new Error("Không thấy tab " + cfg.fullCtSheet + " trong Full das chung tu VTD");
   const backlog = {total: 0, over7: 0, buckets: [0, 0, 0, 0], byStore: {}, byStatus: {}, oldest: [],
-    statusSheet: "Full das chứng từ VTD / " + cfg.fullCtSheet, method: "", headers: []};
+    statusSheet: "Full das chứng từ VTD / " + cfg.fullCtSheet, method: "", headers: [], hasHandover: false};
   if (sh.getLastRow() < 2) return backlog;
-  const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
-  backlog.headers = values[0].map(h => String(h || "").trim()).filter(Boolean);
-  const col = vtdApp_headerMap_(values[0]);
-  const c = {
-    ma: dash_col_(col, ["ma don", "ma don ghtk"], -1),
-    od: dash_col_(col, ["od"], -1),
-    po: dash_col_(col, ["ma po", "po"], -1),
-    hd: dash_col_(col, ["so hoa don", "invoice"], -1),
-    khach: dash_col_(col, ["khach hang", "ten khach hang", "customer"], -1),
-    loaiSt: dash_col_(col, ["loai st", "loai sieu thi"], -1),
-    lenDon: dash_col_(col, ["ngay len don", "date"], -1),
-    banGiao: dash_col_(col, DASH_CONFIG.handoverAliases, -1),
-    status: dash_col_(col, cfg.statusAliases, -1)
-  };
+  const d = dash_read_(sh, {
+    ma: [["ma don", "ma don ghtk"]],
+    od: [["od"]],
+    po: [["ma po", "po"]],
+    hd: [["so hoa don", "invoice"]],
+    khach: [["khach hang", "ten khach hang", "customer"]],
+    loaiSt: [["loai st", "loai sieu thi"]],
+    lenDon: [["ngay len don", "date"]],
+    banGiao: [DASH_CONFIG.handoverAliases],
+    status: [cfg.statusAliases]
+  });
+  const c = d.c;
+  backlog.headers = d.header.map(h => String(h || "").trim()).filter(Boolean);
   const byStatusCol = c.status >= 0;
-  backlog.method = byStatusCol
-    ? "theo cột " + values[0][c.status] + " = Chưa nhận"
-    : "đơn lên trong " + cfg.derivedDays + " ngày chưa có bản Chứng từ trên app";
+  backlog.method = byStatusCol ? "theo cột trạng thái = Chưa nhận" : "đơn lên trong " + cfg.derivedDays + " ngày chưa có bản Chứng từ trên app";
   backlog.hasHandover = c.banGiao >= 0;
   const todayMs = dash_dayMs_(now);
   const seen = {};
-  for (let r = 1; r < values.length; r++) {
-    const row = values[r];
-    const get = i => i >= 0 ? row[i] : "";
-    const ma = String(get(c.ma) || get(c.od) || get(c.po) || "").trim();
-    if (!ma) continue;
-    const uniq = vtdApp_norm_(get(c.od) || ma);
-    if (seen[uniq]) continue;
+  const get = (row, i) => i >= 0 ? row[i] : "";
+  d.rows.forEach(row => {
+    const ma = String(get(row, c.ma) || get(row, c.od) || get(row, c.po) || "").trim();
+    if (!ma) return;
+    const uniq = vtdApp_norm_(get(row, c.od) || ma);
+    if (seen[uniq]) return;
     seen[uniq] = true;
-    const khach = String(get(c.khach) || "").trim();
-    const store = String(get(c.loaiSt) || "").trim() || vtdApp_storeType_(khach);
-    const lenKey = vtdApp_dateKey_(get(c.lenDon));
+    const khach = String(get(row, c.khach) || "").trim();
+    const store = String(get(row, c.loaiSt) || "").trim() || vtdApp_storeType_(khach);
+    const lenKey = dash_key_(get(row, c.lenDon));
     metric("order", "VTD", lenKey, store, "Lên đơn", 1);
-    if (c.banGiao >= 0) metric("handover", "VTD", vtdApp_dateKey_(get(c.banGiao)), store, "Bàn giao", 1);
+    if (c.banGiao >= 0) metric("handover", "VTD", dash_key_(get(row, c.banGiao)), store, "Bàn giao", 1);
     const days = lenKey ? Math.max(0, Math.round((todayMs - dash_dayMs_(lenKey)) / 86400000)) : -1;
 
     let open, statusLabel;
     if (byStatusCol) {
-      statusLabel = String(get(c.status) || "").trim() || "(trống)";
-      open = cfg.openStatuses.indexOf(vtdApp_norm_(get(c.status))) >= 0;
+      statusLabel = String(get(row, c.status) || "").trim() || "(trống)";
+      open = cfg.openStatuses.indexOf(vtdApp_norm_(get(row, c.status))) >= 0;
     } else {
-      if (days < 0 || days > cfg.derivedDays) continue;
+      if (days < 0 || days > cfg.derivedDays) return;
       const keys = [];
-      [c.ma, c.po, c.od, c.hd].forEach(i => { if (i >= 0) Array.prototype.push.apply(keys, vtdApp_lookupKeys_(get(i))); });
+      [c.ma, c.po, c.od, c.hd].forEach(i => { if (i >= 0) Array.prototype.push.apply(keys, vtdApp_lookupKeys_(row[i])); });
       open = !keys.some(k => received[k]);
       statusLabel = open ? "Chưa nhận chứng từ" : "Đã nhận (có trên app)";
     }
     backlog.byStatus[statusLabel] = (backlog.byStatus[statusLabel] || 0) + 1;
-    if (!open) continue;
-
+    if (!open) return;
     backlog.total++;
     backlog.byStore[store] = (backlog.byStore[store] || 0) + 1;
-    if (days < 0) continue;
+    if (days < 0) return;
     if (days > 7) backlog.over7++;
     backlog.buckets[days <= 3 ? 0 : days <= 7 ? 1 : days <= 15 ? 2 : 3]++;
     backlog.oldest.push({ma: ma, khach: khach, kenh: store, ngay: lenKey, days: days, status: statusLabel});
-  }
+  });
   backlog.oldest.sort((a, b) => b.days - a.days);
   backlog.oldest = backlog.oldest.slice(0, 12);
   return backlog;
@@ -367,18 +416,16 @@ function dash_vtdSync_() {
   const sh = vtdApp_ss_().getSheetByName(DASH_CONFIG.vtd.liveSheet);
   const out = {pending: 0, errHangHoan: 0, errChungTu: 0};
   if (!sh || sh.getLastRow() < 2) return out;
-  const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
-  const col = vtdApp_headerMap_(values[0]);
-  const sCol = col["sync_status"], pCol = col["pj2_status"];
-  for (let r = 1; r < values.length; r++) {
-    const s = String(sCol != null ? values[r][sCol] : "").toUpperCase().trim();
-    const p = String(pCol != null ? values[r][pCol] : "").toUpperCase().trim();
-    const isErr = v => v.indexOf("ERROR") >= 0 || v.indexOf("IMG") >= 0;
-    const isPending = v => v === "YES" || v === "RUNNING" || v === "PENDING";
+  const d = dash_read_(sh, {s: [["sync_status"]], p: [["pj2_status"]]});
+  const isErr = v => v.indexOf("ERROR") >= 0 || v.indexOf("IMG") >= 0;
+  const isPending = v => v === "YES" || v === "RUNNING" || v === "PENDING";
+  d.rows.forEach(row => {
+    const s = String(d.c.s >= 0 ? row[d.c.s] : "").toUpperCase().trim();
+    const p = String(d.c.p >= 0 ? row[d.c.p] : "").toUpperCase().trim();
     if (isErr(s)) out.errChungTu++;
     if (isErr(p)) out.errHangHoan++;
     if (isPending(s) || isPending(p)) out.pending++;
-  }
+  });
   return out;
 }
 
@@ -391,75 +438,69 @@ function dash_collectPn_(add, now, metric) {
   for (let i = 0; i < cfg.sheetNames.length && !sh; i++) sh = ss.getSheetByName(cfg.sheetNames[i]);
   const backlog = {total: 0, over7: 0, buckets: [0, 0, 0, 0], byStore: {}, byStatus: {}, oldest: [], statusSheet: "",
     method: "theo cột Xác thực hóa đơn = Chưa nhận chứng từ", hasHandover: false};
-  const pnCols = col => ({
-    ma: dash_col_(col, ["ma don ghtk", "ma don"], -1),
-    od: dash_col_(col, ["so don hang", "od"], -1),
-    khach: dash_col_(col, ["khach hang"], -1),
-    store: dash_col_(col, ["loai sieu thi"], -1),
+  const spec = {
+    ma: [["ma don ghtk", "ma don"]],
+    od: [["so don hang", "od"]],
+    khach: [["khach hang"]],
+    store: [["loai sieu thi"]],
     // Trạng thái chứng từ nằm ở cột "Xác thực hóa đơn": Chưa nhận / Đã nhận chứng từ / Shop hủy OD
-    status: dash_col_(col, ["xac thuc hoa don"], -1),
-    time: dash_col_(col, ["thoi gian"], -1),
-    user: dash_col_(col, ["user thao tac"], -1),
-    lenDon: dash_col_(col, ["ngay len don"], -1),
-    banGiao: dash_col_(col, DASH_CONFIG.handoverAliases, -1)
-  });
+    status: [["xac thuc hoa don"]],
+    time: [["thoi gian"]],
+    user: [["user thao tac"]],
+    lenDon: [["ngay len don"]],
+    banGiao: [DASH_CONFIG.handoverAliases]
+  };
+  const get = (row, i) => i >= 0 ? row[i] : "";
 
   // 1) Tab full (mọi tháng): thao tác chứng từ, lên đơn, bàn giao CT
   if (sh && sh.getLastRow() > 1) {
-    const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
-    const c = pnCols(vtdApp_headerMap_(values[0]));
+    const d = dash_read_(sh, spec), c = d.c;
     backlog.hasHandover = c.banGiao >= 0;
     const seen = {};
-    for (let r = 1; r < values.length; r++) {
-      const row = values[r];
-      const get = i => i >= 0 ? row[i] : "";
-      const ma = String(get(c.ma) || get(c.od) || "");
-      if (!ma) continue;
-      const store = String(get(c.store) || "Khác").trim() || "Khác";
-      const uniq = vtdApp_norm_(get(c.od) || ma);
+    d.rows.forEach(row => {
+      const ma = String(get(row, c.ma) || get(row, c.od) || "");
+      if (!ma) return;
+      const store = String(get(row, c.store) || "Khác").trim() || "Khác";
+      const uniq = vtdApp_norm_(get(row, c.od) || ma);
       if (!seen[uniq]) {
         seen[uniq] = true;
-        metric("order", "PN", vtdApp_dateKey_(get(c.lenDon)), store, "Lên đơn", 1);
-        if (c.banGiao >= 0) metric("handover", "PN", vtdApp_dateKey_(get(c.banGiao)), store, "Bàn giao", 1);
+        metric("order", "PN", dash_key_(get(row, c.lenDon)), store, "Lên đơn", 1);
+        if (c.banGiao >= 0) metric("handover", "PN", dash_key_(get(row, c.banGiao)), store, "Bàn giao", 1);
       }
-      if (!get(c.user)) continue;
-      const actKey = vtdApp_dateKey_(get(c.time));
-      if (!actKey) continue;
-      const user = dash_user_(get(c.user));
-      add("PN", actKey, dash_hour_(get(c.time)), store, "Chứng từ", user, 1, {
-        at: actKey + " " + dash_hhmm_(get(c.time)), src: "PN", ma: ma, kenh: store, loai: "Chứng từ", user: user
+      if (!get(row, c.user)) return;
+      const actKey = dash_key_(get(row, c.time));
+      if (!actKey) return;
+      const user = dash_user_(get(row, c.user));
+      add("PN", actKey, dash_hour_(get(row, c.time)), store, "Chứng từ", user, 1, {
+        at: actKey + " " + dash_hhmm_(get(row, c.time)), src: "PN", ma: ma, kenh: store, loai: "Chứng từ", user: user
       });
-    }
+    });
   }
 
   // 2) Tồn chứng từ chưa nhận: đọc tab chính (khớp với bảng "Xác thực hóa đơn" trên sheet tổng)
   const stSh = ss.getSheetByName(cfg.statusSheet) || sh;
   if (stSh && stSh.getLastRow() > 1) {
     backlog.statusSheet = stSh.getName();
-    const values = stSh.getRange(1, 1, stSh.getLastRow(), stSh.getLastColumn()).getValues();
-    const c = pnCols(vtdApp_headerMap_(values[0]));
+    const d = dash_read_(stSh, spec), c = d.c;
     if (c.status < 0) throw new Error("Tab " + stSh.getName() + " không có cột Xác thực hóa đơn");
     const todayMs = dash_dayMs_(now);
-    for (let r = 1; r < values.length; r++) {
-      const row = values[r];
-      const get = i => i >= 0 ? row[i] : "";
-      const ma = String(get(c.ma) || get(c.od) || "");
-      if (!ma) continue;
-      const status = String(get(c.status) || "").trim();
+    d.rows.forEach(row => {
+      const ma = String(get(row, c.ma) || get(row, c.od) || "");
+      if (!ma) return;
+      const status = String(get(row, c.status) || "").trim();
       const statusLabel = status || "(trống)";
       backlog.byStatus[statusLabel] = (backlog.byStatus[statusLabel] || 0) + 1;
-      if (cfg.openStatuses.indexOf(vtdApp_norm_(status)) < 0) continue;
-
-      const store = String(get(c.store) || "Khác").trim() || "Khác";
-      const lenKey = vtdApp_dateKey_(get(c.lenDon));
+      if (cfg.openStatuses.indexOf(vtdApp_norm_(status)) < 0) return;
+      const store = String(get(row, c.store) || "Khác").trim() || "Khác";
+      const lenKey = dash_key_(get(row, c.lenDon));
       const days = lenKey ? Math.max(0, Math.round((todayMs - dash_dayMs_(lenKey)) / 86400000)) : -1;
       backlog.total++;
       backlog.byStore[store] = (backlog.byStore[store] || 0) + 1;
-      if (days < 0) continue;            // thiếu Ngày lên đơn: vẫn đếm vào tổng, không xếp tuổi
+      if (days < 0) return;            // thiếu Ngày lên đơn: vẫn đếm vào tổng, không xếp tuổi
       if (days > 7) backlog.over7++;
       backlog.buckets[days <= 3 ? 0 : days <= 7 ? 1 : days <= 15 ? 2 : 3]++;
-      backlog.oldest.push({ma: ma, khach: String(get(c.khach) || ""), kenh: store, ngay: lenKey, days: days, status: status});
-    }
+      backlog.oldest.push({ma: ma, khach: String(get(row, c.khach) || ""), kenh: store, ngay: lenKey, days: days, status: status});
+    });
     backlog.oldest.sort((a, b) => b.days - a.days);
     backlog.oldest = backlog.oldest.slice(0, 12);
   }
@@ -467,28 +508,24 @@ function dash_collectPn_(add, now, metric) {
   // 3) Hoàn sản phẩm: mỗi dòng = 1 sản phẩm; qty = số lượng; Tình trạng FF
   const prod = ss.getSheetByName(cfg.productSheet);
   if (prod && prod.getLastRow() > 1) {
-    const values = prod.getRange(1, 1, prod.getLastRow(), prod.getLastColumn()).getValues();
-    const col = vtdApp_headerMap_(values[0]);
-    const c = {
-      date: dash_col_(col, ["ngay hoan tra", "ngay"], -1),
-      time: dash_col_(col, ["thoi gian", "gio"], -1),
-      user: dash_col_(col, ["user thao tac", "user"], -1),
-      qty: dash_col_(col, ["so luong"], -1),
-      name: dash_col_(col, ["ten san pham", "ten vat tu"], -1),
-      status: dash_col_(col, ["tinh trang ff", "tinh trang"], -1)
-    };
-    for (let r = 1; r < values.length; r++) {
-      const row = values[r];
-      const dateKey = c.date >= 0 ? vtdApp_dateKey_(row[c.date]) : "";
-      if (!dateKey) continue;
-      const qty = Number(c.qty >= 0 ? row[c.qty] : 0) || 0;
-      add("PN", dateKey, dash_hour_(c.time >= 0 ? row[c.time] : ""), "Hàng hoàn PN", "Sản phẩm",
-        dash_user_(c.user >= 0 ? row[c.user] : ""), qty, null);
-      const status = String(c.status >= 0 ? row[c.status] : "").trim() || "(trống)";
-      const name = String(c.name >= 0 ? row[c.name] : "").trim();
+    const d = dash_read_(prod, {
+      date: [["ngay hoan tra", "ngay"]],
+      time: [["thoi gian", "gio"]],
+      user: [["user thao tac", "user"]],
+      qty: [["so luong"]],
+      name: [["ten san pham", "ten vat tu"]],
+      status: [["tinh trang ff", "tinh trang"]]
+    }), c = d.c;
+    d.rows.forEach(row => {
+      const dateKey = c.date >= 0 ? dash_key_(row[c.date]) : "";
+      if (!dateKey) return;
+      const qty = Number(get(row, c.qty)) || 0;
+      add("PN", dateKey, dash_hour_(get(row, c.time)), "Hàng hoàn PN", "Sản phẩm", dash_user_(get(row, c.user)), qty, null);
+      const status = String(get(row, c.status) || "").trim() || "(trống)";
+      const name = String(get(row, c.name) || "").trim();
       if (name) metric("product", "PN", dateKey, name, status, qty);
       metric("cond", "PN", dateKey, "Sản phẩm", status, qty);
-    }
+    });
   }
   return backlog;
 }
@@ -500,36 +537,26 @@ function dash_collectTh_(add, metric) {
   if (!cfg.spreadsheetId || !cfg.sheetName) return;
   const sh = SpreadsheetApp.openById(cfg.spreadsheetId).getSheetByName(cfg.sheetName);
   if (!sh) throw new Error("Không thấy tab " + cfg.sheetName);
-  const headerRow = Math.max(1, Number(cfg.headerRow) || 1);
-  if (sh.getLastRow() <= headerRow) return;
-  const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
-  const col = vtdApp_headerMap_(values[headerRow - 1]);
-  const c = {
-    date: dash_col_(col, cfg.dateAliases, -1),
-    time: dash_col_(col, cfg.timeAliases, -1),
-    user: dash_col_(col, cfg.userAliases, -1),
-    qty: dash_col_(col, cfg.qtyAliases, -1),
-    ma: dash_col_(col, cfg.maAliases, -1),
-    kenh: dash_col_(col, cfg.kenhAliases, -1),
-    name: dash_col_(col, cfg.nameAliases, -1),
-    status: dash_col_(col, cfg.statusAliases, -1)
-  };
-  if (c.date < 0 && c.time < 0) throw new Error("Tab " + cfg.sheetName + " thiếu cột Ngày tháng/Thời gian ở dòng " + headerRow);
-  for (let r = headerRow; r < values.length; r++) {
-    const row = values[r];
-    const dateKey = vtdApp_dateKey_(c.date >= 0 ? row[c.date] : "") || vtdApp_dateKey_(c.time >= 0 ? row[c.time] : "");
-    if (!dateKey) continue;
-    const user = dash_user_(c.user >= 0 ? row[c.user] : "");
-    const kenh = String(c.kenh >= 0 ? row[c.kenh] : "").trim() || "TH Truemilk";
-    const qty = Number(c.qty >= 0 ? row[c.qty] : 0) || 0;
-    add("TH", dateKey, dash_hour_(c.time >= 0 ? row[c.time] : ""), kenh, "Hàng hoàn", user, qty, {
-      at: dateKey + " " + dash_hhmm_(c.time >= 0 ? row[c.time] : ""), src: "TH", ma: String(c.ma >= 0 ? row[c.ma] || "" : ""), kenh: kenh, loai: "Hàng hoàn", user: user
+  const d = dash_read_(sh, {
+    date: [cfg.dateAliases], time: [cfg.timeAliases], user: [cfg.userAliases], qty: [cfg.qtyAliases],
+    ma: [cfg.maAliases], kenh: [cfg.kenhAliases], name: [cfg.nameAliases], status: [cfg.statusAliases]
+  }, cfg.headerRow), c = d.c;
+  if (c.date < 0 && c.time < 0) throw new Error("Tab " + cfg.sheetName + " thiếu cột Ngày tháng/Thời gian ở dòng " + cfg.headerRow);
+  const get = (row, i) => i >= 0 ? row[i] : "";
+  d.rows.forEach(row => {
+    const dateKey = dash_key_(get(row, c.date)) || dash_key_(get(row, c.time));
+    if (!dateKey) return;
+    const user = dash_user_(get(row, c.user));
+    const kenh = String(get(row, c.kenh) || "").trim() || "TH Truemilk";
+    const qty = Number(get(row, c.qty)) || 0;
+    add("TH", dateKey, dash_hour_(get(row, c.time)), kenh, "Hàng hoàn", user, qty, {
+      at: dateKey + " " + dash_hhmm_(get(row, c.time)), src: "TH", ma: String(get(row, c.ma) || ""), kenh: kenh, loai: "Hàng hoàn", user: user
     });
-    const name = String(c.name >= 0 ? row[c.name] : "").trim();
+    const name = String(get(row, c.name) || "").trim();
     const status = c.status >= 0 ? (String(row[c.status] || "").trim() || "(trống)") : "";
     if (name) metric("product", "TH", dateKey, name, status || "(không ghi tình trạng)", qty);
     if (status) metric("cond", "TH", dateKey, "Sản phẩm", status, qty);
-  }
+  });
 }
 
 // DS đơn all: mỗi dòng 1 SKU của đơn → gộp theo mã đơn, ngày = Thời gian tạo
@@ -538,23 +565,19 @@ function dash_collectThOrders_(metric) {
   if (!cfg.spreadsheetId || !cfg.ordersSheet) return;
   const sh = SpreadsheetApp.openById(cfg.spreadsheetId).getSheetByName(cfg.ordersSheet);
   if (!sh) throw new Error("Không thấy tab " + cfg.ordersSheet);
-  const headerRow = Math.max(1, Number(cfg.ordersHeaderRow) || 1);
-  if (sh.getLastRow() <= headerRow) return;
-  const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
-  const col = vtdApp_headerMap_(values[headerRow - 1]);
-  const c = {
-    date: dash_col_(col, ["thoi gian tao", "ngay tao", "ngay len don"], -1),
-    ids: [dash_col_(col, ["ma don ghtk"], -1), dash_col_(col, ["ma od"], -1), dash_col_(col, ["ma don gam"], -1), dash_col_(col, ["ma don doi tac"], -1)].filter(i => i >= 0)
-  };
+  const d = dash_read_(sh, {
+    date: [["thoi gian tao", "ngay tao", "ngay len don"]],
+    ghtk: [["ma don ghtk"]], od: [["ma od"]], gam: [["ma don gam"]], dt: [["ma don doi tac"]]
+  }, cfg.ordersHeaderRow), c = d.c;
   if (c.date < 0) throw new Error("Tab " + cfg.ordersSheet + " thiếu cột Thời gian tạo");
+  const ids = [c.ghtk, c.od, c.gam, c.dt].filter(i => i >= 0);
   const seen = {};
-  for (let r = headerRow; r < values.length; r++) {
-    const row = values[r];
-    const id = c.ids.map(i => String(row[i] || "").trim()).filter(Boolean)[0] || ("row" + r);
-    if (seen[id]) continue;
+  d.rows.forEach((row, r) => {
+    const id = ids.map(i => String(row[i] || "").trim()).filter(Boolean)[0] || ("row" + r);
+    if (seen[id]) return;
     seen[id] = true;
-    metric("order", "TH", vtdApp_dateKey_(row[c.date]), "TH Truemilk", "Lên đơn", 1);
-  }
+    metric("order", "TH", dash_key_(row[c.date]), "TH Truemilk", "Lên đơn", 1);
+  });
 }
 
 /* ============================ Helpers ============================ */
@@ -577,16 +600,25 @@ function dash_col_(col, aliases, fallback) {
   return fallback;
 }
 
-function dash_hour_(value) {
-  if (value instanceof Date && !isNaN(value.getTime())) {
-    return Number(Utilities.formatDate(value, DASH_CONFIG.timezone, "H"));
+// Ngày dạng yyyy-MM-dd. Kiểu Date đọc thẳng (nhanh hơn Utilities.formatDate khi chạy hàng chục nghìn dòng);
+// Apps Script trả Date theo múi giờ của project (Asia/Ho_Chi_Minh).
+function dash_key_(value) {
+  if (value instanceof Date) {
+    if (isNaN(value.getTime())) return "";
+    return value.getFullYear() + "-" + ("0" + (value.getMonth() + 1)).slice(-2) + "-" + ("0" + value.getDate()).slice(-2);
   }
+  if (value === "" || value == null) return "";
+  return vtdApp_dateKey_(value);
+}
+
+function dash_hour_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) return value.getHours();
   const m = String(value == null ? "" : value).match(/(\d{1,2}):(\d{2})/);
   return m ? Math.min(23, Number(m[1])) : -1;
 }
 
 function dash_hhmm_(value) {
-  if (value instanceof Date && !isNaN(value.getTime())) return Utilities.formatDate(value, DASH_CONFIG.timezone, "HH:mm");
+  if (value instanceof Date && !isNaN(value.getTime())) return ("0" + value.getHours()).slice(-2) + ":" + ("0" + value.getMinutes()).slice(-2);
   const m = String(value == null ? "" : value).match(/(\d{1,2}):(\d{2})/);
   return m ? ("0" + m[1]).slice(-2) + ":" + m[2] : "";
 }
