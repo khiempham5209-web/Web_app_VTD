@@ -972,4 +972,31 @@ test('returnsSync lists Hoàn sản phẩm rows with stable keys and paging like
  const ks=e.c.apiKeySync_({offset:0}),one=e.c.apiKeySync_({version:ks.version,keys:[ks.entries[0].key]}).records[0];
  assert.ok('maEcomCt' in one && 'ngayBanGiao' in one && 'daTaoSv' in one && 'noteKhac' in one);
 });
+test('Filtered fill-down on full: Google reports only the first area, all filled rows still reach main (exact incident)',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const M=e.sheets.get('Chứng từ_FF'),F=e.sheets.get('Chứng từ_full');
+ const start=F.getLastRow()+1;
+ F.getRange(start,1,6,17).setValues(Array.from({length:6},(_,i)=>doc(2968300+i,'12/10/2026','Chưa nhận chứng từ')));
+ e.c.pnHandleEdit({range:F.getRange(start,1,6,17)});
+ [0,2,4].forEach(i=>{F.getRange(start+i,8).setValue('ok');e.c.pnHandleEdit({range:F.getRange(start+i,8)});});
+ // Đang lọc chỉ hiện dòng "ok": điền ngày vào 3 dòng không liền nhau, trigger chỉ nhận vùng đầu (1 ô).
+ const hd=new Date(2026,9,15);[0,2,4].forEach(i=>F.getRange(start+i,8).setValue(hd));
+ e.c.pnHandleEdit({range:F.getRange(start,8)});
+ const mv=i=>M.getRange(rowOf(M,4,String(2968300+i)),8).getValue();
+ assert.deepEqual([0,1,2,3,4,5].map(i=>{const v=mv(i);return v instanceof Date?'D':v;}),['D','','D','','D',''],'all filtered rows synced');
+ const dest=e.targets.get('Đã bàn giao CT');
+ assert.ok([0,2,4].every(i=>dest.rows.some((r,k)=>k>0&&r&&String(r[4])===String(2968300+i))),'handover has all three');
+ auditOk(e);
+});
+test('Filtered paste on main tab: rows outside the reported area reach full; unrelated rows untouched',()=>{
+ const e=v2env();e.c.pnMirrorAll();
+ const M=e.sheets.get('Chứng từ_FF'),F=e.sheets.get('Chứng từ_full');
+ const rows=[...M.rows.keys()].filter(i=>i>0&&M.rows[i]&&M.rows[i][4]).map(i=>i+1);
+ const a=rows[0],b=rows[rows.length-1];
+ M.getRange(a,10).setValue('ghi chú lọc');M.getRange(b,10).setValue('ghi chú lọc');
+ e.c.pnHandleEdit({range:M.getRange(a,10)});
+ const fv=r=>F.getRange(rowOf(F,4,String(M.getRange(r,5).getValue())),10).getValue();
+ assert.equal(fv(a),'ghi chú lọc');assert.equal(fv(b),'ghi chú lọc','second area synced too');
+ auditOk(e);
+});
 console.log('RESULT '+passed+' tests passed.');

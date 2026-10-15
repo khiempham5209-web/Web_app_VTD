@@ -106,6 +106,9 @@ function pnHandleEdit(e) {
       if(p){
         // Booking / File đơn / Chứng từ (chính hoặc full): chỉ các dòng vừa sửa/dán và dòng script đổi theo.
         result=pnV2HandleRows_(name,r1,r2,{c1:e.range.getColumn(),c2:e.range.getLastColumn()});
+        // Sửa khi đang lọc: Google chỉ báo vùng liền đầu tiên -> bắt bù các dòng phía dưới bị lệch ở đúng các cột vừa sửa.
+        try { const caught=pnV2CatchFilteredEdit_(name,r1,r2,e.range.getColumn(),e.range.getLastColumn()); if(result&&caught)result.filtered=caught; }
+        catch(err) { console.error('Filtered edit: '+String(err&&err.message||err)); }
       } else if(name==='DS BC'||name==='TT Nhập'){
         const rows=new Set();if(p)for(let r=r1;r<=r2;r++)rows.add(r);
         result=pnV2SyncAll_(p?{pair:p.main,prefer:{side:name===p.main?'main':'full',rows}}:{});

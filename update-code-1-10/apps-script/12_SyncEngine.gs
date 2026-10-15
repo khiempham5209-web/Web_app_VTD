@@ -1206,3 +1206,58 @@ function pnTraceOrder(code) {
   console.log(JSON.stringify(out, null, 1));
   return out;
 }
+
+/* Sửa khi đang LỌC (gõ ô đầu rồi kéo / dán xuống): Google chỉ điền các dòng đang hiện, vùng sửa bị ngắt quãng,
+ * và trigger chỉ được báo VÙNG LIỀN ĐẦU TIÊN. Các vùng sau không được báo -> trước đây không sang tab kia.
+ * Bắt bù: từ dưới vùng đầu tới cuối tab, chỉ đọc đúng các cột vừa sửa (+ cột ID) ở 2 tab, dòng nào khác nhau
+ * ở các cột đó thì xử lý y như một lần sửa bình thường. Không có dòng lệch thì không ghi gì. */
+function pnV2CatchFilteredEdit_(name, r1, r2, c1, c2) {
+  const p = pnPair_(name);
+  if (!p || !c1 || !c2) return {skipped: true};
+  const side = name === p.main ? 'main' : 'full';
+  const S = pnV2Layout_(pnSheet_(name), side === 'full'), O = pnV2Layout_(pnSheet_(side === 'main' ? p.full : p.main), side === 'main');
+  if (S.id == null || O.id == null) return {skipped: true};
+  const pairs = [];
+  for (let c = c1 - 1; c <= c2 - 1; c++) {
+    const h = S.headers[c];
+    if (!h || pnV2IsTech_(h)) continue;
+    const oc = O.cols[pnNorm_(h)];
+    if (oc != null) pairs.push([c, oc]);
+  }
+  if (!pairs.length) return {skipped: true};
+  const last = S.sh.getLastRow(), start = r2 + 1;
+  if (last < start) return {ok: true, rows: 0};
+  const n = Math.min(last - start + 1, 5000);
+  const sVals = S.sh.getRange(start, c1, n, c2 - c1 + 1).getValues();
+  const sIds = S.sh.getRange(start, S.id + 1, n, 1).getValues();
+  const oLast = O.sh.getLastRow();
+  if (oLast < 2) return {ok: true, rows: 0};
+  const oMin = Math.min(...pairs.map(x => x[1])), oMax = Math.max(...pairs.map(x => x[1]));
+  const oIds = O.sh.getRange(2, O.id + 1, oLast - 1, 1).getValues();
+  const oVals = O.sh.getRange(2, oMin + 1, oLast - 1, oMax - oMin + 1).getValues();
+  const oById = new Map();
+  oIds.forEach((r, i) => { const id = pnText_(r[0]); if (id && !oById.has(id)) oById.set(id, i); });
+  const rows = [];
+  for (let i = 0; i < n; i++) {
+    const id = pnText_(sIds[i][0]);
+    if (!id || !oById.has(id)) continue;
+    const oi = oById.get(id);
+    if (pairs.some(([sc, oc]) => pnV2Canon_(sVals[i][sc - (c1 - 1)]) !== pnV2Canon_(oVals[oi][oc - oMin]))) rows.push(start + i);
+  }
+  if (!rows.length) return {ok: true, rows: 0};
+  if (p.main === 'Chứng từ_FF') {
+    // Chứng từ: đồng bộ cả lô một lần, rồi VHFF / Đã bàn giao CT cho đúng các dòng đó.
+    const res = pnV2SyncRows_(p, side, rows, false);
+    const fullRows = side === 'full' ? rows : (res.otherRows || []);
+    res.vhff = pnV2PushVhffRows_(fullRows);
+    res.handover = pnV2HandoverIfNeeded_(name, fullRows, {c1, c2});
+    return Object.assign(res, {rows: rows.length});
+  }
+  // Booking / File đơn: xử lý từng vùng liền nhau như một lần sửa (tạo chứng từ, khu vực, GHTK...).
+  const blocks = pnV2Blocks_(rows);
+  blocks.forEach(([a, b], k) => {
+    if (k < 40 && !pnV2OverBudget_()) pnV2HandleRows_(name, a, b, {c1, c2});
+    else pnQueueEdit_(name, a, b);
+  });
+  return {ok: true, rows: rows.length, blocks: blocks.length};
+}
