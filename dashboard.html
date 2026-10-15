@@ -387,6 +387,7 @@ tbody tr:hover td { background: var(--surface-2); }
         </div>
       </div>
       <div class="ostats" id="ordersStats"></div>
+      <div class="tbl-wrap" id="ordersBreak"></div>
       <div class="legend" id="ordersLegend"></div>
       <div class="chart" id="ordersChart"></div>
       <div class="tbl-wrap" id="ordersTable" hidden></div>
@@ -435,6 +436,18 @@ tbody tr:hover td { background: var(--surface-2); }
           <div class="right"><input type="search" id="prodSearch" class="search" placeholder="Tìm sản phẩm" aria-label="Tìm sản phẩm"></div>
         </div>
         <div class="tbl-wrap" id="prodTable"></div>
+      </section>
+    </div>
+
+    <div class="grid" id="pnExtra" hidden>
+      <section class="card c5">
+        <div class="card-h"><h2>Phân loại hàng hoàn PN</h2><span class="sub" id="pnClassSub"></span></div>
+        <div class="tbl-wrap" id="pnClass"></div>
+      </section>
+      <section class="card c7">
+        <div class="card-h"><h2>Ghi chú hàng hoàn PN</h2><span class="sub" id="pnNoteSub"></span></div>
+        <div class="legend" id="pnNoteLegend"></div>
+        <div class="hbars" id="pnNote"></div>
       </section>
     </div>
 
@@ -624,6 +637,12 @@ tbody tr:hover td { background: var(--surface-2); }
           var list = products[src], name = list[Math.min(list.length - 1, Math.floor(Math.pow(rnd(), 1.6) * list.length))];
           if (dd <= 100) addM("product", dt, src, name, st, qty);
           addM("cond", dt, src, "Sản phẩm", st, qty);
+          if (src === "PN") {
+            var cl = rnd() < 0.7 ? "Hoàn trả" : "Hàng thu hồi";
+            addM("pnclass", dt, "PN", cl, st, qty);
+            var nts = st === "Bình thường" ? ["Bình thường"] : [st].concat(rnd() < 0.25 ? ["Khác"] : []);
+            nts.forEach(function (nt) { addM("pnnote", dt, "PN", nt, cl, qty); });
+          }
         }
       });
     }
@@ -721,7 +740,7 @@ tbody tr:hover td { background: var(--surface-2); }
   }
 
   // Phiên bản Dashboard_VTD.gs mà trang này cần (trùng DASH_BUILD_VERSION trong file .gs)
-  var EXPECTED_VERSION = "2026-10-16d";
+  var EXPECTED_VERSION = "2026-10-16e";
   function versionWarnings(p) {
     var s = p.snapshot || {}, out = [];
     var steps = ' Cách cập nhật: dán bản <a href="https://github.com/khiempham5209-web/Web_app_VTD/blob/main/Dashboard_VTD.gs" target="_blank" rel="noopener">Dashboard_VTD.gs mới</a> → Lưu → chạy <b>dashBuild</b> → Deploy → Manage deployments → ✏️ → <b>New version</b>.';
@@ -887,6 +906,7 @@ tbody tr:hover td { background: var(--surface-2); }
     renderOrders(R);
     renderCond(R);
     renderProducts(R);
+    renderPnExtra(R);
     renderTrend(R, cur, prev);
     renderKenh(cur);
     renderLoai(cur);
@@ -1255,6 +1275,69 @@ tbody tr:hover td { background: var(--surface-2); }
   }
   function sumObj(o) { var s = 0; for (var k in o) s += o[k]; return s; }
 
+  // Chia nhỏ 3 chỉ số: Tất cả shop → theo shop; 1 shop → theo loại siêu thị
+  function measureBy(a, b) {
+    var byShop = state.shop === "all", out = {};
+    var row = function (k) { return out[k] || (out[k] = {order: 0, recv: 0, hand: 0, recvKnown: true}); };
+    state.data.mfacts.forEach(function (f) {
+      if (f[0] < a || f[0] > b || !state.srcOn[f[1]]) return;
+      var m = f[8] === "order" ? "order" : f[8] === "handover" ? "hand" : null;
+      if (m) row(byShop ? f[1] : f[2])[m] += f[6];
+    });
+    state.data.facts.forEach(function (f) {
+      if (f[0] < a || f[0] > b || !state.srcOn[f[1]] || f[3] !== "Chứng từ") return;
+      // VTD ghi SLOG chứ không ghi siêu thị trên app → khi xem theo siêu thị không chia được chứng từ VTD
+      if (!byShop && f[1] === "VTD") return;
+      row(byShop ? f[1] : f[2]).recv += f[6];
+    });
+    return out;
+  }
+  function deltaCell(v, p) {
+    if (!p) return '<small style="color:var(--fg-3)">—</small>';
+    var d = Math.round((v - p) / p * 100);
+    return '<small class="delta">' + (d >= 0 ? "▲ +" : "▼ ") + d + "%</small>";
+  }
+  function renderOrdersBreak(R, ms, hasRecv) {
+    var byShop = state.shop === "all";
+    var cur = measureBy(R.from, R.to), prv = measureBy(R.pFrom, R.pTo);
+    var keys = Object.keys(cur);
+    if (byShop) keys = SOURCES.map(function (s) { return s.key; }).filter(function (k) { return cur[k]; });
+    else keys.sort(function (a, b) { return cur[b].order - cur[a].order || cur[b].recv - cur[a].recv; });
+    if (!keys.length) { $("ordersBreak").innerHTML = ""; return; }
+    // 1 shop có nhiều siêu thị: giữ 8 dòng lớn nhất, gộp phần còn lại
+    if (!byShop && keys.length > 9) {
+      var rest = keys.slice(8), other = {order: 0, recv: 0, hand: 0}, otherP = {order: 0, recv: 0, hand: 0};
+      rest.forEach(function (k) { ["order", "recv", "hand"].forEach(function (m) { other[m] += cur[k][m]; otherP[m] += prv[k] ? prv[k][m] : 0; }); });
+      keys = keys.slice(0, 8).concat(["__other"]);
+      cur.__other = other; prv.__other = otherP;
+    }
+    var tot = {order: 0, recv: 0, hand: 0};
+    keys.forEach(function (k) { ["order", "recv", "hand"].forEach(function (m) { tot[m] += cur[k][m]; }); });
+    var vtdNoStore = !byShop && state.shop === "VTD";
+    var label = function (k) {
+      if (k === "__other") return "Khác (" + (Object.keys(cur).length - 9) + ")";
+      if (byShop) return '<span class="src-tag" style="color:var(--fg)"><i style="background:' + SRC[k].color + '"></i>' + esc(SRC[k].label) + "</span>";
+      return esc(k);
+    };
+    var head = '<tr><th>' + (byShop ? "Shop" : "Loại siêu thị") + "</th>" + ms.map(function (m) { return '<th class="n"><span class="src-tag"><i style="background:' + m.color + '"></i>' + esc(m.label) + "</span></th>"; }).join("")
+      + (hasRecv && !vtdNoStore ? '<th class="n">Tỷ lệ nhận</th>' : "") + "<th>Tỷ trọng đơn lên</th></tr>";
+    var body = keys.map(function (k) {
+      var c = cur[k], p = prv[k] || {order: 0, recv: 0, hand: 0}, share = tot.order ? c.order / tot.order * 100 : 0;
+      var noRecv = (byShop && k === "TH") || vtdNoStore;
+      return "<tr><td>" + label(k) + "</td>" + ms.map(function (m) {
+        if (m.key === "recv" && noRecv) return '<td class="n" style="color:var(--fg-3)" title="' + (k === "TH" ? "TH không có chứng từ" : "App VTD ghi SLOG, không ghi siêu thị") + '">–</td>';
+        return '<td class="n"><b>' + n(c[m.key]) + "</b> " + deltaCell(c[m.key], p[m.key]) + "</td>";
+      }).join("")
+        + (hasRecv && !vtdNoStore ? '<td class="n">' + (noRecv || !c.order ? "–" : (c.recv / c.order * 100).toFixed(0) + "%") + "</td>" : "")
+        + '<td><div style="display:flex;align-items:center;gap:6px"><div class="share" style="flex:1;min-width:70px"><span style="width:' + share + "%;background:" + (byShop ? SRC[k].color : "var(--m-order)") + '"></span></div><small style="color:var(--fg-3);min-width:30px;text-align:right">' + share.toFixed(0) + "%</small></div></td></tr>";
+    }).join("");
+    var foot = '<tr><td><b>Tổng</b></td>' + ms.map(function (m) { return '<td class="n"><b>' + (m.key === "recv" && vtdNoStore ? "–" : n(tot[m.key])) + "</b></td>"; }).join("")
+      + (hasRecv && !vtdNoStore ? '<td class="n"><b>' + (tot.order ? (tot.recv / tot.order * 100).toFixed(0) + "%" : "–") + "</b></td>" : "") + "<td></td></tr>";
+    $("ordersBreak").innerHTML = '<p class="mini-h">' + (byShop ? "Theo shop" : "Theo loại siêu thị · " + esc(SRC[state.shop].label)) + ' <span style="font-weight:400;color:var(--fg-3)">· % so với ' + esc(R.pLabel) + "</span></p>"
+      + "<table><thead>" + head + "</thead><tbody>" + body + foot + "</tbody></table>"
+      + (vtdNoStore && hasRecv ? '<p class="foot-note" style="padding:4px 0 0">Chứng từ VTD nhập trên app ghi theo SLOG, chưa chia được theo siêu thị. Xem tổng chứng từ VTD ở ô phía trên.</p>' : "");
+  }
+
   function renderOrders(R) {
     document.querySelectorAll("#granSeg button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.g === state.gran)); });
     var g = state.gran, cur = measureDaily(R.from, R.to), prv = measureDaily(R.pFrom, R.pTo);
@@ -1278,6 +1361,7 @@ tbody tr:hover td { background: var(--surface-2); }
         + '</span><span class="s">' + (ptot.order ? '<span class="delta">' + (dp >= 0 ? "▲ +" : "▼ ") + dp.toFixed(1).replace(".", ",") + " điểm</span><span>vs " + esc(R.pLabel) + "</span>" : "<span>chưa có số kỳ so sánh</span>") + "</span></div>");
     }
     $("ordersStats").innerHTML = stats.join("");
+    renderOrdersBreak(R, ms, hasRecv);
     $("ordersSub").textContent = shopLabel() + " · đơn lên theo Ngày lên đơn, chứng từ theo ngày nhập trên app, bàn giao theo Ngày bàn giao CT";
 
     // Gộp theo ngày / tuần / tháng
@@ -1409,6 +1493,58 @@ tbody tr:hover td { background: var(--surface-2); }
           + '<td class="n"><b>' + n(r.qty) + '</b></td><td class="n">' + n(r.lines) + '</td><td class="n" style="color:' + (rate != null && rate >= 10 ? "var(--critical-ink)" : "inherit") + '">' + (rate == null ? "—" : rate.toFixed(0) + "%") + "</td>"
           + "<td>" + (top.length ? top.map(function (t) { return '<span class="pill" style="margin:1px 2px">' + esc(t) + " · " + n(r.statuses[t]) + "</span>"; }).join("") : '<span style="color:var(--fg-3)">–</span>') + "</td></tr>";
       }).join("") + "</tbody></table>";
+  }
+
+  /* ---- PN: Phân loại & Ghi chú (tab Hoàn sản phẩm) ---- */
+  function pnAgg(metricKey, a, b) {
+    var o = {};
+    state.data.mfacts.forEach(function (f) {
+      if (f[8] !== metricKey || f[1] !== "PN" || f[0] < a || f[0] > b) return;
+      var r = o[f[2]] || (o[f[2]] = {qty: 0, lines: 0, by: {}});
+      r.qty += f[7]; r.lines += f[6]; r.by[f[3]] = (r.by[f[3]] || 0) + f[7];
+    });
+    return o;
+  }
+  function renderPnExtra(R) {
+    var show = state.shop === "PN";
+    $("pnExtra").hidden = !show;
+    if (!show) return;
+    var cls = pnAgg("pnclass", R.from, R.to), clsP = pnAgg("pnclass", R.pFrom, R.pTo);
+    var keys = Object.keys(cls).sort(function (a, b) { return cls[b].qty - cls[a].qty; });
+    var total = keys.reduce(function (a, k) { return a + cls[k].qty; }, 0);
+    $("pnClassSub").textContent = n(total) + " đơn vị sản phẩm · vs " + R.pLabel;
+    // Màu cố định theo phân loại để 2 bảng khớp nhau
+    var CLS_COLORS = {"Hoàn trả": LOAI_COLORS[0], "Hàng thu hồi": LOAI_COLORS[1]};
+    var colorOf = function (k) { return CLS_COLORS[k] || "var(--fg-3)"; };
+    if (!keys.length) {
+      $("pnClass").innerHTML = '<div class="empty">Chưa có dữ liệu phân loại trong khoảng này. Cần bản Dashboard_VTD.gs ' + EXPECTED_VERSION + " và chạy dashBuild.</div>";
+    } else {
+      $("pnClass").innerHTML = '<table><thead><tr><th>Phân loại</th><th class="n">Số lượng</th><th>Tỷ trọng</th><th class="n">Số dòng</th><th class="n">Tỷ lệ lỗi</th><th class="n">So sánh</th></tr></thead><tbody>'
+        + keys.map(function (k) {
+          var r = cls[k], p = clsP[k] ? clsP[k].qty : 0, share = total ? r.qty / total * 100 : 0;
+          var known = 0, issue = 0;
+          Object.keys(r.by).forEach(function (s) { if (isBlank(s)) return; known += r.by[s]; if (!isNormal(s)) issue += r.by[s]; });
+          var d = p ? Math.round((r.qty - p) / p * 100) : null;
+          return '<tr><td><span class="src-tag" style="color:var(--fg)"><i style="background:' + colorOf(k) + '"></i>' + esc(k) + '</span></td><td class="n"><b>' + n(r.qty) + "</b></td>"
+            + '<td><div class="share" style="min-width:80px"><span style="width:' + share + "%;background:" + colorOf(k) + '"></span></div><small style="color:var(--fg-3)">' + share.toFixed(0) + "%</small></td>"
+            + '<td class="n">' + n(r.lines) + '</td><td class="n">' + (known ? (issue / known * 100).toFixed(0) + "%" : "—") + "</td>"
+            + '<td class="n"><span class="delta">' + (d == null ? "—" : (d >= 0 ? "▲ +" : "▼ ") + d + "%") + '</span> <small style="color:var(--fg-3)">(' + n(p) + ")</small></td></tr>";
+        }).join("") + "</tbody></table>";
+    }
+    // Ghi chú: 1 dòng sản phẩm có thể có nhiều ghi chú → tỷ lệ tính trên tổng số lượng, cộng lại có thể quá 100%
+    var notes = pnAgg("pnnote", R.from, R.to), notesP = pnAgg("pnnote", R.pFrom, R.pTo);
+    var nk = Object.keys(notes).sort(function (a, b) { return notes[b].qty - notes[a].qty; });
+    $("pnNoteSub").textContent = "số lượng sản phẩm có từng ghi chú · % trên tổng " + n(total) + " (1 sản phẩm có thể nhiều ghi chú)";
+    var clsKeys = {};
+    nk.forEach(function (k) { Object.keys(notes[k].by).forEach(function (c) { clsKeys[c] = 1; }); });
+    $("pnNoteLegend").innerHTML = Object.keys(clsKeys).map(function (c) { return '<span><i style="background:' + colorOf(c) + '"></i>' + esc(c) + "</span>"; }).join("");
+    var rows = nk.map(function (k) {
+      var r = notes[k], p = notesP[k] ? notesP[k].qty : 0, d = p ? Math.round((r.qty - p) / p * 100) : null;
+      return {label: k + (d == null ? "" : "  (" + (d >= 0 ? "+" : "") + d + "%)"), value: r.qty,
+        segs: Object.keys(r.by).sort().map(function (c) { return {v: r.by[c], color: colorOf(c), label: c}; })};
+    });
+    $("pnNote").innerHTML = hbarsHtml(rows, rows.length ? rows[0].value : 1, {pctOf: total || 1});
+    bindHbarTips($("pnNote"));
   }
 
   /* ---- Chứng từ chưa nhận (mỗi shop 1 bảng riêng) ---- */

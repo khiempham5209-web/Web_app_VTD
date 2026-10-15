@@ -14,12 +14,13 @@
  * _DASH_FACT: mỗi dòng = [Ngày, Nguồn, Kênh, Loại, User, Giờ, Số dòng, Số lượng, Chỉ số]
  *   Chỉ số: op (thao tác nhập trên app) · order (lên đơn) · handover (bàn giao CT về shop)
  *           cond (tình trạng hoàn, Kênh = Chứng từ/Sản phẩm) · product (sản phẩm hoàn, Kênh = tên SP)
+ *           pnclass (PN: Kênh = Phân loại, Loại = Tình trạng) · pnnote (PN: Kênh = Ghi chú, Loại = Phân loại)
  *
  * Tốc độ: mỗi sheet nguồn chỉ đọc đúng các cột cần (dash_read_), không đọc cả bảng.
  */
 
 // Đổi mỗi lần sửa file này — dashboard hiện số phiên bản để biết máy chủ đã chạy bản mới chưa
-const DASH_BUILD_VERSION = "2026-10-16d";
+const DASH_BUILD_VERSION = "2026-10-16e";
 
 const DASH_CONFIG = {
   days: 200,               // số ngày lịch sử cho thao tác / lên đơn / bàn giao / tình trạng
@@ -514,7 +515,9 @@ function dash_collectPn_(add, now, metric) {
       user: [["user thao tac", "user"]],
       qty: [["so luong"]],
       name: [["ten san pham", "ten vat tu"]],
-      status: [["tinh trang ff", "tinh trang"]]
+      status: [["tinh trang ff", "tinh trang"]],
+      cls: [["phan loai"]],
+      note: [["ghi chu"]]
     }), c = d.c;
     d.rows.forEach(row => {
       const dateKey = c.date >= 0 ? dash_key_(row[c.date]) : "";
@@ -525,6 +528,10 @@ function dash_collectPn_(add, now, metric) {
       const name = String(get(row, c.name) || "").trim();
       if (name) metric("product", "PN", dateKey, name, status, qty);
       metric("cond", "PN", dateKey, "Sản phẩm", status, qty);
+      // Phân loại (Hoàn trả / Hàng thu hồi) và Ghi chú (nhiều lựa chọn, nối bằng "; ")
+      const cls = String(get(row, c.cls) || "").trim() || "(chưa phân loại)";
+      metric("pnclass", "PN", dateKey, cls, status, qty);
+      dash_noteItems_(get(row, c.note)).forEach(note => metric("pnnote", "PN", dateKey, note, cls, qty));
     });
   }
   return backlog;
@@ -621,6 +628,21 @@ function dash_hhmm_(value) {
   if (value instanceof Date && !isNaN(value.getTime())) return ("0" + value.getHours()).slice(-2) + ":" + ("0" + value.getMinutes()).slice(-2);
   const m = String(value == null ? "" : value).match(/(\d{1,2}):(\d{2})/);
   return m ? ("0" + m[1]).slice(-2) + ":" + m[2] : "";
+}
+
+// "Bình thường; Hàng cận date; Khác: móp góc" → ["Bình thường", "Hàng cận date", "Khác"]
+function dash_noteItems_(value) {
+  const text = String(value == null ? "" : value).trim();
+  if (!text) return ["(không ghi chú)"];
+  const seen = {}, out = [];
+  text.split(/\s*;\s*/).forEach(part => {
+    let item = part.trim();
+    if (!item) return;
+    if (/^kh[áa]c\s*:/i.test(item)) item = "Khác";
+    if (item.length > 40) item = item.slice(0, 40) + "…";
+    if (!seen[item]) { seen[item] = true; out.push(item); }
+  });
+  return out.length ? out : ["(không ghi chú)"];
 }
 
 function dash_user_(value) {
