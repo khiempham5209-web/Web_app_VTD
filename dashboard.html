@@ -185,6 +185,9 @@ main { padding-block: 16px 40px; display: grid; gap: 16px; }
 .seg-sm button { padding: 3px 9px; font-size: 12px; }
 .ostats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
 .qc3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.qc-box { max-height: 420px; overflow: auto; }
+.qc-box thead th { position: sticky; top: 0; z-index: 1; }
+tr.qc-total td { border-top: 1px solid var(--line-strong); background: var(--surface-2); }
 @media (max-width: 760px) { .ostats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .ostat { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ostat .k { font-size: 12px; color: var(--fg-2); display: flex; align-items: center; gap: 6px; }
@@ -1309,45 +1312,69 @@ tbody tr:hover td { background: var(--surface-2); }
     return ' <small class="delta">' + (d >= 0 ? "▲+" : "▼") + d.toFixed(0) + "đ</small>";
   }
 
-  /* So sánh nhanh theo mốc cố định (không theo bộ lọc thời gian, có theo shop):
-   * hôm nay ↔ hôm qua · tuần này ↔ tuần trước cùng kỳ · tháng này ↔ tháng trước cùng kỳ */
-  function quickPeriods() {
-    var t = state.data.today, mon = addDays(t, -dowIdx(t)), d = Number(t.slice(8, 10));
-    var m1 = t.slice(0, 8) + "01", pm1 = shiftMonth(m1, -1);
-    return [
-      {label: "Hôm nay", a: t, b: t, pLabel: "Hôm qua", pa: addDays(t, -1), pb: addDays(t, -1)},
-      {label: "Hôm qua", a: addDays(t, -1), b: addDays(t, -1), pLabel: "Hôm kia", pa: addDays(t, -2), pb: addDays(t, -2)},
-      {label: "Tuần này (" + dmy(mon) + "–" + dmy(t) + ")", a: mon, b: t, pLabel: "Tuần trước cùng kỳ", pa: addDays(mon, -7), pb: addDays(t, -7)},
-      {label: "Tuần trước (" + dmy(addDays(mon, -7)) + "–" + dmy(addDays(mon, -1)) + ")", a: addDays(mon, -7), b: addDays(mon, -1), pLabel: "2 tuần trước", pa: addDays(mon, -14), pb: addDays(mon, -8)},
-      {label: "Tháng này (" + dmy(m1) + "–" + dmy(t) + ")", a: m1, b: t, pLabel: "Tháng trước cùng kỳ", pa: pm1, pb: shiftMonth(t, -1) < pm1 ? pm1 : shiftMonth(t, -1)},
-      {label: "Tháng trước (" + Number(pm1.slice(5, 7)) + "/" + pm1.slice(0, 4) + ")", a: pm1, b: addDays(m1, -1), pLabel: "2 tháng trước", pa: shiftMonth(pm1, -1), pb: addDays(pm1, -1)}
-    ].map(function (p) { p.dayNo = d; return p; });
+  /* 3 bảng so sánh theo BỘ LỌC PHÍA TRÊN: khoảng thời gian + shop đang chọn, gộp theo Ngày / Tuần / Tháng.
+   * Mỗi dòng (1 ngày / tuần / tháng trong khoảng chọn) so với kỳ liền trước cùng độ dài:
+   *   ngày ↔ ngày trước · tuần ↔ cùng các ngày của tuần trước · tháng ↔ cùng các ngày của tháng trước.
+   * Dòng Tổng = cả khoảng đang chọn ↔ kỳ ở ô "So sánh với". */
+  function compareRows(R, g) {
+    var rows = [], seen = {};
+    for (var k = R.from; k <= R.to; k = addDays(k, 1)) {
+      var bk = bucketOf(k, g);
+      if (seen[bk]) continue;
+      seen[bk] = true;
+      // Kỳ của dòng, cắt theo khoảng đang chọn
+      var a = bk < R.from ? R.from : bk, b;
+      if (g === "day") b = bk;
+      else if (g === "week") b = addDays(bk, 6);
+      else b = addDays(shiftMonth(bk + "-01", 1), -1);
+      if (b > R.to) b = R.to;
+      if (g === "month") a = a.length === 7 ? a + "-01" : a;
+      var pa, pb, plabel;
+      if (g === "day") { pa = pb = addDays(a, -1); plabel = dmy(pa); }
+      else if (g === "week") { pa = addDays(a, -7); pb = addDays(b, -7); plabel = dmy(pa) + "–" + dmy(pb); }
+      else {
+        // Hết tháng thì so với trọn tháng trước (30/09 ↔ 31/08), chưa hết tháng thì so cùng số ngày
+        var monthEnd = function (k) { return addDays(shiftMonth(k.slice(0, 8) + "01", 1), -1); };
+        pa = shiftMonth(a, -1);
+        pb = b === monthEnd(b) ? monthEnd(shiftMonth(b.slice(0, 8) + "01", -1)) : shiftMonth(b, -1);
+        plabel = dmy(pa) + "–" + dmy(pb);
+      }
+      var label = g === "day" ? DOW[dowIdx(a)] + ", " + dmyFull(a)
+        : g === "week" ? "Tuần " + dmy(a) + "–" + dmy(b)
+        : "Tháng " + Number(a.slice(5, 7)) + "/" + a.slice(0, 4) + (a.slice(8) !== "01" || b !== addDays(shiftMonth(a.slice(0, 8) + "01", 1), -1) ? " (" + dmy(a) + "–" + dmy(b) + ")" : "");
+      rows.push({label: label, a: a, b: b, pLabel: plabel, cur: totalIn(a, b), prv: totalIn(pa, pb)});
+    }
+    rows.reverse();   // mới nhất trước
+    rows.push({total: true, label: "Tổng kỳ chọn", a: R.from, b: R.to, pLabel: R.pLabel, cur: totalIn(R.from, R.to), prv: totalIn(R.pFrom, R.pTo)});
+    return rows;
   }
-  function renderQuickCompare(hasRecv) {
-    var periods = quickPeriods();
-    var rows = periods.map(function (p) { return {p: p, cur: totalIn(p.a, p.b), prv: totalIn(p.pa, p.pb)}; });
-    var vs = function (v, p, r) { return deltaCell(v, p) + ' <small style="color:var(--fg-3)">' + esc(r.p.pLabel) + " " + n(p) + "</small>"; };
+  function renderQuickCompare(R, hasRecv) {
+    var g = state.gran, unit = g === "day" ? "ngày" : g === "week" ? "tuần" : "tháng";
+    var rows = compareRows(R, g);
+    var vs = function (v, p, r) { return deltaCell(v, p) + ' <small style="color:var(--fg-3)">' + esc(r.pLabel) + ": " + n(p) + "</small>"; };
     var table = function (title, note, head, rowFn) {
-      return '<div class="tbl-wrap"><p class="mini-h">' + title + ' <span style="font-weight:400;color:var(--fg-3)">· ' + note + "</span></p><table><thead><tr><th>Kỳ</th>"
+      return '<div class="tbl-wrap qc-box"><p class="mini-h">' + title + ' <span style="font-weight:400;color:var(--fg-3)">· ' + note + "</span></p><table><thead><tr><th>" + (g === "day" ? "Ngày" : g === "week" ? "Tuần" : "Tháng") + "</th>"
         + head.map(function (h) { return '<th class="n">' + h + "</th>"; }).join("") + "</tr></thead><tbody>"
-        + rows.map(function (r) { return "<tr><td>" + esc(r.p.label) + "</td>" + rowFn(r) + "</tr>"; }).join("") + "</tbody></table></div>";
+        + rows.map(function (r) { return "<tr" + (r.total ? ' class="qc-total"' : "") + "><td>" + (r.total ? "<b>" + esc(r.label) + "</b>" : esc(r.label)) + "</td>" + rowFn(r) + "</tr>"; }).join("") + "</tbody></table></div>";
     };
     // 1) Đơn lên
-    var t1 = table("1. Đơn lên", "theo ngày lên đơn", ["Đơn lên", "So với"], function (r) {
+    var t1 = table("1. Đơn lên", "theo ngày lên đơn", ["Đơn lên", "So với kỳ trước"], function (r) {
       return '<td class="n"><b>' + n(r.cur.order) + '</b></td><td class="n">' + vs(r.cur.order, r.prv.order, r) + "</td>";
     });
-    // 2) Tỷ lệ nhận chứng từ của chính các đơn lên trong kỳ (trừ shop hủy), đến hiện tại
-    var t2 = hasRecv ? table("2. Tỷ lệ nhận chứng từ", "đã nhận / đơn lên trong kỳ, trừ shop hủy", ["Đã nhận / Đơn", "Tỷ lệ", "So với"], function (r) {
+    // 2) Tỷ lệ nhận chứng từ của chính các đơn lên trong kỳ (trừ shop hủy), tính đến hiện tại
+    var t2 = hasRecv ? table("2. Tỷ lệ nhận chứng từ", "đã nhận / đơn lên trong kỳ, trừ shop hủy", ["Đã nhận / Đơn", "Tỷ lệ", "So với kỳ trước"], function (r) {
       var rr = rateOf(r.cur, "ordrecv"), pr = rateOf(r.prv, "ordrecv");
       return '<td class="n">' + n(r.cur.ordrecv) + " / " + n(r.cur.order - r.cur.ordcancel) + '</td><td class="n"><b>' + pct(rr) + "</b></td>"
-        + '<td class="n">' + (rr == null || pr == null ? '<small style="color:var(--fg-3)">—</small>' : pointCell(rr, pr) + ' <small style="color:var(--fg-3)">' + esc(r.p.pLabel) + " " + pct(pr) + "</small>") + "</td>";
+        + '<td class="n">' + (rr == null || pr == null ? '<small style="color:var(--fg-3)">—</small>' : pointCell(rr, pr) + ' <small style="color:var(--fg-3)">' + esc(r.pLabel) + ": " + pct(pr) + "</small>") + "</td>";
     }) : "";
     // 3) Chứng từ đã nhận trong kỳ (theo ngày nhập trên app)
-    var t3 = hasRecv ? table("3. Chứng từ đã nhận", "theo ngày nhập trên app", ["CT đã nhận", "So với", "TB/ngày"], function (r) {
-      var days = diffDays(r.p.a, r.p.b) + 1;
+    var t3 = hasRecv ? table("3. Chứng từ đã nhận", "theo ngày nhập trên app", ["CT đã nhận", "So với kỳ trước", "TB/ngày"], function (r) {
+      var days = diffDays(r.a, r.b) + 1;
       return '<td class="n"><b>' + n(r.cur.recvAct) + '</b></td><td class="n">' + vs(r.cur.recvAct, r.prv.recvAct, r) + '</td><td class="n">' + n(r.cur.recvAct / days) + "</td>";
     }) : "";
-    $("quickCmp").innerHTML = '<p class="mini-h" style="margin:4px 0 0">So sánh nhanh <span style="font-weight:400;color:var(--fg-3)">· tính đến hôm nay ' + esc(dmyFull(state.data.today)) + ", không theo bộ lọc thời gian, theo shop đang chọn</span></p>"
+    $("quickCmp").innerHTML = '<p class="mini-h" style="margin:4px 0 0">So sánh theo ' + unit + ' <span style="font-weight:400;color:var(--fg-3)">· '
+      + esc(R.len === 1 ? dmyFull(R.from) : dmyFull(R.from) + " – " + dmyFull(R.to)) + " · " + esc(shopLabel())
+      + " · mỗi dòng so với " + unit + " liền trước (cùng số ngày); dòng Tổng so với " + esc(R.pLabel) + " (ô So sánh với). Đổi gộp bằng nút Ngày / Tuần / Tháng.</span></p>"
       + '<div class="qc3">' + t1 + t2 + t3 + "</div>";
   }
 
@@ -1382,7 +1409,7 @@ tbody tr:hover td { background: var(--surface-2); }
     if (hasHand) stats.push(tile("", "Bàn giao trong kỳ (theo ngày bàn giao)", n(cur.handAct), deltaHtml(cur.handAct, prv.handAct)));
     $("ordersStats").innerHTML = stats.join("");
     $("ordersSub").textContent = shopLabel() + " · tỷ lệ tính theo ngày lên đơn, đến hiện tại; đơn mới lên chưa kịp nhận nên tỷ lệ kỳ gần đây thường thấp hơn";
-    renderQuickCompare(hasRecv);
+    renderQuickCompare(R, hasRecv);
     renderOrdersBreak(R, hasRecv, hasHand);
 
     // Gộp theo ngày / tuần / tháng (theo ngày lên đơn cho cả 3 cột)
