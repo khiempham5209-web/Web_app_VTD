@@ -8865,9 +8865,33 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         clearTimeout(timer);
       }
     }
+    // Ảnh nền Drive lấy qua Apps Script (action themeImage): web và APK đều bị Google chặn tải thẳng từ Drive.
+    // Gửi kèm phiên bản đang có, ảnh không đổi thì server chỉ trả unchanged.
+    async function themeImageFromApi(fileId, knownVersion){
+      const controller = window.AbortController ? new AbortController() : null;
+      const timer = setTimeout(() => { try { if (controller) controller.abort(); } catch (err) {} }, 60000);
+      try {
+        const response = await scriptApiFetch(activeApiUrl(), {action:"themeImage", params:{fileId, knownVersion, appVersion: APP_VERSION}}, {
+          signal: controller ? controller.signal : undefined
+        });
+        return await readApiJson(response, "API ảnh nền");
+      } catch (err) {
+        return {ok:false, message:String(err && err.message || err)};
+      } finally {
+        clearTimeout(timer);
+      }
+    }
     async function remoteThemeAsset(asset, currentSignature){
       const url = normalizeThemeAssetUrl(asset && (asset.url || asset.imageUrl || asset.driveUrl || asset.fileId));
       if (!url) return null;
+      const fileId = String(asset.fileId || "") || themeAssetFileId(url);
+      if (fileId) {
+        const res = await themeImageFromApi(fileId, String(currentSignature || ""));
+        if (res && res.ok && res.unchanged) return {changed:false, signature:String(res.version || currentSignature || ""), dataUrl:""};
+        if (res && res.ok && res.dataUrl) return {changed:true, signature:String(res.version || ""), dataUrl:String(res.dataUrl)};
+        if (res && res.message && !/Action khong hop le/i.test(res.message)) console.warn("Ảnh nền qua Apps Script:", res.message);
+        // Apps Script chưa có action themeImage → thử tải thẳng như cũ
+      }
       let signature = `${String(asset.version || "")}|${url}`;
       try {
         const head = await fetchThemeAsset(url, {method:"HEAD"}, 15000);
