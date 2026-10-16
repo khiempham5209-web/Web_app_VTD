@@ -8904,9 +8904,16 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       if (!url) return null;
       const fileId = String(asset.fileId || "") || themeAssetFileId(url);
       if (fileId) {
-        const res = await themeImageFromApi(fileId, String(currentSignature || ""));
-        if (res && res.ok && res.unchanged) return {changed:false, signature:String(res.version || currentSignature || ""), dataUrl:""};
-        if (res && res.ok && res.dataUrl) return {changed:true, signature:String(res.version || ""), dataUrl:String(res.dataUrl)};
+        const sig = String(currentSignature || "");
+        const known = sig.slice(-3) === "|r1" ? sig.slice(0, -3) : "";
+        const res = await themeImageFromApi(fileId, known);
+        if (res && res.ok && res.unchanged) return {changed:false, signature:String(currentSignature || ""), dataUrl:""};
+        if (res && res.ok && res.dataUrl) {
+          // Chrome bỏ qua giá trị CSS dài quá ~2 triệu ký tự → ảnh lớn phải thu nhỏ (cạnh dài 1600px, JPEG) mới hiện
+          const raw = String(res.dataUrl);
+          const dataUrl = raw.length > 600000 ? await resizeLoginBgImage(raw) : raw;
+          return {changed:true, signature:String(res.version || "") + "|r1", dataUrl};
+        }
         if (res && res.message && !/Action khong hop le/i.test(res.message)) console.warn("Ảnh nền qua Apps Script:", res.message);
         // Apps Script chưa có action themeImage → thử tải thẳng như cũ
       }
