@@ -5548,20 +5548,16 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       if (typeof initLoginAppearance === "function") initLoginAppearance();
       refreshLoginThemeOnce();
     }
-    // Màn đăng nhập: tải theme công khai (ảnh nền qua Apps Script) 1 lần mỗi lần mở app,
-    // để máy mới / máy chưa từng đăng nhập cũng có ảnh nền. Máy chưa lưu ảnh thì bỏ phiên bản đã biết để tải lại.
+    // Màn đăng nhập: tải theme công khai 1 lần mỗi lần mở app, để máy mới / máy chưa từng đăng nhập cũng có ảnh nền.
+    // Luôn bỏ phiên bản theme đã biết: cấu hình theme rất nhỏ, còn ảnh thì Apps Script chỉ gửi lại khi file Drive đổi
+    // (kể cả khi thay nội dung chính file cũ mà cấu hình theme không đổi).
     let loginThemeRefreshed = false;
     function refreshLoginThemeOnce(){
       if (loginThemeRefreshed) return;
       loginThemeRefreshed = true;
       setTimeout(() => {
-        Promise.resolve(typeof readStoredLoginBgImage === "function" ? readStoredLoginBgImage() : "")
-          .catch(() => "")
-          .then(image => {
-            if (!image) { try { localStorage.removeItem("vtd_public_theme_version"); } catch (err) {} }
-            return loadPublicThemeConfig(false);
-          })
-          .catch(err => console.warn("Theme màn đăng nhập:", err));
+        try { localStorage.removeItem("vtd_public_theme_version"); } catch (err) {}
+        Promise.resolve(loadPublicThemeConfig(false)).catch(err => console.warn("Theme màn đăng nhập:", err));
       }, 400);
     }
     function showApp(){ el("login").classList.add("hidden"); el("app").classList.remove("hidden"); }
