@@ -183,7 +183,8 @@ main { padding-block: 16px 40px; display: grid; gap: 16px; }
 }
 .search { width: 180px; max-width: 100%; }
 .seg-sm button { padding: 3px 9px; font-size: 12px; }
-.ostats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.ostats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.qc3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
 @media (max-width: 760px) { .ostats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .ostat { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ostat .k { font-size: 12px; color: var(--fg-2); display: flex; align-items: center; gap: 6px; }
@@ -377,7 +378,7 @@ tbody tr:hover td { background: var(--surface-2); }
 
     <section class="card" id="ordersCard">
       <div class="card-h">
-        <h2>Đơn lên · Chứng từ đã nhận · Bàn giao về shop</h2>
+        <h2>Đơn lên · Tỷ lệ nhận chứng từ · Bàn giao về shop</h2>
         <span class="sub" id="ordersSub"></span>
         <div class="right">
           <div class="seg seg-sm" id="granSeg" role="group" aria-label="Gộp theo">
@@ -389,6 +390,7 @@ tbody tr:hover td { background: var(--surface-2); }
         </div>
       </div>
       <div class="ostats" id="ordersStats"></div>
+      <div id="quickCmp"></div>
       <div class="tbl-wrap" id="ordersBreak"></div>
       <div class="legend" id="ordersLegend"></div>
       <div class="chart" id="ordersChart"></div>
@@ -614,8 +616,16 @@ tbody tr:hover td { background: var(--surface-2); }
     for (var dd = 130; dd >= 0; dd--) {
       var dt = addDays(today, -dd), dwk = dowIdx(dt), f2 = dwk === 6 ? 0.1 : dwk === 5 ? 0.7 : 1;
       var nO = {VTD: pois(165 * f2), PN: pois(48 * f2), TH: pois(30 * f2)};
-      for (var o = 0; o < nO.VTD; o++) addM("order", dt, "VTD", pickW(vtdStores), "Lên đơn", 1);
-      for (o = 0; o < nO.PN; o++) addM("order", dt, "PN", pickW(pnStore), "Lên đơn", 1);
+      var pRecv = Math.min(0.93, 0.08 + dd * 0.09), pHand = Math.min(0.88, dd * 0.07);
+      var orderOne = function (src, store) {
+        addM("order", dt, src, store, "Lên đơn", 1);
+        var u = rnd();
+        if (u < 0.02) addM("ordcancel", dt, src, store, "Shop hủy", 1);
+        else if (u < 0.02 + pRecv) addM("ordrecv", dt, src, store, "Đã nhận", 1);
+        if (rnd() < pHand) addM("ordhand", dt, src, store, "Đã bàn giao", 1);
+      };
+      for (var o = 0; o < nO.VTD; o++) orderOne("VTD", pickW(vtdStores));
+      for (o = 0; o < nO.PN; o++) orderOne("PN", pickW(pnStore));
       for (o = 0; o < nO.TH; o++) addM("order", dt, "TH", "TH Truemilk", "Lên đơn", 1);
       var nH = pois(36 * f2);
       for (o = 0; o < nH; o++) addM("handover", dt, "PN", pickW(pnStore), "Bàn giao", 1);
@@ -733,7 +743,7 @@ tbody tr:hover td { background: var(--surface-2); }
   }
 
   // Phiên bản Dashboard_VTD.gs mà trang này cần (trùng DASH_BUILD_VERSION trong file .gs)
-  var EXPECTED_VERSION = "2026-10-16f";
+  var EXPECTED_VERSION = "2026-10-16g";
   function versionWarnings(p) {
     var s = p.snapshot || {}, out = [];
     var steps = ' Cách cập nhật: dán bản <a href="https://github.com/khiempham5209-web/Web_app_VTD/blob/main/Dashboard_VTD.gs" target="_blank" rel="noopener">Dashboard_VTD.gs mới</a> → Lưu → chạy <b>dashBuild</b> → Deploy → Manage deployments → ✏️ → <b>New version</b>.';
@@ -1237,12 +1247,17 @@ tbody tr:hover td { background: var(--surface-2); }
     $("heat").onmouseleave = hideTip;
   }
 
-  /* ---- Đơn lên · Chứng từ đã nhận · Bàn giao ---- */
+  /* ---- Đơn lên · Tỷ lệ nhận chứng từ · Bàn giao ----
+   * Tỷ lệ nhận / bàn giao tính THEO NGÀY LÊN ĐƠN: trong các đơn lên trong kỳ, bao nhiêu đơn đã nhận chứng từ
+   * (đã bàn giao) tính đến hiện tại. Đơn Shop hủy OD không tính vào mẫu số.
+   * "CT nhận trong kỳ" / "Bàn giao trong kỳ" tính theo ngày nhập / ngày bàn giao (hoạt động trong kỳ).
+   */
   var MEASURES = [
     {key: "order", label: "Đơn lên", color: "var(--m-order)"},
-    {key: "recv", label: "Chứng từ đã nhận", color: "var(--m-recv)"},
-    {key: "hand", label: "Bàn giao về shop", color: "var(--m-hand)"}
+    {key: "ordrecv", label: "Đã nhận CT (của đơn lên)", color: "var(--m-recv)"},
+    {key: "ordhand", label: "Đã bàn giao (của đơn lên)", color: "var(--m-hand)"}
   ];
+  var M_KEYS = ["order", "ordrecv", "ordcancel", "ordhand", "recvAct", "handAct"];
   function bucketOf(k, g) {
     if (g === "month") return k.slice(0, 7);
     if (g === "week") return addDays(k, -dowIdx(k));        // thứ Hai đầu tuần
@@ -1253,141 +1268,161 @@ tbody tr:hover td { background: var(--surface-2); }
     if (g === "week") return (short ? "" : "Tuần ") + dmy(b) + (short ? "" : "–" + dmy(addDays(b, 6)));
     return short ? dmy(b) : DOW[dowIdx(b)] + ", " + dmyFull(b);
   }
-  // Ba chỉ số theo ngày trong [a, b] cho các shop đang xem
-  function measureDaily(a, b) {
-    var out = {order: {}, recv: {}, hand: {}};
+  function emptyM() { var o = {}; M_KEYS.forEach(function (k) { o[k] = 0; }); return o; }
+  // Gom chỉ số trong [a, b] theo khóa nhóm (ngày / shop / siêu thị). groupOf(f) trả null = bỏ qua.
+  function measureGroup(a, b, groupOf, opts) {
+    opts = opts || {};
+    var out = {};
+    var row = function (g) { return out[g] || (out[g] = emptyM()); };
+    var mmap = {order: "order", ordrecv: "ordrecv", ordcancel: "ordcancel", ordhand: "ordhand", handover: "handAct"};
     state.data.mfacts.forEach(function (f) {
-      if (f[0] < a || f[0] > b || !state.srcOn[f[1]]) return;
-      var m = f[8] === "order" ? "order" : f[8] === "handover" ? "hand" : null;
-      if (m) out[m][f[0]] = (out[m][f[0]] || 0) + f[6];
+      var m = mmap[f[8]];
+      if (!m || f[0] < a || f[0] > b || !state.srcOn[f[1]]) return;
+      var g = groupOf(f); if (g == null) return;
+      row(g)[m] += f[6];
     });
     state.data.facts.forEach(function (f) {
       if (f[0] < a || f[0] > b || !state.srcOn[f[1]] || f[3] !== "Chứng từ") return;
-      out.recv[f[0]] = (out.recv[f[0]] || 0) + f[6];
+      if (opts.skipVtdRecvAct && f[1] === "VTD") return;
+      var g = groupOf(f); if (g == null) return;
+      row(g).recvAct += f[6];
     });
     return out;
   }
-  function sumObj(o) { var s = 0; for (var k in o) s += o[k]; return s; }
-
-  // Chia nhỏ 3 chỉ số: Tất cả shop → theo shop; 1 shop → theo loại siêu thị
-  function measureBy(a, b) {
-    var byShop = state.shop === "all", out = {};
-    var row = function (k) { return out[k] || (out[k] = {order: 0, recv: 0, hand: 0, recvKnown: true}); };
-    state.data.mfacts.forEach(function (f) {
-      if (f[0] < a || f[0] > b || !state.srcOn[f[1]]) return;
-      var m = f[8] === "order" ? "order" : f[8] === "handover" ? "hand" : null;
-      if (m) row(byShop ? f[1] : f[2])[m] += f[6];
-    });
-    state.data.facts.forEach(function (f) {
-      if (f[0] < a || f[0] > b || !state.srcOn[f[1]] || f[3] !== "Chứng từ") return;
-      // VTD ghi SLOG chứ không ghi siêu thị trên app → khi xem theo siêu thị không chia được chứng từ VTD
-      if (!byShop && f[1] === "VTD") return;
-      row(byShop ? f[1] : f[2]).recv += f[6];
-    });
-    return out;
+  function sumM(groups) { var t = emptyM(); Object.keys(groups).forEach(function (g) { M_KEYS.forEach(function (k) { t[k] += groups[g][k]; }); }); return t; }
+  function totalIn(a, b) { return sumM(measureGroup(a, b, function () { return "all"; })); }
+  function rateOf(m, key) { var base = m.order - m.ordcancel; return base > 0 ? m[key] / base * 100 : null; }
+  function pct(v) { return v == null ? "—" : v.toFixed(1).replace(".", ",") + "%"; }
+  function pointDelta(v, p, lbl) {
+    if (v == null || p == null) return "<span>chưa có số kỳ so sánh</span>";
+    var d = v - p;
+    return '<span class="delta">' + (d >= 0 ? "▲ +" : "▼ ") + d.toFixed(1).replace(".", ",") + " điểm</span><span>vs " + esc(lbl || (CUR_R ? CUR_R.pLabel : "")) + " (" + pct(p) + ")</span>";
   }
   function deltaCell(v, p) {
     if (!p) return '<small style="color:var(--fg-3)">—</small>';
     var d = Math.round((v - p) / p * 100);
     return '<small class="delta">' + (d >= 0 ? "▲ +" : "▼ ") + d + "%</small>";
   }
-  function renderOrdersBreak(R, ms, hasRecv) {
-    var byShop = state.shop === "all";
-    var cur = measureBy(R.from, R.to), prv = measureBy(R.pFrom, R.pTo);
-    var keys = Object.keys(cur);
-    if (byShop) keys = SOURCES.map(function (s) { return s.key; }).filter(function (k) { return cur[k]; });
-    else keys.sort(function (a, b) { return cur[b].order - cur[a].order || cur[b].recv - cur[a].recv; });
-    if (!keys.length) { $("ordersBreak").innerHTML = ""; return; }
-    // 1 shop có nhiều siêu thị: giữ 8 dòng lớn nhất, gộp phần còn lại
-    if (!byShop && keys.length > 9) {
-      var rest = keys.slice(8), other = {order: 0, recv: 0, hand: 0}, otherP = {order: 0, recv: 0, hand: 0};
-      rest.forEach(function (k) { ["order", "recv", "hand"].forEach(function (m) { other[m] += cur[k][m]; otherP[m] += prv[k] ? prv[k][m] : 0; }); });
-      keys = keys.slice(0, 8).concat(["__other"]);
-      cur.__other = other; prv.__other = otherP;
-    }
-    var tot = {order: 0, recv: 0, hand: 0};
-    keys.forEach(function (k) { ["order", "recv", "hand"].forEach(function (m) { tot[m] += cur[k][m]; }); });
-    var vtdNoStore = !byShop && state.shop === "VTD";
-    var label = function (k) {
-      if (k === "__other") return "Khác (" + (Object.keys(cur).length - 9) + ")";
-      if (byShop) return '<span class="src-tag" style="color:var(--fg)"><i style="background:' + SRC[k].color + '"></i>' + esc(SRC[k].label) + "</span>";
-      return esc(k);
+  function pointCell(v, p) {
+    if (v == null || p == null) return "";
+    var d = v - p;
+    return ' <small class="delta">' + (d >= 0 ? "▲+" : "▼") + d.toFixed(0) + "đ</small>";
+  }
+
+  /* So sánh nhanh theo mốc cố định (không theo bộ lọc thời gian, có theo shop):
+   * hôm nay ↔ hôm qua · tuần này ↔ tuần trước cùng kỳ · tháng này ↔ tháng trước cùng kỳ */
+  function quickPeriods() {
+    var t = state.data.today, mon = addDays(t, -dowIdx(t)), d = Number(t.slice(8, 10));
+    var m1 = t.slice(0, 8) + "01", pm1 = shiftMonth(m1, -1);
+    return [
+      {label: "Hôm nay", a: t, b: t, pLabel: "Hôm qua", pa: addDays(t, -1), pb: addDays(t, -1)},
+      {label: "Hôm qua", a: addDays(t, -1), b: addDays(t, -1), pLabel: "Hôm kia", pa: addDays(t, -2), pb: addDays(t, -2)},
+      {label: "Tuần này (" + dmy(mon) + "–" + dmy(t) + ")", a: mon, b: t, pLabel: "Tuần trước cùng kỳ", pa: addDays(mon, -7), pb: addDays(t, -7)},
+      {label: "Tuần trước (" + dmy(addDays(mon, -7)) + "–" + dmy(addDays(mon, -1)) + ")", a: addDays(mon, -7), b: addDays(mon, -1), pLabel: "2 tuần trước", pa: addDays(mon, -14), pb: addDays(mon, -8)},
+      {label: "Tháng này (" + dmy(m1) + "–" + dmy(t) + ")", a: m1, b: t, pLabel: "Tháng trước cùng kỳ", pa: pm1, pb: shiftMonth(t, -1) < pm1 ? pm1 : shiftMonth(t, -1)},
+      {label: "Tháng trước (" + Number(pm1.slice(5, 7)) + "/" + pm1.slice(0, 4) + ")", a: pm1, b: addDays(m1, -1), pLabel: "2 tháng trước", pa: shiftMonth(pm1, -1), pb: addDays(pm1, -1)}
+    ].map(function (p) { p.dayNo = d; return p; });
+  }
+  function renderQuickCompare(hasRecv) {
+    var periods = quickPeriods();
+    var rows = periods.map(function (p) { return {p: p, cur: totalIn(p.a, p.b), prv: totalIn(p.pa, p.pb)}; });
+    var vs = function (v, p, r) { return deltaCell(v, p) + ' <small style="color:var(--fg-3)">' + esc(r.p.pLabel) + " " + n(p) + "</small>"; };
+    var table = function (title, note, head, rowFn) {
+      return '<div class="tbl-wrap"><p class="mini-h">' + title + ' <span style="font-weight:400;color:var(--fg-3)">· ' + note + "</span></p><table><thead><tr><th>Kỳ</th>"
+        + head.map(function (h) { return '<th class="n">' + h + "</th>"; }).join("") + "</tr></thead><tbody>"
+        + rows.map(function (r) { return "<tr><td>" + esc(r.p.label) + "</td>" + rowFn(r) + "</tr>"; }).join("") + "</tbody></table></div>";
     };
-    var head = '<tr><th>' + (byShop ? "Shop" : "Loại siêu thị") + "</th>" + ms.map(function (m) { return '<th class="n"><span class="src-tag"><i style="background:' + m.color + '"></i>' + esc(m.label) + "</span></th>"; }).join("")
-      + (hasRecv && !vtdNoStore ? '<th class="n">Tỷ lệ nhận</th>' : "") + "<th>Tỷ trọng đơn lên</th></tr>";
-    var body = keys.map(function (k) {
-      var c = cur[k], p = prv[k] || {order: 0, recv: 0, hand: 0}, share = tot.order ? c.order / tot.order * 100 : 0;
-      var noRecv = (byShop && k === "TH") || vtdNoStore;
-      return "<tr><td>" + label(k) + "</td>" + ms.map(function (m) {
-        if (m.key === "recv" && noRecv) return '<td class="n" style="color:var(--fg-3)" title="' + (k === "TH" ? "TH không có chứng từ" : "App VTD ghi SLOG, không ghi siêu thị") + '">–</td>';
-        return '<td class="n"><b>' + n(c[m.key]) + "</b> " + deltaCell(c[m.key], p[m.key]) + "</td>";
-      }).join("")
-        + (hasRecv && !vtdNoStore ? '<td class="n">' + (noRecv || !c.order ? "–" : (c.recv / c.order * 100).toFixed(0) + "%") + "</td>" : "")
-        + '<td><div style="display:flex;align-items:center;gap:6px"><div class="share" style="flex:1;min-width:70px"><span style="width:' + share + "%;background:" + (byShop ? SRC[k].color : "var(--m-order)") + '"></span></div><small style="color:var(--fg-3);min-width:30px;text-align:right">' + share.toFixed(0) + "%</small></div></td></tr>";
-    }).join("");
-    var foot = '<tr><td><b>Tổng</b></td>' + ms.map(function (m) { return '<td class="n"><b>' + (m.key === "recv" && vtdNoStore ? "–" : n(tot[m.key])) + "</b></td>"; }).join("")
-      + (hasRecv && !vtdNoStore ? '<td class="n"><b>' + (tot.order ? (tot.recv / tot.order * 100).toFixed(0) + "%" : "–") + "</b></td>" : "") + "<td></td></tr>";
-    $("ordersBreak").innerHTML = '<p class="mini-h">' + (byShop ? "Theo shop" : "Theo loại siêu thị · " + esc(SRC[state.shop].label)) + ' <span style="font-weight:400;color:var(--fg-3)">· % so với ' + esc(R.pLabel) + "</span></p>"
-      + "<table><thead>" + head + "</thead><tbody>" + body + foot + "</tbody></table>"
-      + (vtdNoStore && hasRecv ? '<p class="foot-note" style="padding:4px 0 0">Chứng từ VTD nhập trên app ghi theo SLOG, chưa chia được theo siêu thị. Xem tổng chứng từ VTD ở ô phía trên.</p>' : "");
+    // 1) Đơn lên
+    var t1 = table("1. Đơn lên", "theo ngày lên đơn", ["Đơn lên", "So với"], function (r) {
+      return '<td class="n"><b>' + n(r.cur.order) + '</b></td><td class="n">' + vs(r.cur.order, r.prv.order, r) + "</td>";
+    });
+    // 2) Tỷ lệ nhận chứng từ của chính các đơn lên trong kỳ (trừ shop hủy), đến hiện tại
+    var t2 = hasRecv ? table("2. Tỷ lệ nhận chứng từ", "đã nhận / đơn lên trong kỳ, trừ shop hủy", ["Đã nhận / Đơn", "Tỷ lệ", "So với"], function (r) {
+      var rr = rateOf(r.cur, "ordrecv"), pr = rateOf(r.prv, "ordrecv");
+      return '<td class="n">' + n(r.cur.ordrecv) + " / " + n(r.cur.order - r.cur.ordcancel) + '</td><td class="n"><b>' + pct(rr) + "</b></td>"
+        + '<td class="n">' + (rr == null || pr == null ? '<small style="color:var(--fg-3)">—</small>' : pointCell(rr, pr) + ' <small style="color:var(--fg-3)">' + esc(r.p.pLabel) + " " + pct(pr) + "</small>") + "</td>";
+    }) : "";
+    // 3) Chứng từ đã nhận trong kỳ (theo ngày nhập trên app)
+    var t3 = hasRecv ? table("3. Chứng từ đã nhận", "theo ngày nhập trên app", ["CT đã nhận", "So với", "TB/ngày"], function (r) {
+      var days = diffDays(r.p.a, r.p.b) + 1;
+      return '<td class="n"><b>' + n(r.cur.recvAct) + '</b></td><td class="n">' + vs(r.cur.recvAct, r.prv.recvAct, r) + '</td><td class="n">' + n(r.cur.recvAct / days) + "</td>";
+    }) : "";
+    $("quickCmp").innerHTML = '<p class="mini-h" style="margin:4px 0 0">So sánh nhanh <span style="font-weight:400;color:var(--fg-3)">· tính đến hôm nay ' + esc(dmyFull(state.data.today)) + ", không theo bộ lọc thời gian, theo shop đang chọn</span></p>"
+      + '<div class="qc3">' + t1 + t2 + t3 + "</div>";
   }
 
   function renderOrders(R) {
     document.querySelectorAll("#granSeg button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.g === state.gran)); });
-    var g = state.gran, cur = measureDaily(R.from, R.to), prv = measureDaily(R.pFrom, R.pTo);
+    var g = state.gran;
+    var cur = totalIn(R.from, R.to), prv = totalIn(R.pFrom, R.pTo);
     var bls = getBacklogs();
     var shops = SOURCES.filter(function (s) { return state.srcOn[s.key]; }).map(function (s) { return s.key; });
     var hasRecv = shops.some(function (k) { return k !== "TH"; });
-    var hasHand = shops.some(function (k) { return bls[k] && bls[k].hasHandover; }) || sumObj(cur.hand) > 0;
-    var ms = MEASURES.filter(function (m) { return m.key === "order" || (m.key === "recv" && hasRecv) || (m.key === "hand" && hasHand); });
+    var hasHand = shops.some(function (k) { return bls[k] && bls[k].hasHandover; }) || cur.handAct > 0 || cur.ordhand > 0;
+    var ms = MEASURES.filter(function (m) { return m.key === "order" || (m.key === "ordrecv" && hasRecv) || (m.key === "ordhand" && hasHand); });
 
-    // Ô so sánh
-    var tot = {}, ptot = {};
-    ms.forEach(function (m) { tot[m.key] = sumObj(cur[m.key]); ptot[m.key] = sumObj(prv[m.key]); });
-    var stats = ms.map(function (m) {
-      return '<div class="ostat"><span class="k"><i style="background:' + m.color + '"></i>' + esc(m.label) + '</span><span class="v">' + n(tot[m.key])
-        + '</span><span class="s">' + deltaHtml(tot[m.key], ptot[m.key]) + "</span></div>";
-    });
+    // Ô số liệu theo khoảng thời gian đang chọn
+    var rRecv = rateOf(cur, "ordrecv"), pRecv = rateOf(prv, "ordrecv");
+    var rHand = rateOf(cur, "ordhand"), pHand = rateOf(prv, "ordhand");
+    var tile = function (color, label, value, sub, title) {
+      return '<div class="ostat"' + (title ? ' title="' + esc(title) + '"' : "") + '><span class="k">' + (color ? '<i style="background:' + color + '"></i>' : "") + esc(label) + '</span><span class="v">' + value + '</span><span class="s">' + sub + "</span></div>";
+    };
+    var stats = [tile("var(--m-order)", "Đơn lên", n(cur.order), deltaHtml(cur.order, prv.order))];
     if (hasRecv) {
-      var rate = tot.order ? tot.recv / tot.order * 100 : 0, prate = ptot.order ? ptot.recv / ptot.order * 100 : 0;
-      var dp = rate - prate;
-      stats.push('<div class="ostat"><span class="k">Tỷ lệ nhận CT / đơn lên</span><span class="v">' + (tot.order ? rate.toFixed(1).replace(".", ",") + "%" : "—")
-        + '</span><span class="s">' + (ptot.order ? '<span class="delta">' + (dp >= 0 ? "▲ +" : "▼ ") + dp.toFixed(1).replace(".", ",") + " điểm</span><span>vs " + esc(R.pLabel) + "</span>" : "<span>chưa có số kỳ so sánh</span>") + "</span></div>");
+      stats.push(tile("var(--m-recv)", "Tỷ lệ nhận CT (theo ngày lên đơn)", pct(rRecv),
+        "<span>" + n(cur.ordrecv) + " / " + n(cur.order - cur.ordcancel) + " đơn" + (cur.ordcancel ? " · trừ " + n(cur.ordcancel) + " shop hủy" : "") + "</span>" + pointDelta(rRecv, pRecv),
+        "Trong các đơn lên trong kỳ, bao nhiêu đơn đã nhận chứng từ tính đến hiện tại"));
     }
+    if (hasHand) {
+      stats.push(tile("var(--m-hand)", "Tỷ lệ đã bàn giao (theo ngày lên đơn)", pct(rHand),
+        "<span>" + n(cur.ordhand) + " / " + n(cur.order - cur.ordcancel) + " đơn</span>" + pointDelta(rHand, pHand),
+        "Trong các đơn lên trong kỳ, bao nhiêu đơn đã có Ngày bàn giao CT"));
+    }
+    if (hasRecv) stats.push(tile("", "Chứng từ nhận trong kỳ (theo ngày nhập)", n(cur.recvAct), deltaHtml(cur.recvAct, prv.recvAct)));
+    if (hasHand) stats.push(tile("", "Bàn giao trong kỳ (theo ngày bàn giao)", n(cur.handAct), deltaHtml(cur.handAct, prv.handAct)));
     $("ordersStats").innerHTML = stats.join("");
-    renderOrdersBreak(R, ms, hasRecv);
-    $("ordersSub").textContent = shopLabel() + " · đơn lên theo Ngày lên đơn, chứng từ theo ngày nhập trên app, bàn giao theo Ngày bàn giao CT";
+    $("ordersSub").textContent = shopLabel() + " · tỷ lệ tính theo ngày lên đơn, đến hiện tại; đơn mới lên chưa kịp nhận nên tỷ lệ kỳ gần đây thường thấp hơn";
+    renderQuickCompare(hasRecv);
+    renderOrdersBreak(R, hasRecv, hasHand);
 
-    // Gộp theo ngày / tuần / tháng
+    // Gộp theo ngày / tuần / tháng (theo ngày lên đơn cho cả 3 cột)
     var buckets = [], bidx = {};
     for (var k = R.from; k <= R.to; k = addDays(k, 1)) { var b = bucketOf(k, g); if (bidx[b] == null) { bidx[b] = buckets.length; buckets.push(b); } }
-    var vals = ms.map(function () { return buckets.map(function () { return 0; }); });
-    ms.forEach(function (m, mi) { for (var day in cur[m.key]) { var bi = bidx[bucketOf(day, g)]; if (bi != null) vals[mi][bi] += cur[m.key][day]; } });
+    var byB = measureGroup(R.from, R.to, function (f) { return bucketOf(f[0], g); });
+    var val = function (bk, key) { return byB[bk] ? byB[bk][key] : 0; };
+    var unit = g === "day" ? "ngày" : g === "week" ? "tuần" : "tháng";
 
     $("ordersLegend").innerHTML = ms.map(function (m) { return '<span><i style="background:' + m.color + '"></i>' + esc(m.label) + "</span>"; }).join("")
-      + (g !== "day" ? '<span style="color:var(--fg-3)">· kỳ đầu/cuối có thể không đủ ' + (g === "week" ? "tuần" : "tháng") + "</span>" : "");
+      + (g !== "day" ? '<span style="color:var(--fg-3)">· kỳ đầu/cuối có thể không đủ ' + unit + "</span>" : "");
 
-    // Bảng: mới nhất trước, kèm chênh lệch so với kỳ liền trước trong bảng
+    // Bảng theo kỳ: mới nhất trước
+    var cols = [["order", "Đơn lên"]];
+    if (hasRecv) cols.push(["ordrecv", "Đã nhận CT"], ["rRecv", "Tỷ lệ nhận"]);
+    if (hasHand) cols.push(["ordhand", "Đã bàn giao"], ["rHand", "Tỷ lệ bàn giao"]);
+    if (hasRecv) cols.push(["recvAct", "CT nhận trong " + unit]);
+    if (hasHand) cols.push(["handAct", "Bàn giao trong " + unit]);
     $("ordersTable").innerHTML = '<table><thead><tr><th>' + (g === "day" ? "Ngày" : g === "week" ? "Tuần" : "Tháng") + "</th>"
-      + ms.map(function (m) { return '<th class="n">' + esc(m.label) + "</th>"; }).join("") + (hasRecv ? '<th class="n">Tỷ lệ nhận</th>' : "") + "</tr></thead><tbody>"
-      + buckets.map(function (bk, i) {
-        return "<tr><td>" + esc(bucketLabel(bk, g)) + "</td>" + ms.map(function (m, mi) {
-          var v = vals[mi][i], pv = i > 0 ? vals[mi][i - 1] : null;
-          var d = pv != null && pv ? Math.round((v - pv) / pv * 100) : null;
-          return '<td class="n">' + n(v) + (d != null ? ' <small style="color:var(--fg-3)">' + (d >= 0 ? "+" : "") + d + "%</small>" : "") + "</td>";
-        }).join("") + (hasRecv ? '<td class="n">' + (vals[0][i] ? (vals[1][i] / vals[0][i] * 100).toFixed(0) + "%" : "—") + "</td>" : "") + "</tr>";
+      + cols.map(function (c) { return '<th class="n">' + esc(c[1]) + "</th>"; }).join("") + "</tr></thead><tbody>"
+      + buckets.map(function (bk) {
+        var m = byB[bk] || emptyM();
+        return "<tr><td>" + esc(bucketLabel(bk, g)) + "</td>" + cols.map(function (c) {
+          if (c[0] === "rRecv") return '<td class="n">' + pct(rateOf(m, "ordrecv")) + "</td>";
+          if (c[0] === "rHand") return '<td class="n">' + pct(rateOf(m, "ordhand")) + "</td>";
+          return '<td class="n">' + n(m[c[0]]) + "</td>";
+        }).join("") + "</tr>";
       }).reverse().join("") + "</tbody></table>";
     $("ordersTable").hidden = !state.ordersTable; $("ordersChart").hidden = state.ordersTable;
     $("ordersTableBtn").textContent = state.ordersTable ? "Xem biểu đồ" : "Xem dạng bảng";
 
-    // Cột nhóm: mỗi kỳ 1 nhóm, mỗi chỉ số 1 cột
+    // Cột nhóm: mỗi kỳ 1 nhóm (Đơn lên · Đã nhận · Đã bàn giao của chính các đơn đó)
     var el = $("ordersChart");
     var W = Math.max(280, el.clientWidth || 900), H = 240, ml = 44, mr = 8, mt = 10, mb = 26;
     var iw = W - ml - mr, ih = H - mt - mb;
-    var max = niceMax(Math.max.apply(null, [1].concat.apply([1], vals)));
+    var mx = 1; buckets.forEach(function (bk) { ms.forEach(function (m) { mx = Math.max(mx, val(bk, m.key)); }); });
+    var max = niceMax(mx);
     var step = iw / buckets.length, gw = Math.min(step * 0.78, 22 * ms.length + 8), bw = Math.max(1.5, (gw - 2 * (ms.length - 1)) / ms.length);
     var y = function (v) { return mt + ih - v / max * ih; };
-    var svg = '<svg viewBox="0 0 ' + W + " " + H + '" height="' + H + '" role="img" aria-label="Đơn lên, chứng từ đã nhận, bàn giao theo ' + (g === "day" ? "ngày" : g === "week" ? "tuần" : "tháng") + '"><g class="axis">';
+    var svg = '<svg viewBox="0 0 ' + W + " " + H + '" height="' + H + '" role="img" aria-label="Đơn lên và đã nhận chứng từ theo ngày lên đơn"><g class="axis">';
     for (var t = 0; t <= 4; t++) {
       var tv = max / 4 * t, ty = y(tv);
       svg += '<line class="' + (t ? "grid-line" : "base-line") + '" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + ty + '" y2="' + ty + '"/><text x="' + (ml - 8) + '" y="' + (ty + 4) + '" text-anchor="end">' + n(tv) + "</text>";
@@ -1402,7 +1437,7 @@ tbody tr:hover td { background: var(--surface-2); }
     buckets.forEach(function (bk, i) {
       var x0 = ml + step * i + (step - gw) / 2;
       ms.forEach(function (m, mi) {
-        var v = vals[mi][i]; if (v <= 0) return;
+        var v = val(bk, m.key); if (v <= 0) return;
         var x = x0 + mi * (bw + 2), yy = y(v), hgt = mt + ih - yy, r = Math.min(3, bw / 2, hgt);
         svg += '<path d="M' + x + " " + (yy + hgt) + "V" + (yy + r) + "Q" + x + " " + yy + " " + (x + r) + " " + yy + "H" + (x + bw - r) + "Q" + (x + bw) + " " + yy + " " + (x + bw) + " " + (yy + r) + "V" + (yy + hgt) + 'Z" fill="' + m.color + '"/>';
       });
@@ -1416,12 +1451,71 @@ tbody tr:hover td { background: var(--surface-2); }
       if (on && on !== tg) on.classList.remove("on");
       if (!tg) { hideTip(); on = null; return; }
       tg.classList.add("on"); on = tg;
-      var i = +tg.dataset.i;
-      showTip('<div class="t">' + esc(bucketLabel(buckets[i], g)) + "</div>" + ms.map(function (m, mi) {
-        return '<div class="r"><span><i style="background:' + m.color + '"></i>' + esc(m.label) + "</span><b>" + n(vals[mi][i]) + "</b></div>";
-      }).join("") + (hasRecv && vals[0][i] ? '<div class="r tot"><span>Tỷ lệ nhận / đơn lên</span><b>' + (vals[1][i] / vals[0][i] * 100).toFixed(0) + "%</b></div>" : ""), e.clientX, e.clientY);
+      var bk = buckets[+tg.dataset.i], m = byB[bk] || emptyM();
+      var rows = '<div class="r"><span><i style="background:var(--m-order)"></i>Đơn lên</span><b>' + n(m.order) + "</b></div>";
+      if (hasRecv) rows += '<div class="r"><span><i style="background:var(--m-recv)"></i>Đã nhận CT</span><b>' + n(m.ordrecv) + " · " + pct(rateOf(m, "ordrecv")) + "</b></div>";
+      if (hasHand) rows += '<div class="r"><span><i style="background:var(--m-hand)"></i>Đã bàn giao</span><b>' + n(m.ordhand) + " · " + pct(rateOf(m, "ordhand")) + "</b></div>";
+      if (m.ordcancel) rows += '<div class="r"><span>Shop hủy (không tính)</span><b>' + n(m.ordcancel) + "</b></div>";
+      if (hasRecv) rows += '<div class="r tot"><span>CT nhận trong ' + unit + "</span><b>" + n(m.recvAct) + "</b></div>";
+      if (hasHand) rows += '<div class="r"><span>Bàn giao trong ' + unit + "</span><b>" + n(m.handAct) + "</b></div>";
+      showTip('<div class="t">Lên đơn: ' + esc(bucketLabel(bk, g)) + "</div>" + rows, e.clientX, e.clientY);
     };
     el.onmouseleave = function () { hideTip(); if (on) on.classList.remove("on"); on = null; };
+  }
+
+  // Chia nhỏ: Tất cả shop → theo shop; 1 shop → theo loại siêu thị
+  function renderOrdersBreak(R, hasRecv, hasHand) {
+    var byShop = state.shop === "all";
+    var groupOf = byShop ? function (f) { return f[1]; } : function (f) { return f[2]; };
+    // VTD ghi SLOG chứ không ghi siêu thị trên app → theo siêu thị không chia được "CT nhận trong kỳ" của VTD
+    var opts = {skipVtdRecvAct: !byShop};
+    var cur = measureGroup(R.from, R.to, groupOf, opts), prv = measureGroup(R.pFrom, R.pTo, groupOf, opts);
+    var keys = Object.keys(cur).filter(function (k) { return cur[k].order || cur[k].recvAct || cur[k].handAct; });
+    if (byShop) keys = SOURCES.map(function (s) { return s.key; }).filter(function (k) { return cur[k]; });
+    else keys.sort(function (a, b) { return cur[b].order - cur[a].order || cur[b].recvAct - cur[a].recvAct; });
+    if (!keys.length) { $("ordersBreak").innerHTML = ""; return; }
+    var nKeys = keys.length;
+    if (!byShop && keys.length > 9) {
+      var rest = keys.slice(8), other = emptyM(), otherP = emptyM();
+      rest.forEach(function (k) { M_KEYS.forEach(function (m) { other[m] += cur[k][m]; otherP[m] += prv[k] ? prv[k][m] : 0; }); });
+      keys = keys.slice(0, 8).concat(["__other"]);
+      cur.__other = other; prv.__other = otherP;
+    }
+    var tot = emptyM();
+    keys.forEach(function (k) { M_KEYS.forEach(function (m) { tot[m] += cur[k][m]; }); });
+    var vtdStore = !byShop && state.shop === "VTD";
+    var label = function (k) {
+      if (k === "__other") return "Khác (" + (nKeys - 8) + ")";
+      if (byShop) return '<span class="src-tag" style="color:var(--fg)"><i style="background:' + SRC[k].color + '"></i>' + esc(SRC[k].label) + "</span>";
+      return esc(k);
+    };
+    var cols = [["order", "Đơn lên"]];
+    if (hasRecv) cols.push(["ordrecv", "Đã nhận CT"], ["rRecv", "Tỷ lệ nhận"]);
+    if (hasHand) cols.push(["ordhand", "Đã bàn giao"], ["rHand", "Tỷ lệ bàn giao"]);
+    if (hasRecv) cols.push(["recvAct", "CT nhận trong kỳ"]);
+    var cell = function (k, c, m, p) {
+      var noRecv = byShop && k === "TH";
+      if ((c === "ordrecv" || c === "rRecv") && noRecv) return '<td class="n" style="color:var(--fg-3)" title="TH không có chứng từ">–</td>';
+      if (c === "recvAct" && (noRecv || vtdStore)) return '<td class="n" style="color:var(--fg-3)" title="' + (noRecv ? "TH không có chứng từ" : "App VTD ghi SLOG, không ghi siêu thị") + '">–</td>';
+      if (c === "rRecv") return '<td class="n">' + pct(rateOf(m, "ordrecv")) + pointCell(rateOf(m, "ordrecv"), p ? rateOf(p, "ordrecv") : null) + "</td>";
+      if (c === "rHand") return '<td class="n">' + pct(rateOf(m, "ordhand")) + pointCell(rateOf(m, "ordhand"), p ? rateOf(p, "ordhand") : null) + "</td>";
+      return '<td class="n"><b>' + n(m[c]) + "</b> " + (c === "order" || c === "recvAct" ? deltaCell(m[c], p ? p[c] : 0) : "") + "</td>";
+    };
+    var head = "<tr><th>" + (byShop ? "Shop" : "Loại siêu thị") + "</th>" + cols.map(function (c) { return '<th class="n">' + esc(c[1]) + "</th>"; }).join("") + "<th>Tỷ trọng đơn lên</th></tr>";
+    var body = keys.map(function (k) {
+      var m = cur[k], p = prv[k], share = tot.order ? m.order / tot.order * 100 : 0;
+      return "<tr><td>" + label(k) + "</td>" + cols.map(function (c) { return cell(k, c[0], m, p); }).join("")
+        + '<td><div style="display:flex;align-items:center;gap:6px"><div class="share" style="flex:1;min-width:70px"><span style="width:' + share + "%;background:" + (byShop ? SRC[k].color : "var(--m-order)") + '"></span></div><small style="color:var(--fg-3);min-width:30px;text-align:right">' + share.toFixed(0) + "%</small></div></td></tr>";
+    }).join("");
+    var foot = "<tr><td><b>Tổng</b></td>" + cols.map(function (c) {
+      if (c[0] === "rRecv") return '<td class="n"><b>' + pct(rateOf(tot, "ordrecv")) + "</b></td>";
+      if (c[0] === "rHand") return '<td class="n"><b>' + pct(rateOf(tot, "ordhand")) + "</b></td>";
+      if (c[0] === "recvAct" && vtdStore) return '<td class="n">–</td>';
+      return '<td class="n"><b>' + n(tot[c[0]]) + "</b></td>";
+    }).join("") + "<td></td></tr>";
+    $("ordersBreak").innerHTML = '<p class="mini-h">' + (byShop ? "Theo shop" : "Theo loại siêu thị · " + esc(SRC[state.shop].label))
+      + ' <span style="font-weight:400;color:var(--fg-3)">· khoảng đang chọn · tỷ lệ theo ngày lên đơn · so với ' + esc(R.pLabel) + " (đ = điểm %)</span></p>"
+      + "<table><thead>" + head + "</thead><tbody>" + body + foot + "</tbody></table>";
   }
 
   /* ---- Tình trạng hoàn & tỷ lệ lỗi ---- */

@@ -15,12 +15,13 @@
  *   Chỉ số: op (thao tác nhập trên app) · order (lên đơn) · handover (bàn giao CT về shop)
  *           cond (tình trạng hoàn, Kênh = Chứng từ/Sản phẩm) · product (sản phẩm hoàn, Kênh = tên SP)
  *           cls (Kênh = Phân loại, Loại = Tình trạng) · note (Kênh = Ghi chú, Loại = Phân loại) — VTD/PN/TH
+ *           ordrecv / ordcancel / ordhand: theo NGÀY LÊN ĐƠN — đơn đã nhận CT / shop hủy / đã bàn giao (tính đến hiện tại)
  *
  * Tốc độ: mỗi sheet nguồn chỉ đọc đúng các cột cần (dash_read_), không đọc cả bảng.
  */
 
 // Đổi mỗi lần sửa file này — dashboard hiện số phiên bản để biết máy chủ đã chạy bản mới chưa
-const DASH_BUILD_VERSION = "2026-10-16f";
+const DASH_BUILD_VERSION = "2026-10-16g";
 
 const DASH_CONFIG = {
   days: 200,               // số ngày lịch sử cho thao tác / lên đơn / bàn giao / tình trạng
@@ -387,9 +388,20 @@ function dash_collectVtdBacklog_(now, received, metric) {
     const khach = String(get(row, c.khach) || "").trim();
     const store = String(get(row, c.loaiSt) || "").trim() || vtdApp_storeType_(khach);
     const lenKey = dash_key_(get(row, c.lenDon));
+    const handKey = c.banGiao >= 0 ? dash_key_(get(row, c.banGiao)) : "";
     metric("order", "VTD", lenKey, store, "Lên đơn", 1);
-    if (c.banGiao >= 0) metric("handover", "VTD", dash_key_(get(row, c.banGiao)), store, "Bàn giao", 1);
+    if (handKey) metric("handover", "VTD", handKey, store, "Bàn giao", 1);
     const days = lenKey ? Math.max(0, Math.round((todayMs - dash_dayMs_(lenKey)) / 86400000)) : -1;
+
+    // Theo ngày lên đơn: đơn này đã nhận chứng từ / shop hủy / đã bàn giao chưa (tính đến hiện tại)
+    const keys = [];
+    [c.ma, c.po, c.od, c.hd].forEach(i => { if (i >= 0) Array.prototype.push.apply(keys, vtdApp_lookupKeys_(row[i])); });
+    const recvByApp = keys.some(k => received[k]);
+    const stNorm = byStatusCol ? vtdApp_norm_(get(row, c.status)) : "";
+    const isCancel = stNorm.indexOf("huy") >= 0;
+    if (!isCancel && (recvByApp || stNorm.indexOf("da nhan") >= 0)) metric("ordrecv", "VTD", lenKey, store, "Đã nhận", 1);
+    else if (isCancel) metric("ordcancel", "VTD", lenKey, store, "Shop hủy", 1);
+    if (handKey) metric("ordhand", "VTD", lenKey, store, "Đã bàn giao", 1);
 
     let open, statusLabel;
     if (byStatusCol) {
@@ -397,9 +409,7 @@ function dash_collectVtdBacklog_(now, received, metric) {
       open = cfg.openStatuses.indexOf(vtdApp_norm_(get(row, c.status))) >= 0;
     } else {
       if (days < 0 || days > cfg.derivedDays) return;
-      const keys = [];
-      [c.ma, c.po, c.od, c.hd].forEach(i => { if (i >= 0) Array.prototype.push.apply(keys, vtdApp_lookupKeys_(row[i])); });
-      open = !keys.some(k => received[k]);
+      open = !recvByApp;
       statusLabel = open ? "Chưa nhận chứng từ" : "Đã nhận (có trên app)";
     }
     backlog.byStatus[statusLabel] = (backlog.byStatus[statusLabel] || 0) + 1;
@@ -468,8 +478,15 @@ function dash_collectPn_(add, now, metric) {
       const uniq = vtdApp_norm_(get(row, c.od) || ma);
       if (!seen[uniq]) {
         seen[uniq] = true;
-        metric("order", "PN", dash_key_(get(row, c.lenDon)), store, "Lên đơn", 1);
-        if (c.banGiao >= 0) metric("handover", "PN", dash_key_(get(row, c.banGiao)), store, "Bàn giao", 1);
+        const lenKey = dash_key_(get(row, c.lenDon));
+        const handKey = c.banGiao >= 0 ? dash_key_(get(row, c.banGiao)) : "";
+        metric("order", "PN", lenKey, store, "Lên đơn", 1);
+        if (handKey) metric("handover", "PN", handKey, store, "Bàn giao", 1);
+        // Theo ngày lên đơn: trạng thái hiện tại của đơn (cột Xác thực hóa đơn) và đã bàn giao chưa
+        const st = vtdApp_norm_(get(row, c.status));
+        if (st.indexOf("huy") >= 0) metric("ordcancel", "PN", lenKey, store, "Shop hủy", 1);
+        else if (st.indexOf("da nhan") >= 0) metric("ordrecv", "PN", lenKey, store, "Đã nhận", 1);
+        if (handKey) metric("ordhand", "PN", lenKey, store, "Đã bàn giao", 1);
       }
       if (!get(row, c.user)) return;
       const actKey = dash_key_(get(row, c.time));
