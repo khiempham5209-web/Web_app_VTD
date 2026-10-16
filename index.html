@@ -3507,8 +3507,9 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
             <label>Áp dụng cho màn<select id="appAppearanceTarget" onchange="setAppAppearanceTarget(this.value)">${screenOptionHtml}</select></label>
             <label>Màu nền app<input type="color" value="${html(appCfg.bgColor || "#ffffff")}" oninput="setAppAppearanceValue('bgColor', this.value)"></label>
             <label>Độ phủ ảnh nền <output id="appBgDimOut">${html(appCfg.bgDim || 12)}%</output><input type="range" min="0" max="70" step="1" value="${html(appCfg.bgDim || 12)}" oninput="setAppAppearanceValue('bgDim', this.value)"></label>
+            <label>Link ảnh nền Drive (gửi cho mọi máy)<input id="appBgDriveUrl" type="url" value="${html(appAppearanceTargetConfig().imageUrl || "")}" placeholder="https://drive.google.com/file/d/.../view" onchange="setAppBgDriveUrl(this.value)"></label>
             <div class="file-actions">
-              <button type="button" onclick="openAppBgPicker()">Chọn ảnh nền app</button>
+              <button type="button" onclick="openAppBgPicker()">Chọn ảnh từ máy (chỉ máy này)</button>
               <button type="button" onclick="clearAppBgImage()">Xóa ảnh nền app</button>
             </div>
             <input id="appBgFile" class="login-bg-file" type="file" accept="image/*" onchange="setAppBgImage(this)">
@@ -9380,6 +9381,21 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         input.value = "";
       }
     }
+    // Link Drive cho nền trong app (theo màn đang chọn ở "Áp dụng cho màn"); máy khác nhận sau khi bấm "Đẩy theme hệ thống"
+    function setAppBgDriveUrl(value){
+      const url = normalizeThemeAssetUrl(value);
+      if (String(value || "").trim() && !url) {
+        toast("Link ảnh nền không hợp lệ.", "err");
+        return;
+      }
+      const cfg = appAppearanceTargetConfig();
+      cfg.imageUrl = url;
+      cfg.hasImage = !!url;
+      cfg.imageVersion = url ? `drive_${Date.now()}` : themeAssetVersion("");
+      saveAppConfig(false);
+      if (view === "admin" && adminTab === "appearance") admin();
+      toast(url ? "Đã lưu link. Bấm \"Đẩy theme hệ thống\" để mọi máy (kể cả máy này) tải ảnh." : "Đã bỏ link ảnh nền app.", "ok");
+    }
     function openAppBgPicker(){
       const input = el("appBgFile");
       if (input) input.click();
@@ -9389,6 +9405,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       appBgImageCache[appAppearanceTarget] = "";
       appBgImageLoaded[appAppearanceTarget] = true;
       appAppearanceTargetConfig().hasImage = false;
+      appAppearanceTargetConfig().imageUrl = "";
       appAppearanceTargetConfig().imageVersion = themeAssetVersion("");
       saveAppConfig(false);
       applyAppAppearance();
