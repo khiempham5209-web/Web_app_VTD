@@ -1576,7 +1576,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
     let view = "home";
     const rows = [];
     const inputState = { slog: "", loai: "", xacThuc: "", tinhTrang: "Bình thường", po: "" };
-    const returnThState = { maDon: "", product: "", productSearch: "", customProduct: false, newSubSku: "", newName: "", newUnit: "", creatingSku: false, qty: "", status: "Bình thường", note: "", items: [], loadingSku: false, skuLoaded: false, saving: false };
+    const returnThState = { maDon: "", loaiHoan: "Hoàn trả", product: "", productSearch: "", customProduct: false, newSubSku: "", newName: "", newUnit: "", creatingSku: false, qty: "", status: "Bình thường", note: "", items: [], loadingSku: false, skuLoaded: false, saving: false };
     const docOpsState = {
       maDon: "", loading: false, record: null, message: "", returnType: "",
       xacThuc: "Đã nhận chứng từ", status: "Bình thường", note: "", saving: false,
@@ -2195,7 +2195,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         tip("Ô viền đỏ", "Là ô bắt buộc còn thiếu, bổ sung rồi bấm OK lại."),
         hpPhone("Nhập thông tin", hpField("Mã đơn GHTK", "S22843210.MB1", "scan") + `<div class="hp-card"><b>Thông tin khách hàng</b>Khách hàng: Circle K · PO: PR-15592</div>` + `<div class="hp-pair">${hpField("Slog", "O1B1", "select")}${hpField("Loại hoàn", "Chứng từ", "select")}</div>` + hpField("Tình trạng chứng từ", "Bình thường", "select") + `<div class="hp-photos"><span></span><span></span></div><div class="hp-btns"><span class="hp-btn">Hủy</span><span class="hp-btn ok">OK</span></div>`, "input"));
       const s4 = hpSection("hp-th", 4, C.violet, hpTab("returnth") + " (Truemilk)", "Một đơn nhiều SKU",
-        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("returnth")} ở thanh dưới cùng.</b></li><li><b>Quét hoặc nhập Mã đơn.</b></li><li><b>Chọn Tên sản phẩm.</b><small>Không có trong danh sách: nhập SUB SKU, Tên SKU, Đơn vị rồi bấm "Lưu SKU mới".</small></li><li><b>Nhập Số lượng, chọn Tình trạng, ghi chú nếu có, chụp ảnh SKU.</b></li><li><b>Bấm Thêm SKU.</b><small>Nhiều SKU thì lặp lại B3 đến B5.</small></li><li><b>Bấm OK để lưu.</b></li></ol>`,
+        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("returnth")} ở thanh dưới cùng.</b></li><li><b>Quét hoặc nhập Mã đơn.</b><small>Quét ra link https://i.ghtk.vn/... thì app tự lấy 10 số cuối làm mã đơn.</small></li><li><b>Chọn Loại hoàn.</b><small>Mặc định Hoàn trả; đơn Ecom thì chọn Ecom. Cả đơn dùng chung 1 Loại hoàn.</small></li><li><b>Chọn Tên sản phẩm.</b><small>Không có trong danh sách: nhập SUB SKU, Tên SKU, Đơn vị rồi bấm "Lưu SKU mới".</small></li><li><b>Nhập Số lượng, chọn Tình trạng, ghi chú nếu có, chụp ảnh SKU.</b></li><li><b>Bấm Thêm SKU.</b><small>Nhiều SKU thì lặp lại B4 đến B6.</small></li><li><b>Bấm OK để lưu.</b></li><li><b>Sửa / xóa đơn trong ngày: Trang chủ → bấm vào đơn TH → Sửa.</b><small>Trong màn Sửa có nút Xóa SKU và Xóa đơn (cần được cấp quyền). Mất mạng vẫn lưu được, có mạng app tự gửi.</small></li></ol>`,
         "",
         hpPhone("Nhập TH", hpField("Mã đơn", "TH-240915", "scan") + hpField("Tên sản phẩm", "Sữa TH 180ml", "select") + `<div class="hp-pair">${hpField("Số lượng", "12")}${hpField("Tình trạng", "Bình thường", "select")}</div><div class="hp-photos"><span></span></div><div class="hp-btns"><span class="hp-btn">Thêm SKU</span><span class="hp-btn ok">OK</span></div>`, "input"));
       const s5 = hpSection("hp-pn", 5, C.amber, hpTab("docops") + " (Phạm Nguyên)", "Chứng từ · Sản phẩm · SP + CT",
@@ -3539,6 +3539,8 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         ["saveRaw","Lưu đơn"],
         ["updateRecord","Sửa đơn"],
         ["saveDocOps","Lưu thao tác CT"],
+        ["updateReturnTh","Sửa đơn TH"],
+        ["deleteReturnTh","Xóa đơn TH"],
         ["uploadImage","Upload ảnh"],
         ["queueRecord","Queue offline"],
         ["storeInfo","Thông tin ST"],
@@ -4302,6 +4304,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       await warmAllDataCaches(true);
       await loadReturnThToday(true);
       await loadReturnThSku(true);
+      await loadReturnThData(true);
       await reportReturnThCacheProgress();
       await loadDocOpsLookupCache(true);
       await loadDocOpsSkuCache(true);
@@ -4937,7 +4940,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         alert("JSON config chưa đúng.");
       }
     }
-    const APP_VERSION = "5.9.26";
+    const APP_VERSION = "5.9.27";
     const RETURN_TH_TODAY_CACHE_KEY = "vtd_return_th_today_cache_v1";
     const RETURN_TH_SKU_CACHE_KEY = "vtd_return_th_sku_cache_v1";
     const DOC_OPS_TODAY_CACHE_KEY = "vtd_doc_ops_today_cache_v1";
@@ -6674,6 +6677,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         }),
         {key:"masterSku", error:masterSku.lastError || "", label:"Master SKU", status:cacheStatusLabel(masterSku.status), progress:(Number(masterSku.downloaded || 0) + "/" + Number(masterSku.total || 0))},
         {key:"returnThToday", label:"TH Truemilk hôm nay", status:cacheStatusLabel(returnTh.status), progress:(Number(returnTh.downloaded || 0) + "/" + Number(returnTh.total || 0))},
+        ...Object.keys(TH_CACHE_LABELS).map(type => { const p = thCacheProgress(type); return {key:type, error:p.lastError || "", label:TH_CACHE_LABELS[type], status:cacheStatusLabel(p.status), progress:(Number(p.downloaded || 0) + "/" + Number(p.total || 0))}; }),
         {key:"docOpsLookup", error:docOpsLookup.lastError || "", label:"Chứng từ PN lookup", status:cacheStatusLabel(docOpsLookup.status), progress:(Number(docOpsLookup.downloaded || 0) + "/" + Number(docOpsLookup.total || 0))},
         {key:"docOpsToday", label:"Chứng từ PN hôm nay", status:cacheStatusLabel(docOpsToday.status), progress:(Number(docOpsToday.downloaded || 0) + "/" + Number(docOpsToday.total || 0))},
         {key:"docOpsSku", error:docOpsSku.lastError || "", label:"DS SKU Phạm Nguyên", status:cacheStatusLabel(docOpsSku.status), progress:(Number(docOpsSku.downloaded || 0) + "/" + Number(docOpsSku.total || 0))},
@@ -7803,6 +7807,9 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       row = row || {};
       const rawItems = Array.isArray(row.items) ? row.items : [];
       const items = rawItems.map(item => ({
+        id: item.id || "",
+        loaiHoan: item.loaiHoan || "",
+        daTaoSv: item.daTaoSv || "",
         tenSanPham: item.tenSanPham || item.name || item.product || "",
         soLuong: item.soLuong || item.qty || item.quantity || "",
         tinhTrang: item.tinhTrang || item.status || "",
@@ -7812,6 +7819,8 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       const qty = items.reduce((sum, item) => sum + (Number(item.soLuong) || 0), 0);
       return {
         id: row.id || row.key || "",
+        localId: row.localId || "",
+        loaiHoan: row.loaiHoan || (items[0] && items[0].loaiHoan) || "",
         maDon: row.maDon || row.ma_don || row.orderCode || "",
         date: dateTextDdMmYyyy(row.date || row.ngay || todayText()),
         time: row.time || row.gio || "",
@@ -7845,8 +7854,10 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         return [];
       }
     }
-    function saveReturnThRowsCache(rows){
-      const merged = returnThMergeRows(loadReturnThRowsCache(), rows).slice(0, 6000);
+    function saveReturnThRowsCache(rows, replaceDay){
+      // replaceDay: danh sách của ngày đó từ server là bản đầy đủ -> bỏ bản cũ để đơn đã xóa/đổi mã không còn sót lại.
+      const keep = replaceDay ? loadReturnThRowsCache().filter(row => dateTextDdMmYyyy(row.date) !== dateTextDdMmYyyy(replaceDay)) : loadReturnThRowsCache();
+      const merged = returnThMergeRows(keep, rows).slice(0, 6000);
       try {
         localStorage.setItem(RETURN_TH_TODAY_CACHE_KEY, JSON.stringify({
           updatedAt: new Date().toISOString(),
@@ -7863,6 +7874,8 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       const p = item.payload || {};
       const items = Array.isArray(p.items) ? p.items : [];
       const normalizedItems = items.map(sku => ({
+        id: sku && sku.clientItemId || "",
+        loaiHoan: sku && sku.loaiHoan || p.loaiHoan || "",
         tenSanPham: sku && (sku.tenSanPham || sku.name || sku.product) || "",
         soLuong: sku && (sku.soLuong || sku.qty || sku.quantity) || "",
         tinhTrang: sku && (sku.tinhTrang || sku.status) || "",
@@ -7874,6 +7887,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         id: item.localId || "",
         localId: item.localId || "",
         maDon: p.maDon || "",
+        loaiHoan: p.loaiHoan || "",
         date: dateTextDdMmYyyy(item.dateText || todayText()),
         time: item.timeText || "",
         user: item.user || currentEmail(),
@@ -7886,14 +7900,18 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
     function returnThTodayRecords(){
       const today = todayApiDateText();
       const localRows = localQueue()
-        .filter(item => item && item.kind === "returnTh" && item.status !== "done" && dateTextDdMmYyyy(item.dateText) === today)
+        .filter(item => item && item.kind === "returnTh" && !returnThIsEditItem(item) && item.status !== "done" && dateTextDdMmYyyy(item.dateText) === today)
         .map(localReturnThRecord);
       return returnThMergeRows(returnThCachedRowsForDay(today), live.returnThTodayRows || [], localRows)
+        .map(returnThApplyPendingEdits)
+        .filter(Boolean)
         .filter(row => dateTextDdMmYyyy(row.date) === today)
         .sort((a, b) => String(b.time || "").localeCompare(String(a.time || "")));
     }
     function returnThStatusLabel(status){
-      return String(status || "").toLowerCase() === "error" ? "Fail" : "Done";
+      const value = String(status || "").toLowerCase();
+      if (["pending", "syncing", "pendingimage"].includes(value)) return "Chờ gửi";
+      return value === "error" ? "Fail" : "Done";
     }
     function loadReturnThToday(force = false){
       const day = todayApiDateText();
@@ -7907,16 +7925,17 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       if (live.returnThTodayLoading) return;
       if (!returnThApiUrl()) return;
       live.returnThTodayLoading = true;
-      returnThApi("listToday", {date: day, allUsers:true, _silent:true}).then(res => {
+      return returnThApi("listToday", {date: day, allUsers:true, _silent:true}).then(res => {
         if (res && res.ok) {
           const remoteRows = Array.isArray(res.items) ? res.items : (Array.isArray(res.rows) ? res.rows : []);
-          const allRows = saveReturnThRowsCache(remoteRows);
+          const allRows = saveReturnThRowsCache(remoteRows, day);
           live.returnThTodayRows = allRows.filter(row => dateTextDdMmYyyy(row.date) === day);
           live.returnThTodayLoaded = true;
           live.returnThTodayDay = day;
           live.returnThTodayLoading = false;
           reportReturnThCacheProgress();
           if (view === "home") home();
+          if (view === "search" && searchShopValue() === "th" && live.thRan) runThSearch();
         } else {
           live.returnThTodayLoading = false;
           reportReturnThCacheProgress({
@@ -7946,9 +7965,12 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
     }
     function returnThDetail(index){
       const row = returnThTodayRecords()[index];
-      if (!row) return;
+      if (!row) { view = "home"; return render(); }
+      live.thDetailRecord = row;
+      live.thDetailIndex = index;
+      thEdit.active = false;
       navState.fromView = "home";
-      navState.scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+      if (view !== "detail") navState.scrollY = window.scrollY || document.documentElement.scrollTop || 0;
       view = "detail";
       const items = Array.isArray(row.items) && row.items.length ? row.items : [{
         tenSanPham: row.products || "",
@@ -7966,18 +7988,21 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
               ["Ghi chú", item.ghiChu]
             ])}
           </div>
+          ${item.imageLink ? `<button type="button" class="pns-link" onclick="pnOpenLink('${html(item.imageLink).replace(/'/g, "&#39;")}')">Xem ảnh</button>` : ""}
         </div>
       </div>`).join("");
       const detailKv = kvRows([
         ["Mã đơn", row.maDon],
+        ["Loại hoàn", row.loaiHoan || (items[0] && items[0].loaiHoan) || "Hoàn trả"],
         ["User thao tác", row.user],
         ["Trạng thái đồng bộ", returnThStatusLabel(row.status)]
       ]);
+      const editButton = canEditReturnThRecord(row) ? `<button type="button" class="primary" onclick="startReturnThEdit()">Sửa</button>` : "";
       el("view").className = "content";
       el("title").textContent = "Chi tiết TH Truemilk";
       el("view").innerHTML = `<section class="section detail">
         <div>
-          <button onclick="backToList()">← Quay lại</button>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><button onclick="backToList()">← Quay lại</button>${editButton}</div>
           <h2 style="margin-top:14px">Nhập TH</h2>
           <div class="kv">${detailKv}</div>
           <h2 style="margin-top:16px">Sản phẩm</h2>
@@ -8347,6 +8372,10 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         for (let i = 0; i < queue.length; i++) {
           const item = queue[i];
           if (!item || item.status === "done" || item.status === "syncing" || item.status === "pendingImage" || item.remoteId) continue;
+          if (item.kind === "returnTh" && returnThIsEditItem(item)) {
+            queue = await syncReturnThEditItem(item);
+            continue;
+          }
           if (item.kind === "returnTh") {
             await ensureQueueItemImageRefs(item);
             item.status = "syncing";
@@ -9610,6 +9639,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       setTimeout(() => Promise.resolve(loadDocOpsSkuCache(false)).catch(() => {}), 1900);
       setTimeout(() => {
         Promise.resolve(loadReturnThToday(false)).catch(() => {});
+        Promise.resolve(loadReturnThData(false)).catch(() => {});
         const currentMonth = currentBusinessMonth();
         if (shouldLiveLoadStore(currentMonth)) Promise.resolve(loadStoreInfo(currentMonth)).catch(() => {});
         warmStoreInfoFromDevice();
@@ -9814,20 +9844,27 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
     // ===== Tìm kiếm Phạm Nguyên: tìm trên dữ liệu đã tải về máy (đơn PN + hàng hoàn PN), chỉ xem =====
     let pnReturnsMemory = null;
     function pnSearchAllowed(){ return canScreen("docops"); }
+    function searchShopsAllowed(){
+      return ["vtd", ...(pnSearchAllowed() ? ["pn"] : []), ...(thSearchAllowed() ? ["th"] : [])];
+    }
     function searchShopValue(){
-      if (!pnSearchAllowed()) return "vtd";
+      const allowed = searchShopsAllowed();
+      if (allowed.length < 2) return "vtd";
       if (!live.searchShop) { try { live.searchShop = localStorage.getItem("vtd_search_shop") || "vtd"; } catch (err) { live.searchShop = "vtd"; } }
-      return live.searchShop === "pn" ? "pn" : "vtd";
+      return allowed.includes(live.searchShop) ? live.searchShop : "vtd";
     }
     function searchShopToggle(){
-      if (!pnSearchAllowed()) return "";
+      const allowed = searchShopsAllowed();
+      if (allowed.length < 2) return "";
       const shop = searchShopValue();
-      return `<div class="pns-shop"><span>Chọn shop tìm kiếm</span><div class="pns-seg"><button type="button" class="${shop === "vtd" ? "on" : ""}" onclick="setSearchShop('vtd')">VTD</button><button type="button" class="${shop === "pn" ? "on" : ""}" onclick="setSearchShop('pn')">Phạm Nguyên</button></div></div>`;
+      const names = {vtd:"VTD", pn:"Phạm Nguyên", th:"TH Truemilk"};
+      return `<div class="pns-shop"><span>Chọn shop tìm kiếm</span><div class="pns-seg">${allowed.map(x => `<button type="button" class="${shop === x ? "on" : ""}" onclick="setSearchShop('${x}')">${names[x]}</button>`).join("")}</div></div>`;
     }
     function setSearchShop(shop){
-      live.searchShop = shop === "pn" ? "pn" : "vtd";
+      live.searchShop = ["pn", "th"].includes(shop) ? shop : "vtd";
       try { localStorage.setItem("vtd_search_shop", live.searchShop); } catch (err) {}
       live.pnDetailKey = "";
+      live.thDetailKey = "";
       search();
     }
     function pnDateIso(value){
@@ -9969,6 +10006,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
     function search(){
       el("view").className = "content";
       if (searchShopValue() === "pn") return pnSearchView();
+      if (searchShopValue() === "th") return thSearchView();
       const data = searchRan ? live.searchResults : [];
       const f = live.searchFilters || {query:"", slog:"Tất cả", loaiHoan:"Tất cả", fromDate:"", toDate:""};
       const resultContent = live.searchLoading
@@ -10045,6 +10083,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       await Promise.allSettled([
         loadDashboard({silent:true}),
         loadReturnThToday(true),
+        loadReturnThData(false),
         loadDocOpsToday(true)
       ]);
       live.dashboardRefreshActive = false;
@@ -11134,7 +11173,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       renderFilePreview("docOpsProductFiles", "docOpsProductPreview", "docOpsProductCamera");
     }
     function setReturnThMaDon(value){
-      returnThState.maDon = String(value || "").trim();
+      returnThState.maDon = returnThCleanMaDon(value);
       const input = el("returnThMaDon");
       if (input) input.value = returnThState.maDon;
     }
@@ -11210,38 +11249,9 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         return false;
       }
     }
-    async function loadReturnThSku(force = false){
-      const hasCached = hydrateReturnThSkuCache();
-      if (hasCached && !force && returnThSkuCacheFresh()) {
-        returnThState.skuLoaded = true;
-        if (view === "returnth") setTimeout(returnth, 0);
-        return;
-      }
-      if (returnThState.loadingSku || (returnThState.skuLoaded && !force && (hasCached || returnThProducts.length))) return;
-      const url = returnThApiUrl();
-      if (!url) {
-        returnThState.skuLoaded = true;
-        return;
-      }
-      returnThState.loadingSku = true;
-      try {
-        const res = await returnThApi("listSku", {_silent:true});
-        if (res && res.ok && Array.isArray(res.items)) {
-          const items = uniqueReturnThSku(res.items);
-          if (items.length) {
-            const unique = saveReturnThSkuCache(items);
-            returnThProducts.splice(0, returnThProducts.length, ...unique);
-            if (returnThState.product && !unique.some(x => x.name === returnThState.product)) returnThState.product = "";
-          }
-        }
-        returnThState.skuLoaded = true;
-      } finally {
-        returnThState.loadingSku = false;
-        if (view === "returnth") returnth();
-      }
-    }
     function resetReturnThForm(){
       returnThState.maDon = "";
+      returnThState.loaiHoan = "Hoàn trả";
       returnThState.product = "";
       returnThState.productSearch = "";
       returnThState.customProduct = false;
@@ -11259,6 +11269,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
     function returnThDraftItem(){
       return {
         tenSanPham: String(returnThState.product || (returnThState.customProduct ? returnThState.productSearch : "") || "").trim(),
+        loaiHoan: returnThLoaiHoan(),
         soLuong: String(returnThState.qty || "").trim(),
         tinhTrang: String(returnThState.status || "").trim(),
         ghiChu: String(returnThState.note || "").trim(),
@@ -11335,6 +11346,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       const item = res.item || {subSku, name, unit};
       returnThProducts.push(item);
       saveReturnThSkuCache(returnThProducts);
+      returnThSkuRemember(Object.assign({}, item, {row: res.row}));
       returnThState.product = name;
       returnThState.productSearch = name;
       returnThState.customProduct = false;
@@ -11350,7 +11362,8 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       el("view").innerHTML = `<section class="section form-sheet">
         <div class="form-head"><h2>Nhập TH</h2>${returnThState.loadingSku ? `<span class="muted">Đang tải SKU...</span>` : ""}</div>
         <div class="grid">
-          <label>Mã đơn<div class="scan-row"><input id="returnThMaDon" placeholder="Scan hoặc nhập mã đơn" value="${html(returnThState.maDon)}" oninput="returnThState.maDon=this.value"><button class="scan-btn" type="button" title="Quét mã đơn" aria-label="Quét mã đơn" onclick="openCodeScanner('returnThMaDon', 'setReturnThMaDon')">${scanIcon("Quét mã đơn")}</button></div></label>
+          <label>Mã đơn<div class="scan-row"><input id="returnThMaDon" placeholder="Scan hoặc nhập mã đơn" value="${html(returnThState.maDon)}" oninput="returnThMaDonInput(this)" onchange="returnThMaDonInput(this)"><button class="scan-btn" type="button" title="Quét mã đơn" aria-label="Quét mã đơn" onclick="openCodeScanner('returnThMaDon', 'setReturnThMaDon')">${scanIcon("Quét mã đơn")}</button></div></label>
+          <label>Loại hoàn${returnThLoaiHoanSelect("returnThState.loaiHoan=this.value", returnThLoaiHoan())}</label>
           <label>Tên sản phẩm${skuComboHtml("returnth")}</label>
         </div>
         ${returnThState.customProduct ? `<div class="grid cols-3">
@@ -11377,8 +11390,9 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
     async function saveReturnTh(){
       if(Object.values(live.capturePending || {}).some(Boolean))return toast('Đang nhận ảnh, vui lòng đợi ảnh hiện đủ rồi lưu.','err');
       if (returnThState.saving) return;
-      const maDon = String(returnThState.maDon || "").trim();
-      const items = returnThItemsForSave();
+      const maDon = returnThCleanMaDon(returnThState.maDon);
+      const loaiHoan = returnThLoaiHoan();
+      const items = returnThItemsForSave().map(item => Object.assign({}, item, {loaiHoan}));
       if (!maDon) return toast("Vui lòng nhập mã đơn.", "err");
       for (let i = 0; i < items.length; i++) {
         const err = validateReturnThItem(items[i], `SKU ${i + 1}`);
@@ -11392,6 +11406,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
           soLuong: items[0].soLuong,
           tinhTrang: items[0].tinhTrang,
           ghiChu: items[0].ghiChu || "",
+          loaiHoan,
           items
         });
         resetReturnThForm();
@@ -11401,6 +11416,827 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       } finally {
         returnThState.saving = false;
       }
+    }
+    // ===== Nhập TH 5.9.27: Loại hoàn, mã đơn từ link GHTK, cache SKU/dữ liệu theo mã (như PN), sửa/xóa đơn, tìm kiếm TH =====
+    const RETURN_TH_LOAI_HOAN = ["Hoàn trả", "Ecom"];
+    function returnThLoaiHoan(value){
+      const text = String(value === undefined ? returnThState.loaiHoan : (value || "")).trim();
+      return RETURN_TH_LOAI_HOAN.includes(text) ? text : "Hoàn trả";
+    }
+    function returnThLoaiHoanSelect(onchange, current){
+      return `<select onchange="${onchange}">${RETURN_TH_LOAI_HOAN.map(x => `<option ${x === current ? "selected" : ""}>${x}</option>`).join("")}</select>`;
+    }
+    // QR GHTK đôi khi ra link https://i.ghtk.vn/1598188396: chỉ giữ 10 số cuối làm mã đơn.
+    function returnThCleanMaDon(value){
+      const text = String(value || "").trim();
+      if (!/ghtk\.vn/i.test(text)) return text;
+      const digits = (text.split(/[?#]/)[0].replace(/\/+$/, "").split("/").pop() || "").replace(/\D/g, "");
+      return digits.length >= 10 ? digits.slice(-10) : text;
+    }
+    function returnThMaDonInput(input, target){
+      const raw = String(input.value || "");
+      const clean = returnThCleanMaDon(raw);
+      if (clean !== raw.trim()) input.value = clean;
+      (target || returnThState).maDon = clean !== raw.trim() ? clean : raw;
+    }
+
+    // ----- Cache riêng của TH (IndexedDB), không dùng chung DB cache VTD/PN -----
+    const TH_CACHE_DB = "VTD_TH_CACHE_V1";
+    const TH_CACHE_LABELS = {returnThSku:"DS SKU TH Truemilk", returnThData:"Dữ liệu TH Truemilk"};
+    const thCache = {db:null, opening:null, rows:null, dataLoading:false, progress:{}, progressLoaded:false};
+    function thCacheDb(){
+      if (thCache.db) return Promise.resolve(thCache.db);
+      if (thCache.opening) return thCache.opening;
+      thCache.opening = new Promise((resolve, reject) => {
+        if (!window.indexedDB) return reject(new Error("Máy không mở được IndexedDB."));
+        const req = indexedDB.open(TH_CACHE_DB, 1);
+        const timer = setTimeout(() => reject(new Error("Mở cache TH quá lâu.")), 15000);
+        req.onupgradeneeded = () => {
+          ["thSku", "thReturns"].forEach(name => { if (!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name, {keyPath:"syncKey"}); });
+          if (!req.result.objectStoreNames.contains("meta")) req.result.createObjectStore("meta", {keyPath:"key"});
+        };
+        req.onblocked = () => { clearTimeout(timer); reject(new Error("Cache TH bị khóa bởi phiên app khác.")); };
+        req.onerror = () => { clearTimeout(timer); reject(req.error || new Error("Không mở được cache TH.")); };
+        req.onsuccess = () => {
+          clearTimeout(timer);
+          const db = req.result;
+          thCache.db = db;
+          db.onversionchange = () => { db.close(); thCache.db = null; thCache.opening = null; };
+          resolve(db);
+        };
+      }).catch(err => { thCache.opening = null; throw err; });
+      return thCache.opening;
+    }
+    async function thCacheRead(store, key){
+      const db = await thCacheDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(store, "readonly"), os = tx.objectStore(store);
+        const req = key === undefined ? os.getAll() : os.get(key);
+        let result;
+        req.onsuccess = () => { result = req.result; };
+        tx.oncomplete = () => resolve(result);
+        tx.onerror = tx.onabort = () => reject(tx.error || new Error("Đọc cache TH thất bại."));
+      });
+    }
+    async function thCacheWrite(store, records, deletes = []){
+      const db = await thCacheDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(store, "readwrite"), os = tx.objectStore(store);
+        try { deletes.forEach(key => os.delete(key)); records.forEach(record => os.put(record)); }
+        catch (err) { tx.abort(); reject(err); return; }
+        tx.oncomplete = () => resolve();
+        tx.onerror = tx.onabort = () => reject(tx.error || new Error("Ghi cache TH thất bại."));
+      });
+    }
+    async function thCacheLoadProgress(){
+      if (thCache.progressLoaded) return;
+      thCache.progressLoaded = true;
+      for (const type of Object.keys(TH_CACHE_LABELS)) {
+        try {
+          const saved = await thCacheRead("meta", "progress:" + type);
+          if (saved && !thCache.progress[type]) thCache.progress[type] = saved;
+        } catch (err) {}
+      }
+    }
+    function thCacheProgress(type){
+      return Object.assign({status:"pending", downloaded:0, total:0}, thCache.progress[type] || {});
+    }
+    function thOwnCacheLinesHtml(){
+      if (!canScreen("returnth")) return "";
+      return Object.keys(TH_CACHE_LABELS).map(type => {
+        const p = thCacheProgress(type);
+        return '<div>' + html(TH_CACHE_LABELS[type]) + ': ' + html(cacheStatusLabel(p.status)) + ' · ' + Number(p.downloaded || 0) + '/' + Number(p.total || 0) + (p.lastError ? '<div>' + html(p.lastError) + '</div>' : '') + (p.reportError ? '<div>' + html(p.reportError) + '</div>' : '') + '</div>';
+      }).join("");
+    }
+    // Ghi trạng thái cache TH; report=true thì báo về admin (lỗi sẽ được API VTD gửi mail như cache PN).
+    async function thCacheSetProgress(type, patch, report){
+      const progress = Object.assign({}, thCache.progress[type] || {}, patch, {key:"progress:" + type, protocol:1, updatedAt:new Date().toISOString()});
+      thCache.progress[type] = progress;
+      if (report) {
+        try {
+          const res = await api("reportLookupCacheStatus", Object.assign({}, progress, {cacheType:type, label:TH_CACHE_LABELS[type], deviceId:deviceId(), appVersion:APP_VERSION, _silent:true}));
+          progress.reportError = !res || !res.ok ? String(res && res.message || "Không gửi được báo cáo về admin.") : res.alertError ? "Không gửi được email: " + res.alertError : "";
+        } catch (err) {
+          progress.reportError = "Không gửi được báo cáo: " + String(err && err.message || err);
+        }
+      }
+      try { await thCacheWrite("meta", [progress]); } catch (err) {}
+      try { refreshLocalCacheProgressUi(); } catch (err) {}
+      const ownPanel = el("ownCacheStatus");
+      if (ownPanel) ownPanel.outerHTML = ownCachePanelHtml();
+      return progress;
+    }
+    async function thDailyClaim(type, force){
+      const key = "attempt:" + type, day = todayApiDateText();
+      let saved = null;
+      try { saved = await thCacheRead("meta", key); } catch (err) {}
+      if (!force && saved && saved.day === day) return false;
+      try { await thCacheWrite("meta", [{key, day}]); } catch (err) {}
+      return true;
+    }
+    function thSyncMerge(saved, res, label, keyOf){
+      if (!res || !res.ok || res.protocol !== 1) throw new Error(res && res.message || "API Nhập TH chưa hỗ trợ đồng bộ " + label + ".");
+      if (!Array.isArray(res.entries) || !Array.isArray(res.records) || res.entries.length !== Number(res.total)) throw new Error("Danh sách " + label + " chưa đủ.");
+      const byKey = new Map(saved.map(r => [r.syncKey, r]));
+      res.records.forEach(r => byKey.set(r.syncKey, r));
+      const keys = new Set(), next = [];
+      for (const entry of res.entries) {
+        const row = byKey.get(entry.key);
+        if (keys.has(entry.key) || !row || row.contentVersion !== entry.version || keyOf(row) !== entry.key) throw new Error("Dữ liệu " + label + " thiếu hoặc không khớp mã.");
+        keys.add(entry.key);
+        next.push(Object.assign({}, row, {rowNumber:entry.rowNumber}));
+      }
+      return {next, deletes:saved.filter(r => !keys.has(r.syncKey)).map(r => r.syncKey)};
+    }
+
+    // ----- DS SKU TH: giống SKU PN (mỗi ngày đối soát 1 lần, chỉ tải SKU mới/đổi, khóa = SUB SKU) -----
+    function returnThApplySkuRows(rows){
+      const items = (rows || []).slice().sort((a, b) => Number(a.rowNumber || 0) - Number(b.rowNumber || 0))
+        .map(r => ({subSku:String(r.subSku || "").trim(), name:String(r.name || "").trim(), unit:String(r.unit || "").trim()}))
+        .filter(r => r.name);
+      if (items.length) returnThProducts.splice(0, returnThProducts.length, ...items);
+    }
+    async function returnThSkuRemember(item){
+      const subSku = String(item && item.subSku || "").trim();
+      if (!subSku) return;
+      try { await thCacheWrite("thSku", [{syncKey:"SUBSKU:" + subSku.toLowerCase(), subSku, name:item.name || "", unit:item.unit || "", rowNumber:Number(item.row || 0) || 999999, contentVersion:""}]); } catch (err) {}
+    }
+    async function loadReturnThSku(force = false){
+      if (returnThState.loadingSku) return false;
+      returnThState.loadingSku = true;
+      try {
+        let saved = [];
+        try { saved = (await thCacheRead("thSku")) || []; } catch (err) { saved = []; }
+        if (saved.length) returnThApplySkuRows(saved);
+        else hydrateReturnThSkuCache();
+        await thCacheLoadProgress();
+        returnThState.skuLoaded = true;
+        if (!returnThApiUrl()) return false;
+        if (saved.length && !await thDailyClaim("returnThSku", force)) return false;
+        if (!saved.length) await thDailyClaim("returnThSku", true);
+        await thCacheSetProgress("returnThSku", {status:"checking", downloaded:saved.length, lastError:""});
+        const versions = Object.fromEntries(saved.map(r => [r.syncKey, r.contentVersion]));
+        const res = await returnThApi("skuSync", {versions, _silent:true});
+        const merged = thSyncMerge(saved, res, "SKU TH", row => "SUBSKU:" + String(row.subSku || "").trim().toLowerCase());
+        await thCacheWrite("thSku", merged.next, merged.deletes);
+        returnThApplySkuRows(merged.next);
+        saveReturnThSkuCache(returnThProducts);
+        await thCacheSetProgress("returnThSku", {status:"done", downloaded:merged.next.length, total:Number(res.total), lastError:"", verifiedAt:new Date().toISOString()}, true);
+        return true;
+      } catch (err) {
+        await thCacheSetProgress("returnThSku", {status:"error", downloaded:returnThProducts.length, lastError:String(err && err.message || err)}, true).catch(() => {});
+        return false;
+      } finally {
+        returnThState.loadingSku = false;
+        returnThState.skuLoaded = true;
+        if (view === "returnth") returnth();
+      }
+    }
+
+    // ----- Dữ liệu tab Hàng hoàn cho màn Tìm kiếm TH: tải khi mở app/đăng nhập và khi tải lại trang chủ -----
+    async function thReturnsRows(){
+      if (thCache.rows) return thCache.rows;
+      try { thCache.rows = (await thCacheRead("thReturns")) || []; } catch (err) { thCache.rows = []; }
+      return thCache.rows;
+    }
+    async function loadReturnThData(force = false){
+      if (thCache.dataLoading || !returnThApiUrl() || !canScreen("returnth")) return false;
+      thCache.dataLoading = true;
+      try {
+        await thCacheLoadProgress();
+        const saved = (await thCacheRead("thReturns")) || [];
+        await thCacheSetProgress("returnThData", {status:"checking", downloaded:saved.length, lastError:""});
+        const versions = Object.fromEntries(saved.map(r => [r.syncKey, r.contentVersion]));
+        const res = await returnThApi("keySync", {versions, _silent:true});
+        const merged = thSyncMerge(saved, res, "dữ liệu TH", row => row.syncKey);
+        await thCacheWrite("thReturns", merged.next, merged.deletes);
+        thCache.rows = merged.next;
+        const previous = thCacheProgress("returnThData");
+        await thCacheSetProgress("returnThData", {status:"done", downloaded:merged.next.length, total:Number(res.total), lastError:"", verifiedAt:new Date().toISOString()}, force || previous.status !== "done");
+        if (view === "search" && searchShopValue() === "th") search();
+        return true;
+      } catch (err) {
+        await thCacheSetProgress("returnThData", {status:"error", lastError:String(err && err.message || err)}, true).catch(() => {});
+        return false;
+      } finally {
+        thCache.dataLoading = false;
+      }
+    }
+
+    // ----- Lệnh sửa/xóa nằm trong hàng đợi (kind returnTh, op edit): offline vẫn lưu, có mạng tự gửi -----
+    function returnThIsEditItem(item){
+      return !!(item && item.kind === "returnTh" && item.payload && item.payload.op === "edit");
+    }
+    function returnThItemIds(item){
+      const p = item && item.payload || {};
+      const ids = (Array.isArray(p.items) ? p.items : []).map(i => String(i && i.clientItemId || "")).filter(Boolean);
+      if (returnThIsEditItem(item)) (p.groupIds || []).forEach(id => ids.push(String(id)));
+      return ids;
+    }
+    function returnThApplyPendingEdits(record){
+      if (!record) return record;
+      let rec = record;
+      for (const q of localQueue()) {
+        if (!returnThIsEditItem(q) || q.status === "done") continue;
+        const ids = new Set((rec.items || []).map(i => String(i.id || "")).filter(Boolean));
+        const p = q.payload || {};
+        if (!ids.size || !(p.groupIds || []).some(id => ids.has(String(id)))) continue;
+        if (p.deleteOrder) return null;
+        const items = (p.items || []).map(i => ({
+          id:i.clientItemId || "",
+          tenSanPham:i.tenSanPham || "",
+          soLuong:i.soLuong || "",
+          tinhTrang:i.tinhTrang || "",
+          ghiChu:i.ghiChu || "",
+          loaiHoan:p.loaiHoan || "",
+          imageLink:i.imageLink || "",
+          daTaoSv:i.daTaoSv || ""
+        }));
+        rec = Object.assign({}, rec, {
+          maDon:p.maDon || rec.maDon,
+          loaiHoan:p.loaiHoan || rec.loaiHoan,
+          status:q.status === "error" ? "error" : "pending",
+          editLocalId:q.localId,
+          items,
+          qty:items.reduce((sum, i) => sum + (Number(i.soLuong) || 0), 0),
+          products:items.map(i => i.tenSanPham).filter(Boolean).join("; ")
+        });
+      }
+      return rec;
+    }
+    async function syncReturnThEditItem(item){
+      let queue = localQueue();
+      const pos = queue.findIndex(x => x && x.localId === item.localId);
+      const ids = new Set(returnThItemIds(item));
+      // Giữ đúng thứ tự: đơn gốc / lần sửa trước của cùng đơn phải gửi xong trước.
+      if (queue.slice(0, Math.max(0, pos)).some(x => x && x.kind === "returnTh" && x.status !== "done" && returnThItemIds(x).some(id => ids.has(id)))) return queue;
+      await ensureQueueItemImageRefs(item);
+      item.status = "syncing";
+      item.attempts = Number(item.attempts || 0) + 1;
+      item.lastTryAt = Date.now();
+      item.lastStep = item.payload.deleteOrder ? "deleteReturnTh" : "updateReturnTh";
+      saveLocalQueue(queue);
+      updateInputSyncBadge();
+      scheduleQueueReport();
+      const filesBySku = {};
+      try {
+        for (const ref of (item.images || [])) {
+          const payload = await queuedImagePayload(ref);
+          const skuIndex = Number(payload && payload.skuIndex != null ? payload.skuIndex : 0);
+          (filesBySku[skuIndex] = filesBySku[skuIndex] || []).push(payload);
+        }
+      } catch (err) {
+        queue = localQueue();
+        const updated = queue.find(x => x.localId === item.localId);
+        if (updated) {
+          updated.status = "error";
+          updated.lastError = String(err && err.message || err);
+          updated.lastStep = "readReturnThImage";
+          notifyQueueItemError(updated);
+          saveLocalQueue(queue);
+          updateInputSyncBadge();
+          scheduleQueueReport();
+        }
+        return queue;
+      }
+      const items = (Array.isArray(item.payload.items) ? item.payload.items : []).map((sku, skuIndex) => Object.assign({}, sku, {
+        images: filesBySku[skuIndex] || [],
+        files: filesBySku[skuIndex] || []
+      }));
+      const res = await returnThApi(item.payload.deleteOrder ? "deleteReturnTh" : "updateReturnTh", Object.assign({}, item.payload, {
+        items,
+        editId: item.payload.editId || item.localId,
+        clientId: item.localId,
+        _silent: true
+      }));
+      queue = localQueue();
+      const updated = queue.find(x => x.localId === item.localId);
+      if (!updated) return queue;
+      if (!res.ok) {
+        updated.status = "error";
+        updated.lastError = res.message || "Sync sửa đơn TH lỗi";
+        notifyQueueItemError(updated);
+        saveLocalQueue(queue);
+        updateInputSyncBadge();
+        scheduleQueueReport();
+        return queue;
+      }
+      await queueImagesDelete((updated.images || []).map(img => img && img.id));
+      updated.status = "done";
+      updated.remoteId = res.id || updated.localId;
+      updated.syncedAt = Date.now();
+      updated.lastError = "";
+      updated.lastStep = "done";
+      notifyQueueItemDone(updated);
+      saveLocalQueue(queue);
+      updateInputSyncBadge();
+      scheduleQueueReport();
+      live.returnThTodayLoaded = false;
+      loadReturnThToday(true);
+      return queue;
+    }
+
+    // ----- Màn chi tiết -> Sửa -> Sửa / Xóa -----
+    const thEdit = {active:false, record:null, localId:"", maDon:"", loaiHoan:"Hoàn trả", items:[], removed:[], draft:null, saving:false, seq:0};
+    function thEditBlankDraft(){
+      return {product:"", productSearch:"", custom:false, newSubSku:"", newName:"", newUnit:"", creatingSku:false, qty:"", status:"Bình thường", note:"", uid:"d" + (++thEdit.seq)};
+    }
+    function canEditReturnThRecord(row){
+      if (!row || !canAction("updateReturnTh")) return false;
+      if (dateTextDdMmYyyy(row.date) !== todayApiDateText()) return false;
+      return Array.isArray(row.items) && row.items.length > 0 && row.items.every(i => String(i.id || "").trim());
+    }
+    function thEditBucket(uid){
+      const bucket = "thEditFiles_" + uid;
+      nativeImagePickerMap["thEditCam_" + uid] = ["camera", bucket, "thEditPrev_" + uid];
+      nativeImagePickerMap["thEditLib_" + uid] = ["library", bucket, "thEditPrev_" + uid];
+      if (!Array.isArray(live[bucket])) live[bucket] = [];
+      return bucket;
+    }
+    function startReturnThEdit(){
+      const row = live.thDetailRecord;
+      if (!canEditReturnThRecord(row)) return toast("Không sửa được đơn này (chỉ sửa đơn trong ngày và cần quyền Sửa đơn TH).", "err");
+      const queued = row.localId ? localQueue().find(q => q.localId === row.localId && q.status !== "done" && !returnThIsEditItem(q)) : null;
+      if (queued && queued.status === "syncing") return toast("Đơn đang được gửi lên hệ thống, đợi vài giây rồi bấm Sửa lại.", "err");
+      thEdit.active = true;
+      thEdit.record = row;
+      thEdit.localId = queued ? queued.localId : "";
+      thEdit.maDon = row.maDon || "";
+      thEdit.loaiHoan = returnThLoaiHoan(row.loaiHoan || (row.items[0] && row.items[0].loaiHoan) || "");
+      thEdit.removed = [];
+      thEdit.saving = false;
+      const refs = queued ? (queued.images || []) : [];
+      thEdit.items = row.items.map((i, idx) => {
+        const uid = "i" + (++thEdit.seq);
+        const bucket = thEditBucket(uid);
+        live[bucket] = [];
+        return {
+          uid, bucket,
+          id:String(i.id || ""),
+          tenSanPham:i.tenSanPham || "",
+          productSearch:i.tenSanPham || "",
+          soLuong:String(i.soLuong || ""),
+          tinhTrang:i.tinhTrang || "Bình thường",
+          ghiChu:i.ghiChu || "",
+          imageLink:i.imageLink || "",
+          daTaoSv:i.daTaoSv || "",
+          queueSkuIndex:queued ? idx : null,
+          hasQueuedImage:queued ? refs.some(r => Number(r.skuIndex || 0) === idx) : false
+        };
+      });
+      thEdit.draft = thEditBlankDraft();
+      thEditBucket(thEdit.draft.uid);
+      live[thEditBucket(thEdit.draft.uid)] = [];
+      view = "detail";
+      returnThEditView();
+      window.scrollTo(0, 0);
+    }
+    function thEditTarget(k){ return k === "new" ? thEdit.draft : thEdit.items[Number(k)]; }
+    function thEditSkuSuggestions(k, all){
+      const t = thEditTarget(k) || {};
+      const q = all ? "" : skuSearchText(t.productSearch || "");
+      const rows = returnThProducts.map((p, i) => ({i, name:String((typeof p === "string" ? p : p.name) || "").trim()}))
+        .filter(r => r.name && (!q || skuSearchText(r.name).includes(q))).slice(0, 2000);
+      if (!rows.length) return k === "new"
+        ? `<button type="button" class="sku-suggestion" onclick="thEditSkuCustom()">Không thấy SKU phù hợp - tạo mới</button>`
+        : `<div class="muted" style="padding:10px">Không thấy SKU phù hợp.</div>`;
+      return rows.map(r => `<button type="button" class="sku-suggestion" onclick="thEditSkuChoose('${k}', ${r.i})">${html(r.name)}</button>`).join("");
+    }
+    function thEditPickerHtml(k){
+      const t = thEditTarget(k) || {};
+      const value = t.productSearch || "";
+      return `<div class="sku-search-wrap">
+        <input id="thEditSku_${k}" class="sku-search-input" value="${html(value)}" placeholder="Nhập tên SKU để tìm" autocomplete="off" onfocus="thEditSkuOpen('${k}', true)" onclick="thEditSkuOpen('${k}', true)" oninput="thEditSkuInput('${k}', this.value)">
+        <span class="sku-search-caret" aria-hidden="true"></span>
+        <div id="thEditSkuBox_${k}" class="sku-suggestions"></div>
+        ${k === "new" ? `<button type="button" class="sku-create-link" onclick="thEditSkuCustom()">Tạo mới nếu chưa có</button>` : ""}
+      </div>`;
+    }
+    function thEditSkuOpen(k, all){
+      document.querySelectorAll(".sku-suggestions.open").forEach(node => { if (node.id !== "thEditSkuBox_" + k) node.classList.remove("open"); });
+      const box = el("thEditSkuBox_" + k);
+      if (!box) return;
+      box.innerHTML = thEditSkuSuggestions(k, all);
+      box.classList.add("open");
+    }
+    function thEditSkuInput(k, value){
+      const t = thEditTarget(k);
+      if (!t) return;
+      t.productSearch = String(value || "");
+      if (k === "new") t.product = ""; else t.tenSanPham = "";
+      thEditSkuOpen(k, false);
+    }
+    function thEditSkuChoose(k, index){
+      const t = thEditTarget(k), p = returnThProducts[index];
+      if (!t || !p) return;
+      const name = String((typeof p === "string" ? p : p.name) || "").trim();
+      t.productSearch = name;
+      if (k === "new") { t.product = name; t.custom = false; } else t.tenSanPham = name;
+      const input = el("thEditSku_" + k);
+      if (input) input.value = name;
+      const box = el("thEditSkuBox_" + k);
+      if (box) box.classList.remove("open");
+      if (k === "new") returnThEditView();
+    }
+    function thEditSkuCustom(){
+      thEdit.draft.product = "";
+      thEdit.draft.productSearch = "";
+      thEdit.draft.custom = true;
+      returnThEditView();
+    }
+    async function thEditCreateSku(){
+      const d = thEdit.draft;
+      if (d.creatingSku) return;
+      const subSku = String(d.newSubSku || "").trim(), name = String(d.newName || "").trim(), unit = String(d.newUnit || "").trim();
+      if (!subSku || !name || !unit) return toast("Nhập đủ SUB SKU, Tên SKU và Đơn vị.", "err");
+      d.creatingSku = true;
+      returnThEditView();
+      const res = await returnThApi("createSku", {subSku, name, unit, _silent:true});
+      d.creatingSku = false;
+      if (!res.ok) { returnThEditView(); return toast(res.message || "Chưa tạo được SKU mới.", "err"); }
+      const item = res.item || {subSku, name, unit};
+      returnThProducts.push(item);
+      saveReturnThSkuCache(returnThProducts);
+      returnThSkuRemember(Object.assign({}, item, {row:res.row}));
+      Object.assign(d, {product:name, productSearch:name, custom:false, newSubSku:"", newName:"", newUnit:""});
+      returnThEditView();
+      toast("Đã thêm SKU mới vào Thông tin SKU.", "ok");
+    }
+    function thEditDraftName(){
+      const d = thEdit.draft;
+      return String(d.product || (d.custom ? d.productSearch : "") || "").trim();
+    }
+    function thEditDraftHasValue(){
+      const d = thEdit.draft;
+      return !!(thEditDraftName() || String(d.qty || "").trim() || String(d.note || "").trim() || (live[thEditBucket(d.uid)] || []).length);
+    }
+    function thEditAddDraft(){
+      const d = thEdit.draft, bucket = thEditBucket(d.uid);
+      const item = {tenSanPham:thEditDraftName(), soLuong:String(d.qty || "").trim(), tinhTrang:String(d.status || "").trim(), ghiChu:String(d.note || "").trim(), images:(live[bucket] || []).slice(0, 1)};
+      const err = validateReturnThItem(item, `SKU ${thEdit.items.length + 1}`);
+      if (err) return toast(err, "err");
+      thEdit.items.push({uid:d.uid, bucket, id:"", isNew:true, tenSanPham:item.tenSanPham, productSearch:item.tenSanPham, soLuong:item.soLuong, tinhTrang:item.tinhTrang, ghiChu:item.ghiChu, imageLink:"", daTaoSv:"", queueSkuIndex:null, hasQueuedImage:false});
+      thEdit.draft = thEditBlankDraft();
+      live[thEditBucket(thEdit.draft.uid)] = [];
+      returnThEditView();
+    }
+    function removeThEditItem(index){
+      if (!canAction("deleteReturnTh")) return toast("Chưa có quyền Xóa đơn TH.", "err");
+      const item = thEdit.items[index];
+      if (!item) return;
+      if (!confirm(`Xóa SKU "${item.tenSanPham || item.productSearch || "SKU " + (index + 1)}" khỏi đơn? Bấm Lưu sửa mới ghi lên hệ thống.`)) return;
+      if (item.id && !item.isNew) thEdit.removed.push(item.id);
+      thEdit.items.splice(index, 1);
+      returnThEditView();
+    }
+    function setThEditMaDon(value){
+      thEdit.maDon = returnThCleanMaDon(value);
+      const input = el("thEditMaDon");
+      if (input) input.value = thEdit.maDon;
+    }
+    function cancelReturnThEdit(){
+      thEdit.active = false;
+      const r = thEdit.record || {};
+      const index = returnThTodayRecords().findIndex(x => x.time === r.time && x.user === r.user && ((r.localId && x.localId === r.localId) || x.maDon === r.maDon));
+      returnThDetail(index >= 0 ? index : live.thDetailIndex);
+    }
+    function thEditPhotoHtml(uid, bucket, label){
+      return `<div class="file-actions"><button type="button" onclick="openFilePicker('thEditCam_${uid}')">${label}</button><button type="button" onclick="openFilePicker('thEditLib_${uid}')">Chọn từ thư viện</button></div>
+        <input id="thEditCam_${uid}" class="hidden-file" type="file" accept="image/*" capture="environment" onchange="captureFiles(this, '${bucket}', 'thEditPrev_${uid}')">
+        <input id="thEditLib_${uid}" class="hidden-file" type="file" accept="image/*" onchange="captureFiles(this, '${bucket}', 'thEditPrev_${uid}')">
+        <div id="thEditPrev_${uid}" class="preview-grid"></div>`;
+    }
+    function returnThEditView(){
+      if (!thEdit.active) return;
+      const canDelete = canAction("deleteReturnTh");
+      const statusOptions = value => ["Bình thường", "Móp_lỗi hỏng sản phẩm"].map(x => `<option ${x === value ? "selected" : ""}>${x}</option>`).join("");
+      const danger = "color:var(--err);border-color:#fecaca";
+      const itemCards = thEdit.items.map((item, index) => `<div class="sku-card open" style="display:block">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><strong>SKU ${index + 1}${item.isNew ? " (mới)" : ""}</strong>${canDelete ? `<button type="button" style="${danger}" onclick="removeThEditItem(${index})">Xóa SKU</button>` : ""}</div>
+          <label>Tên sản phẩm${thEditPickerHtml(String(index))}</label>
+          <div class="grid cols-2">
+            <label>Số lượng<input type="number" min="1" inputmode="numeric" value="${html(item.soLuong)}" oninput="thEdit.items[${index}].soLuong=this.value"></label>
+            <label>Tình trạng<select onchange="thEdit.items[${index}].tinhTrang=this.value">${statusOptions(item.tinhTrang)}</select></label>
+          </div>
+          <label>Ghi chú<textarea placeholder="Ghi chú nếu có" oninput="thEdit.items[${index}].ghiChu=this.value">${html(item.ghiChu)}</textarea></label>
+          <div class="muted" style="margin:6px 0">${item.imageLink ? `Ảnh hiện tại: <button type="button" class="pns-link" onclick="pnOpenLink('${html(item.imageLink).replace(/'/g, "&#39;")}')">Xem ảnh</button>` : item.hasQueuedImage ? "Ảnh hiện tại: đã chụp, đang chờ gửi." : item.isNew ? "" : "Chưa có ảnh."} Chụp ảnh mới sẽ thay ảnh cũ.</div>
+          ${thEditPhotoHtml(item.uid, item.bucket, "Chụp ảnh mới")}
+        </div>`).join("");
+      const d = thEdit.draft;
+      el("view").className = "content";
+      el("title").textContent = "Sửa đơn TH";
+      el("view").innerHTML = `<section class="section detail form-sheet">
+        <button type="button" onclick="cancelReturnThEdit()">← Hủy sửa</button>
+        <h2 style="margin-top:14px">Sửa đơn TH</h2>
+        <div class="grid">
+          <label>Mã đơn<div class="scan-row"><input id="thEditMaDon" placeholder="Scan hoặc nhập mã đơn" value="${html(thEdit.maDon)}" oninput="returnThMaDonInput(this, thEdit)" onchange="returnThMaDonInput(this, thEdit)"><button class="scan-btn" type="button" title="Quét mã đơn" aria-label="Quét mã đơn" onclick="openCodeScanner('thEditMaDon', 'setThEditMaDon')">${scanIcon("Quét mã đơn")}</button></div></label>
+          <label>Loại hoàn${returnThLoaiHoanSelect("thEdit.loaiHoan=this.value", thEdit.loaiHoan)}</label>
+        </div>
+        <h2 style="margin-top:16px">SKU trong đơn (${thEdit.items.length})</h2>
+        ${itemCards || `<div class="lookup">Đơn chưa còn SKU nào. Thêm SKU bên dưới hoặc dùng Xóa đơn.</div>`}
+        <h2 style="margin-top:16px">Thêm SKU</h2>
+        <label>Tên sản phẩm${thEditPickerHtml("new")}</label>
+        ${d.custom ? `<div class="grid cols-3">
+          <label>SUB SKU<input value="${html(d.newSubSku)}" placeholder="Nhập SUB SKU" oninput="thEdit.draft.newSubSku=this.value"></label>
+          <label>Tên SKU<input value="${html(d.newName)}" placeholder="Nhập tên SKU" oninput="thEdit.draft.newName=this.value"></label>
+          <label>Đơn vị<input value="${html(d.newUnit)}" placeholder="Nhập đơn vị" oninput="thEdit.draft.newUnit=this.value"></label>
+        </div><div style="display:flex;justify-content:flex-end"><button type="button" class="primary" onclick="thEditCreateSku()" ${d.creatingSku ? "disabled" : ""}>${d.creatingSku ? "Đang tạo..." : "Lưu SKU mới"}</button></div>` : ""}
+        <div class="grid cols-2">
+          <label>Số lượng<input type="number" min="1" inputmode="numeric" placeholder="Nhập số lượng" value="${html(d.qty)}" oninput="thEdit.draft.qty=this.value"></label>
+          <label>Tình trạng<select onchange="thEdit.draft.status=this.value">${statusOptions(d.status)}</select></label>
+        </div>
+        <label>Ghi chú<textarea placeholder="Ghi chú nếu có" oninput="thEdit.draft.note=this.value">${html(d.note)}</textarea></label>
+        <h2 style="margin-top:12px">Ảnh SKU mới</h2>
+        ${thEditPhotoHtml(d.uid, thEditBucket(d.uid), "Chụp ảnh")}
+        <div style="display:flex;justify-content:flex-end"><button type="button" onclick="thEditAddDraft()">Thêm SKU</button></div>
+        <div style="margin-top:14px;display:flex;gap:10px;justify-content:flex-end"><button type="button" onclick="cancelReturnThEdit()">Hủy</button><button type="button" class="success" onclick="saveReturnThEdit()" ${thEdit.saving ? "disabled" : ""}>${thEdit.saving ? "Đang lưu..." : "Lưu sửa"}</button></div>
+        ${canDelete ? `<div style="margin-top:22px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px"><span class="muted">Xóa toàn bộ đơn này khỏi hệ thống.</span><button type="button" style="${danger}" onclick="deleteReturnThOrder()" ${thEdit.saving ? "disabled" : ""}>Xóa đơn</button></div>` : ""}
+      </section>`;
+      thEdit.items.forEach(item => renderFilePreview(item.bucket, "thEditPrev_" + item.uid, "thEditCam_" + item.uid));
+      renderFilePreview(thEditBucket(d.uid), "thEditPrev_" + d.uid, "thEditCam_" + d.uid);
+    }
+    function thEditImagePayload(file, skuIndex, skuName){
+      return {
+        sourceFile:file,
+        fileName:file && (file.fileName || file.name) || `TH_${Date.now()}_${skuIndex}.jpg`,
+        mimeType:file && (file.mimeType || file.type) || "image/jpeg",
+        imageType:"returnth",
+        skuIndex,
+        skuName
+      };
+    }
+    async function saveReturnThEdit(){
+      if (Object.values(live.capturePending || {}).some(Boolean)) return toast("Đang nhận ảnh, vui lòng đợi ảnh hiện đủ rồi lưu.", "err");
+      if (thEdit.saving) return;
+      const maDon = returnThCleanMaDon(thEdit.maDon);
+      if (!maDon) return toast("Vui lòng nhập mã đơn.", "err");
+      if (thEditDraftHasValue()) return toast("Bạn đang nhập dở SKU mới: bấm Thêm SKU, hoặc xóa trống phần Thêm SKU rồi lưu.", "err");
+      if (!thEdit.items.length) return toast("Đơn phải còn ít nhất 1 SKU. Muốn bỏ cả đơn hãy bấm Xóa đơn.", "err");
+      for (let i = 0; i < thEdit.items.length; i++) {
+        const it = thEdit.items[i], label = `SKU ${i + 1}`;
+        if (!String(it.tenSanPham || "").trim()) return toast(`${label}: chưa chọn tên sản phẩm trong danh sách.`, "err");
+        if (!String(it.soLuong || "").trim() || Number(it.soLuong) <= 0) return toast(`${label}: thiếu số lượng hợp lệ.`, "err");
+        if (!String(it.tinhTrang || "").trim()) return toast(`${label}: thiếu tình trạng.`, "err");
+        if (!it.imageLink && !it.hasQueuedImage && !(live[it.bucket] || []).length) return toast(`${label}: thiếu ảnh sản phẩm.`, "err");
+      }
+      thEdit.saving = true;
+      returnThEditView();
+      try {
+        const queued = thEdit.localId ? localQueue().find(q => q.localId === thEdit.localId && q.status !== "done") : null;
+        if (queued) await returnThEditQueuedCreate(queued, maDon);
+        else await enqueueReturnThEdit(maDon, false);
+        thEdit.active = false;
+        toast("Đã lưu sửa đơn TH. App sẽ tự gửi lên hệ thống.", "ok");
+        navState.fromView = "home";
+        backToList();
+      } catch (err) {
+        toast(err && err.message ? err.message : String(err), "err");
+      } finally {
+        thEdit.saving = false;
+        if (thEdit.active) returnThEditView();
+      }
+    }
+    // Đơn còn chờ gửi: sửa thẳng vào mục trong hàng đợi, không phải hủy rồi nhập lại.
+    async function returnThEditQueuedCreate(queued, maDon){
+      if (queued.status === "syncing") throw new Error("Đơn đang được gửi lên hệ thống, đợi vài giây rồi bấm Lưu sửa lại.");
+      const loaiHoan = returnThLoaiHoan(thEdit.loaiHoan);
+      const batchId = queued.payload.clientBatchId || queued.localId;
+      const oldRefs = queued.images || [];
+      const keepRefs = [], dropIds = [], newPayloads = [];
+      const items = thEdit.items.map((it, j) => {
+        const files = (live[it.bucket] || []).slice(0, 1);
+        if (it.queueSkuIndex != null) {
+          const refs = oldRefs.filter(r => Number(r.skuIndex || 0) === it.queueSkuIndex);
+          if (files.length) refs.forEach(r => dropIds.push(r.id));
+          else refs.forEach(r => keepRefs.push(Object.assign({}, r, {skuIndex:j})));
+        }
+        files.forEach(f => newPayloads.push(thEditImagePayload(f, j, it.tenSanPham)));
+        return {clientItemId:it.id || `${batchId}-e${Date.now().toString(36)}${j + 1}`, tenSanPham:it.tenSanPham, soLuong:String(it.soLuong).trim(), tinhTrang:it.tinhTrang, ghiChu:String(it.ghiChu || "").trim(), loaiHoan};
+      });
+      const kept = new Set(thEdit.items.map(it => it.queueSkuIndex).filter(x => x != null));
+      oldRefs.forEach(r => { if (!kept.has(Number(r.skuIndex || 0))) dropIds.push(r.id); });
+      const newRefs = newPayloads.length ? await persistQueueImages(`${queued.localId}-e${Date.now()}`, newPayloads) : [];
+      const queue = localQueue();
+      const target = queue.find(x => x.localId === queued.localId);
+      if (!target || target.status === "syncing" || target.status === "done") {
+        await queueImagesDelete(newRefs.map(r => r.id));
+        throw new Error("Đơn vừa được gửi lên hệ thống. Mở lại chi tiết đơn rồi bấm Sửa.");
+      }
+      target.images = [...keepRefs, ...newRefs];
+      target.payload = Object.assign({}, target.payload, {
+        maDon, loaiHoan,
+        tenSanPham:items[0].tenSanPham,
+        soLuong:items[0].soLuong,
+        tinhTrang:items[0].tinhTrang,
+        ghiChu:items[0].ghiChu || "",
+        items:items.map((it, j) => Object.assign({}, it, {images:target.images.filter(r => Number(r.skuIndex || 0) === j)}))
+      });
+      if (target.status === "error") { target.status = "pending"; target.lastError = ""; target.notifiedErrorAt = 0; }
+      target.lastStep = "edited";
+      saveLocalQueue(queue);
+      await queueImagesDelete(dropIds.filter(Boolean));
+      updateInputSyncBadge();
+      scheduleQueueReport();
+      scheduleSyncQueue(0);
+    }
+    // Đơn đã lên sheet: tạo lệnh sửa/xóa trong hàng đợi (offline vẫn lưu được, có mạng tự gửi theo ID dòng).
+    async function enqueueReturnThEdit(maDon, deleteOrder){
+      const itemLocalId = localId();
+      const loaiHoan = returnThLoaiHoan(thEdit.loaiHoan);
+      const groupIds = (thEdit.record.items || []).map(i => String(i.id || "")).filter(Boolean);
+      const imagePayloads = [];
+      const items = deleteOrder ? [] : thEdit.items.map((it, j) => {
+        const files = (live[it.bucket] || []).slice(0, 1);
+        files.forEach(f => imagePayloads.push(thEditImagePayload(f, j, it.tenSanPham)));
+        return {clientItemId:it.id || `${itemLocalId}-${j + 1}`, tenSanPham:it.tenSanPham, soLuong:String(it.soLuong).trim(), tinhTrang:it.tinhTrang, ghiChu:String(it.ghiChu || "").trim(), loaiHoan, imageLink:files.length ? "" : it.imageLink, daTaoSv:it.daTaoSv || ""};
+      });
+      const refs = imagePayloads.length ? await persistQueueImages(itemLocalId, imagePayloads) : [];
+      const queue = localQueue();
+      queue.push({
+        kind:"returnTh",
+        localId:itemLocalId,
+        createdAt:Date.now(),
+        dateText:todayText(),
+        timeText:timeText(),
+        user:currentEmail(),
+        status:"pending",
+        attempts:0,
+        lastError:"",
+        lastStep:"queued",
+        payload:{op:"edit", editId:itemLocalId, maDon, loaiHoan, groupIds, deleteIds:deleteOrder ? [] : thEdit.removed.slice(), deleteOrder:!!deleteOrder, items},
+        images:refs
+      });
+      saveLocalQueue(queue);
+      updateInputSyncBadge();
+      scheduleQueueReport();
+      scheduleSyncQueue(0);
+    }
+    async function deleteReturnThOrder(){
+      if (!canAction("deleteReturnTh")) return toast("Chưa có quyền Xóa đơn TH.", "err");
+      if (thEdit.saving) return;
+      const record = thEdit.record || {};
+      if (!confirm(`Xóa toàn bộ đơn ${record.maDon || ""} (${(record.items || []).length} SKU)? Dữ liệu đơn sẽ bị xóa khỏi sheet Hàng hoàn.`)) return;
+      thEdit.saving = true;
+      try {
+        const queue = localQueue();
+        const queued = thEdit.localId ? queue.find(q => q.localId === thEdit.localId && q.status !== "done") : null;
+        if (queued) {
+          if (queued.status === "syncing") throw new Error("Đơn đang được gửi lên hệ thống, đợi vài giây rồi thử lại.");
+          saveLocalQueue(queue.filter(q => q.localId !== queued.localId));
+          await queueImagesDelete((queued.images || []).map(img => img && img.id));
+          updateInputSyncBadge();
+          scheduleQueueReport();
+          toast("Đã xóa đơn chưa gửi khỏi máy.", "ok");
+        } else {
+          await enqueueReturnThEdit(record.maDon || "", true);
+          toast("Đã xóa đơn. App sẽ tự cập nhật lên hệ thống.", "ok");
+        }
+        thEdit.active = false;
+        navState.fromView = "home";
+        backToList();
+      } catch (err) {
+        toast(err && err.message ? err.message : String(err), "err");
+      } finally {
+        thEdit.saving = false;
+        if (thEdit.active) returnThEditView();
+      }
+    }
+
+    // ----- Tìm kiếm TH Truemilk: tìm trên dữ liệu đã tải về máy + đơn hôm nay + đơn đang chờ gửi -----
+    function thSearchAllowed(){ return canScreen("returnth"); }
+    function thIsoDate(value){
+      const m = String(value || "").match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : "";
+    }
+    function thRecordRows(rec){
+      return (rec.items || []).map((i, idx) => ({
+        syncKey:i.id ? "ID:" + String(i.id).toLowerCase() : "LOCAL:" + (rec.localId || rec.id || rec.maDon) + ":" + idx,
+        id:i.id || "",
+        date:rec.date,
+        time:rec.time,
+        maDon:rec.maDon,
+        user:rec.user,
+        loaiHoan:i.loaiHoan || rec.loaiHoan || "Hoàn trả",
+        tenSanPham:i.tenSanPham || "",
+        soLuong:i.soLuong || "",
+        tinhTrang:i.tinhTrang || "",
+        ghiChu:i.ghiChu || "",
+        imageLink:i.imageLink || "",
+        daTaoSv:i.daTaoSv || "",
+        status:rec.status || "done",
+        localId:rec.localId || ""
+      }));
+    }
+    async function thSearchOrders(){
+      const today = todayApiDateText();
+      const todayFresh = live.returnThTodayLoaded && live.returnThTodayDay === today;
+      const byKey = new Map();
+      (await thReturnsRows()).forEach(r => {
+        if (todayFresh && dateTextDdMmYyyy(r.date) === today) return;
+        byKey.set(r.syncKey, Object.assign({}, r, {status:"done"}));
+      });
+      returnThTodayRecords().forEach(rec => thRecordRows(rec).forEach(r => byKey.set(r.syncKey, r)));
+      const groups = new Map();
+      byKey.forEach(r => {
+        const date = dateTextDdMmYyyy(r.date);
+        const key = [date, r.time, r.maDon, r.user].join("|");
+        let g = groups.get(key);
+        if (!g) {
+          g = {key, date, time:r.time || "", maDon:r.maDon || "", user:r.user || "", loaiHoan:r.loaiHoan || "Hoàn trả", status:"done", localId:r.localId || "", items:[]};
+          groups.set(key, g);
+        }
+        g.items.push({id:r.id, tenSanPham:r.tenSanPham, soLuong:r.soLuong, tinhTrang:r.tinhTrang, ghiChu:r.ghiChu, loaiHoan:r.loaiHoan, imageLink:r.imageLink, daTaoSv:r.daTaoSv});
+        if (r.status && r.status !== "done") g.status = r.status;
+      });
+      return [...groups.values()].map(returnThApplyPendingEdits).filter(Boolean).map(g => Object.assign(g, {iso:thIsoDate(g.date)}));
+    }
+    function thSearchFilters(){ return live.thSearch || (live.thSearch = {code:"", loai:"", status:"", product:"", user:"", from:"", to:""}); }
+    async function runThSearch(){
+      const f = thSearchFilters();
+      ["code", "loai", "status", "product", "user", "from", "to"].forEach(k => { const node = el("ths_" + k); if (node) f[k] = String(node.value || "").trim(); });
+      f.code = returnThCleanMaDon(f.code);
+      live.thLoading = true; live.thRan = true; search();
+      try {
+        const all = await thSearchOrders(), q = pnKey(f.code), prod = skuSearchText(f.product);
+        live.thUsers = [...new Set(all.map(o => o.user).filter(Boolean))].sort();
+        live.thResults = all.filter(o =>
+          (!q || pnKey(o.maDon).includes(q)) &&
+          (!f.loai || o.loaiHoan === f.loai || o.items.some(i => i.loaiHoan === f.loai)) &&
+          (!f.status || o.items.some(i => i.tinhTrang === f.status)) &&
+          (!prod || o.items.some(i => skuSearchText(i.tenSanPham).includes(prod))) &&
+          (!f.user || o.user === f.user) &&
+          (!f.from || (o.iso && o.iso >= f.from)) &&
+          (!f.to || (o.iso && o.iso <= f.to))
+        ).sort((a, b) => (b.iso || "").localeCompare(a.iso || "") || String(b.time || "").localeCompare(String(a.time || "")));
+      } catch (err) {
+        live.thResults = [];
+        toast("Không đọc được dữ liệu TH trên máy: " + String(err && err.message || err), "err");
+      } finally {
+        live.thLoading = false;
+        search();
+      }
+    }
+    function thSearchScanned(value){ const node = el("ths_code"); if (node) node.value = returnThCleanMaDon(value); runThSearch(); }
+    function clearThSearch(){ live.thSearch = null; live.thResults = []; live.thRan = false; search(); }
+    function openThDetail(key){ live.thDetailKey = key; search(); window.scrollTo(0, 0); }
+    function closeThDetail(){ live.thDetailKey = ""; search(); }
+    function thSearchView(){
+      el("view").className = "content";
+      if (live.thDetailKey) return thDetailView();
+      if (!live.thUsers && !live.thUsersLoading) {
+        live.thUsersLoading = true;
+        thSearchOrders().then(all => { live.thUsers = [...new Set(all.map(o => o.user).filter(Boolean))].sort(); })
+          .catch(() => { live.thUsers = []; })
+          .finally(() => { live.thUsersLoading = false; if (view === "search" && searchShopValue() === "th" && !live.thDetailKey) search(); });
+      }
+      const f = thSearchFilters();
+      const opt = (list, value) => `<option value="">Tất cả</option>${list.map(x => `<option ${x === value ? "selected" : ""}>${html(x)}</option>`).join("")}`;
+      const rows = live.thResults || [], shown = rows.slice(0, 300);
+      const list = live.thLoading ? `<div class="lookup search-loading"><div class="inline-spinner"></div><span>Đang tìm trên dữ liệu máy...</span></div>`
+        : !live.thRan ? `<div class="lookup">Nhập mã hoặc chọn bộ lọc rồi bấm Tìm. Để trống tất cả rồi bấm Tìm là xem toàn bộ.</div>`
+        : !rows.length ? `<div class="lookup">Không có đơn phù hợp. Thử bỏ bớt bộ lọc, hoặc tải lại dữ liệu trên máy.</div>`
+        : `<div class="pns-sum"><span><b>${rows.length.toLocaleString("vi-VN")}</b> đơn${rows.length > shown.length ? ` · hiện ${shown.length} đơn mới nhất` : ""}</span><span class="pns-tot"><span><b>${rows.reduce((s, o) => s + o.items.length, 0).toLocaleString("vi-VN")}</b> SKU</span></span></div>
+          <div class="pns-list">${shown.map(o => `<button type="button" class="pns-it" onclick="openThDetail('${html(o.key).replace(/'/g, "&#39;")}')"><span class="pns-date">${html(o.date ? o.date.slice(0, 5) : "--/--")}</span><span class="pns-no">${html(o.maDon || "-")}</span><span class="pns-kh">${html(o.items.map(i => i.tenSanPham).filter(Boolean).join("; ") || "-")}</span><span class="pns-tg"><i class="pns-dot ${o.loaiHoan === "Ecom" ? "sp" : "ok"}">${o.loaiHoan === "Ecom" ? "EC" : "HT"}</i>${o.items.length > 1 ? `<i class="pns-dot sp">${o.items.length}SKU</i>` : ""}${o.status !== "done" ? `<i class="pns-dot no">${o.status === "error" ? "Lỗi" : "Chờ"}</i>` : ""}</span></button>`).join("")}</div>
+          <div class="muted" style="text-align:center;margin-top:6px;font-size:12px">Bấm vào đơn để xem đủ thông tin</div>`;
+      const dataP = thCacheProgress("returnThData");
+      el("view").innerHTML = `<section class="section">
+          ${searchShopToggle()}
+          <div class="search-filter-grid">
+            <label>Mã đơn<div class="scan-row"><input id="ths_code" value="${html(f.code)}" placeholder="Quét hoặc nhập mã đơn" onkeydown="if(event.key==='Enter')runThSearch()"><button class="scan-btn" type="button" title="Quét mã" aria-label="Quét mã" onclick="openCodeScanner('ths_code', 'thSearchScanned')">${scanIcon("Quét mã")}</button></div></label>
+            <div class="search-filter-row">
+              <label>Loại hoàn<select id="ths_loai">${opt(RETURN_TH_LOAI_HOAN, f.loai)}</select></label>
+              <label>Tình trạng<select id="ths_status">${opt(["Bình thường", "Móp_lỗi hỏng sản phẩm"], f.status)}</select></label>
+            </div>
+            <div class="search-filter-row">
+              <label>Tên sản phẩm<input id="ths_product" value="${html(f.product)}" placeholder="Một phần tên SKU"></label>
+              <label>User thao tác<select id="ths_user">${opt(live.thUsers || [], f.user)}</select></label>
+            </div>
+            <div class="search-filter-row">
+              <label>Ngày nhập từ<input id="ths_from" type="date" value="${html(f.from)}"></label>
+              <label>Đến<input id="ths_to" type="date" value="${html(f.to)}"></label>
+            </div>
+          </div>
+          <div class="center-action" style="gap:8px"><button type="button" onclick="clearThSearch()">Xóa lọc</button><button class="primary" onclick="runThSearch()" ${live.thLoading ? "disabled" : ""}>Tìm</button></div>
+        </section>
+        <section class="section"><h2>Kết quả</h2>${list}
+          <div class="muted" style="font-size:12px;margin-top:10px">Dữ liệu TH trên máy: ${Number(dataP.downloaded || 0).toLocaleString("vi-VN")} dòng${dataP.status === "error" ? ` (lỗi tải: ${html(dataP.lastError || "")})` : ""}. Dữ liệu được tải khi mở app/đăng nhập và khi bấm tải lại trang chủ.</div>
+        </section>`;
+    }
+    function thDetailView(){
+      const o = (live.thResults || []).find(x => x.key === live.thDetailKey);
+      if (!o) { live.thDetailKey = ""; return thSearchView(); }
+      const kv = rows => `<div class="pns-kv">${rows.map(([k, v]) => `<span>${html(k)}</span><span>${v === undefined || v === null || v === "" ? "-" : v}</span>`).join("")}</div>`;
+      const t = v => html(v || "");
+      const link = url => url ? `<button type="button" class="pns-link" onclick="pnOpenLink('${html(url).replace(/'/g, "&#39;")}')">Xem ảnh</button>` : "";
+      el("view").innerHTML = `<section class="section">
+          <button type="button" onclick="closeThDetail()">← Quay lại kết quả</button>
+          <h2 style="margin-top:12px">Đơn ${t(o.maDon)}</h2>
+          ${o.status !== "done" ? `<div class="lookup" style="margin-bottom:10px"><strong>${o.status === "error" ? "Đơn có lượt gửi bị lỗi trên máy này" : "Đơn có lượt lưu/sửa đang chờ gửi từ máy này"}</strong></div>` : ""}
+          <h3 class="pns-h"><span>📄</span>Thông tin đơn</h3>
+          ${kv([["Mã đơn", t(o.maDon)], ["Loại hoàn", t(o.loaiHoan)], ["Ngày nhập", t(o.date)], ["Giờ", t(o.time)], ["User thao tác", t(o.user)], ["Số SKU", String(o.items.length)]])}
+          <h3 class="pns-h"><span>📦</span>Sản phẩm (${o.items.length})</h3>
+          ${o.items.map(i => `<div class="pns-card"><div class="pns-card-t">${t(i.tenSanPham)}</div>${kv([["Số lượng", t(i.soLuong)], ["Tình trạng", t(i.tinhTrang)], ["Loại hoàn", t(i.loaiHoan || o.loaiHoan)], ["Ghi chú", t(i.ghiChu)], ["Đã tạo SV", t(i.daTaoSv)], ["ID", t(i.id)], ["Ảnh sản phẩm", link(i.imageLink) || "-"]])}</div>`).join("")}
+        </section>`;
     }
     async function captureFiles(input,bucket,targetId){
       const selected=Array.from(input.files || []);input.value='';
@@ -11774,7 +12610,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       return '<div id="ownCacheStatus" class="lookup"><strong>Dữ liệu trên máy này</strong>'+['masterSku','docOpsSku','docOpsLookup','docOpsReturns'].map(type=>{
         const p=keyedProgress(type), label=type==='masterSku'?'Master SKU VTD':type==='docOpsSku'?'SKU Phạm Nguyên':type==='docOpsReturns'?'Hàng hoàn PN':'Đơn PN';
         return '<div>'+html(label)+': '+html(cacheStatusLabel(p.status))+' · '+Number(p.downloaded || 0)+'/'+Number(p.total || 0)+(p.lastError?'<div>'+html(p.lastError)+'</div>':'')+(p.reportError?'<div>'+html(p.reportError)+'</div>':'')+'</div>';
-      }).join('')+((canAdminConfig() || canAction('downloadCache'))?'<button onclick="downloadOwnCache()">Tải lại cache máy này</button>':'<small>Liên hệ admin để cấp quyền tải lại cache máy này.</small>')+'</div>';
+      }).join('')+(typeof thOwnCacheLinesHtml==='function'?thOwnCacheLinesHtml():'')+((canAdminConfig() || canAction('downloadCache'))?'<button onclick="downloadOwnCache()">Tải lại cache máy này</button>':'<small>Liên hệ admin để cấp quyền tải lại cache máy này.</small>')+'</div>';
     }
     async function downloadOwnCache(){
       if(!canAdminConfig() && !canAction('downloadCache'))return toast('Chưa có quyền tải lại cache máy này.','err');
@@ -11784,8 +12620,9 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       keySyncState.timer=null;keySyncState.forceDaily=true;
       toast('Đang tải lại dữ liệu máy này…','ok');
       await keySyncBackground();
+      if(canScreen('returnth')){await loadReturnThSku(true);await loadReturnThData(true);}
       if(view==='settings')settings();
-      const errors=['masterSku','docOpsSku','docOpsLookup','docOpsReturns'].filter(t=>keyedProgress(t).status==='error');
+      const errors=['masterSku','docOpsSku','docOpsLookup','docOpsReturns'].filter(t=>keyedProgress(t).status==='error').concat(canScreen('returnth')?Object.keys(TH_CACHE_LABELS).filter(t=>thCacheProgress(t).status==='error'):[]);
       toast(errors.length?'Có dữ liệu tải lỗi. Xem trạng thái trên máy.':'Đã kết thúc lượt kiểm tra cache.',errors.length?'err':'ok');
     }
     async function keySyncBackground() {
