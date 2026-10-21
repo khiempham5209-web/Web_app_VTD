@@ -11552,13 +11552,17 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       if (ownPanel) ownPanel.outerHTML = ownCachePanelHtml();
       return progress;
     }
-    async function thDailyClaim(type, force){
-      const key = "attempt:" + type, day = todayApiDateText();
-      let saved = null;
-      try { saved = await thCacheRead("meta", key); } catch (err) {}
-      if (!force && saved && saved.day === day) return false;
-      try { await thCacheWrite("meta", [{key, day}]); } catch (err) {}
-      return true;
+    // Chỉ đánh dấu "đã đối soát hôm nay" khi thành công: lỗi (vd API chưa deploy) thì lần mở app sau thử lại.
+    async function thDailyDone(type){
+      try {
+        const saved = await thCacheRead("meta", "attempt:" + type);
+        return !!(saved && saved.day === todayApiDateText());
+      } catch (err) {
+        return false;
+      }
+    }
+    async function thDailyMark(type){
+      try { await thCacheWrite("meta", [{key:"attempt:" + type, day:todayApiDateText()}]); } catch (err) {}
     }
     function thSyncMerge(saved, res, label, keyOf){
       if (!res || !res.ok || res.protocol !== 1) throw new Error(res && res.message || "API Nhập TH chưa hỗ trợ đồng bộ " + label + ".");
@@ -11587,19 +11591,42 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       if (!subSku) return;
       try { await thCacheWrite("thSku", [{syncKey:"SUBSKU:" + subSku.toLowerCase(), subSku, name:item.name || "", unit:item.unit || "", rowNumber:Number(item.row || 0) || 999999, contentVersion:""}]); } catch (err) {}
     }
+    // API TH chưa có skuSync (chưa deploy bản mới) hoặc skuSync lỗi: vẫn lấy đủ DS SKU bằng listSku cũ.
+    async function returnThSkuFallback(){
+      try {
+        const res = await returnThApi("listSku", {_silent:true});
+        const items = res && res.ok ? uniqueReturnThSku(res.items) : [];
+        if (items.length) {
+          returnThProducts.splice(0, returnThProducts.length, ...items);
+          saveReturnThSkuCache(items);
+        }
+      } catch (err) {}
+    }
+    function thProductNames(){
+      const names = returnThProducts.map(p => String((typeof p === "string" ? p : p.name) || "").trim());
+      (live.thDataNames || []).forEach(name => names.push(name));
+      return [...new Set(names.filter(Boolean))].sort((a, b) => a.localeCompare(b, "vi"));
+    }
+    // DS SKU vừa tải xong: cập nhật màn đang mở (ô chọn Tên sản phẩm ở Tìm kiếm TH giữ nguyên lựa chọn).
+    function returnThRefreshSkuViews(){
+      if (view === "returnth") return returnth();
+      const select = el("ths_product");
+      if (!select) return;
+      const value = select.value;
+      select.innerHTML = `<option value="">Tất cả</option>${thProductNames().map(x => `<option ${x === value ? "selected" : ""}>${html(x)}</option>`).join("")}`;
+    }
     async function loadReturnThSku(force = false){
       if (returnThState.loadingSku) return false;
       returnThState.loadingSku = true;
+      let saved = [];
       try {
-        let saved = [];
         try { saved = (await thCacheRead("thSku")) || []; } catch (err) { saved = []; }
         if (saved.length) returnThApplySkuRows(saved);
         else hydrateReturnThSkuCache();
         await thCacheLoadProgress();
         returnThState.skuLoaded = true;
         if (!returnThApiUrl()) return false;
-        if (saved.length && !await thDailyClaim("returnThSku", force)) return false;
-        if (!saved.length) await thDailyClaim("returnThSku", true);
+        if (saved.length && !force && await thDailyDone("returnThSku")) return false;
         await thCacheSetProgress("returnThSku", {status:"checking", downloaded:saved.length, lastError:""});
         const versions = Object.fromEntries(saved.map(r => [r.syncKey, r.contentVersion]));
         const res = await returnThApi("skuSync", {versions, _silent:true});
@@ -11607,15 +11634,19 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         await thCacheWrite("thSku", merged.next, merged.deletes);
         returnThApplySkuRows(merged.next);
         saveReturnThSkuCache(returnThProducts);
+        await thDailyMark("returnThSku");
         await thCacheSetProgress("returnThSku", {status:"done", downloaded:merged.next.length, total:Number(res.total), lastError:"", verifiedAt:new Date().toISOString()}, true);
         return true;
       } catch (err) {
-        await thCacheSetProgress("returnThSku", {status:"error", downloaded:returnThProducts.length, lastError:String(err && err.message || err)}, true).catch(() => {});
+        if (!saved.length) await returnThSkuFallback();
+        const message = String(err && err.message || err), previous = thCacheProgress("returnThSku");
+        // Lỗi giống lần trước thì không báo lại về admin mỗi lần mở app.
+        await thCacheSetProgress("returnThSku", {status:"error", downloaded:returnThProducts.length, lastError:message}, previous.status !== "error" || previous.lastError !== message).catch(() => {});
         return false;
       } finally {
         returnThState.loadingSku = false;
         returnThState.skuLoaded = true;
-        if (view === "returnth") returnth();
+        returnThRefreshSkuViews();
       }
     }
 
@@ -12205,9 +12236,9 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
     // Danh sách chọn: User từ dữ liệu; Tên sản phẩm = DS SKU TH + tên đã có trong dữ liệu (SKU TH ít nên chọn thẳng).
     function thSearchOptions(all){
       live.thUsers = [...new Set(all.map(o => o.user).filter(Boolean))].sort();
-      const names = returnThProducts.map(p => String((typeof p === "string" ? p : p.name) || "").trim());
+      const names = [];
       all.forEach(o => o.items.forEach(i => names.push(String(i.tenSanPham || "").trim())));
-      live.thProducts = [...new Set(names.filter(Boolean))].sort((a, b) => a.localeCompare(b, "vi"));
+      live.thDataNames = [...new Set(names.filter(Boolean))];
     }
     function thSearchScanned(value){ const node = el("ths_code"); if (node) node.value = returnThCleanMaDon(value); runThSearch(); }
     function clearThSearch(){ live.thSearch = null; live.thResults = []; live.thRan = false; search(); }
@@ -12216,10 +12247,11 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
     function thSearchView(){
       el("view").className = "content";
       if (live.thDetailKey) return thDetailView();
+      if (!returnThState.skuLoaded && !returnThState.loadingSku) setTimeout(() => loadReturnThSku(false), 0);
       if (!live.thUsers && !live.thUsersLoading) {
         live.thUsersLoading = true;
         thSearchOrders().then(thSearchOptions)
-          .catch(() => { live.thUsers = []; live.thProducts = []; })
+          .catch(() => { live.thUsers = []; live.thDataNames = []; })
           .finally(() => { live.thUsersLoading = false; if (view === "search" && searchShopValue() === "th" && !live.thDetailKey) search(); });
       }
       const f = thSearchFilters();
@@ -12241,7 +12273,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
               <label>Tình trạng<select id="ths_status">${opt(["Bình thường", "Móp_lỗi hỏng sản phẩm"], f.status)}</select></label>
             </div>
             <div class="search-filter-row">
-              <label>Tên sản phẩm<select id="ths_product">${opt(live.thProducts || returnThProducts.map(p => String((typeof p === "string" ? p : p.name) || "").trim()).filter(Boolean), f.product)}</select></label>
+              <label>Tên sản phẩm<select id="ths_product">${opt(thProductNames(), f.product)}</select></label>
               <label>User thao tác<select id="ths_user">${opt(live.thUsers || [], f.user)}</select></label>
             </div>
             <div class="search-filter-row">
