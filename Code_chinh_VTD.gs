@@ -821,6 +821,14 @@ function vtdApp_updateRecord(params) {
   const key = String(params.id || params.rawId || params.maDon || "").trim();
   if (!key) return vtdApp_fail_("Thiếu ID hoặc mã đơn.");
 
+  // App gửi lại cùng một lần sửa (mất phản hồi, offline gửi lại) thì không xử lý lần 2.
+  const editId = String(params.editId || "").trim();
+  const editCacheKey = editId ? "VTD_EDIT_DONE_" + editId : "";
+  if (editCacheKey) {
+    const done = CacheService.getScriptCache().get(editCacheKey);
+    if (done) return vtdApp_ok_(Object.assign(JSON.parse(done), {duplicate: true}));
+  }
+
   const ss = vtdApp_ss_();
   const sheet = ss.getSheetByName(VTD_APP.rawSheet);
   const found = vtdApp_findRecordForUpdate_(sheet, key, params);
@@ -856,18 +864,23 @@ function vtdApp_updateRecord(params) {
   }
 
   sheet.getRange(found.rowNumber, 1, 1, headers.length).setValues([row]);
-  const skuCount = vtdApp_replaceSkuForRaw_(ss, rawId, maDon, params.skuItems, auth);
+  // Không gửi skuItems = không đổi SKU: giữ nguyên các dòng SKU (và ảnh sản phẩm) hiện có.
+  const skuCount = hasSkuChange ? vtdApp_replaceSkuForRaw_(ss, rawId, maDon, params.skuItems, auth) : null;
   const imageUpdate = vtdApp_updateImagesForRaw_(ss, rawId, maDon, params);
   vtdApp_queueRow_(sheet, found.rowNumber, {manualUpdate: true, forcePJ2: hasImageChange || hasSkuChange});
 
-  return vtdApp_ok_({
+  const result = {
     id: rawId,
     maDon: maDon,
     rowNumber: found.rowNumber,
     skuCount: skuCount,
     imageUpdate: imageUpdate,
     message: "Đã cập nhật và đưa vào queue xử lý lại."
-  });
+  };
+  if (editCacheKey) {
+    try { CacheService.getScriptCache().put(editCacheKey, JSON.stringify(result), 21600); } catch (err) {}
+  }
+  return vtdApp_ok_(result);
 }
 
 function vtdApp_findRecordForUpdate_(sheet, key, params) {
@@ -1660,11 +1673,13 @@ function vtdApp_updateSkuImage_(ss, data) {
     const rowMaDon = String(vtdApp_pickFromArray_(row, col, ["ma don", "mã đơn", "ma don ghtk", "mã đơn ghtk"]) || "").trim();
     if ((rawId && rowRawId === rawId) || (maDon && rowMaDon === maDon)) {
       const rowSkuName = vtdApp_norm_(vtdApp_pickFromArray_(row, col, ["ten san pham hoan", "tên sản phẩm hoàn về", "ten san pham", "tên sản phẩm", "sku"]));
-      candidates.push({rowNumber: i + 2, skuName: rowSkuName});
+      candidates.push({rowNumber: i + 2, skuName: rowSkuName, rawId: rowRawId});
     }
   });
   if (!candidates.length) return {updated: false, message: "Không thấy RAW_ID trong List_SKU_hoàn."};
-  let target = candidates[Math.min(skuIndex, candidates.length - 1)] || null;
+  const ownRows = rawId ? candidates.filter(item => item.rawId === rawId) : [];
+  const pool = ownRows.length ? ownRows : candidates;
+  let target = pool[Math.min(skuIndex, pool.length - 1)] || null;
   if (!target && skuNameNorm) target = candidates.find(item => item.skuName === skuNameNorm) || null;
   const currentImage = String(vtdApp_pickFromArray_(sheet.getRange(target.rowNumber, 1, 1, sheet.getLastColumn()).getDisplayValues()[0], col, ["anh san pham", "Ảnh sản phẩm", "ảnh sản phẩm", "anh", "ảnh", "link anh", "link ảnh"]) || "").trim();
   const imagePath = String(data.imagePath || data.imageUrl || "").trim();
@@ -4386,6 +4401,9 @@ function vtdApp_readSkuByRaw_(ss, limit) {
     if (!rawId) continue;
     out[rawId] = out[rawId] || [];
     out[rawId].push({
+      id: String(vtdApp_pickFromArray_(row, col, ["id"]) || "").trim(),
+      rawId: rawId,
+      anhSanPham: String(vtdApp_pickFromArray_(row, col, ["anh san pham", "ảnh sản phẩm"]) || "").trim(),
       ten: vtdApp_pickFromArray_(row, col, ["ten san pham hoan ve", "ten san pham hoan", "ten san pham", "sku"]),
       type: vtdApp_pickFromArray_(row, col, ["type", "loai"]),
       soLuong: vtdApp_pickFromArray_(row, col, ["so luong"]),
@@ -4417,7 +4435,12 @@ function vtdApp_readSkuByRawIds_(ss, rawIds) {
     const maDon = String(vtdApp_pickFromArray_(row, col, ["ma don", "mã đơn", "ma don ghtk", "mã đơn ghtk"]) || "").trim();
     const keys = [rawId, maDon].filter(key => key && rawIds[key]);
     if (!keys.length) continue;
+    const anhSanPham = String(vtdApp_pickFromArray_(row, col, ["anh san pham", "ảnh sản phẩm"]) || "").trim();
     const sku = {
+      id: String(vtdApp_pickFromArray_(row, col, ["id"]) || "").trim(),
+      rawId: rawId,
+      anhSanPham: anhSanPham,
+      anhUrl: anhSanPham ? anhSanPham.split(/\s*;\s*/).map(vtdApp_resolveImageUrl_).filter(Boolean).join("; ") : "",
       ten: vtdApp_pickFromArray_(row, col, ["ten san pham hoan ve", "tên sản phẩm hoàn về", "ten san pham hoan", "ten san pham", "sku"]) || row[2],
       type: vtdApp_pickFromArray_(row, col, ["type", "loai"]) || row[3],
       soLuong: vtdApp_pickFromArray_(row, col, ["so luong", "số lượng", "qty"]) || row[4],

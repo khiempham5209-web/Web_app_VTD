@@ -2275,7 +2275,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         <ol class="hp-steps"><li><b>Kiểm tra khi nào cần tải lại.</b><small>Quét mã ở ${hpTab("docops")} báo không thấy đơn dù đơn đã có · Không thấy SKU mới · Thông tin đơn hiện ra cũ, sai.</small></li><li><b>Bấm tab ${hpTab("settings")} → Cài đặt khác → Cập nhật app.</b></li><li><b>Xem khung "Dữ liệu trên máy này".</b><small>Mỗi dòng (Master SKU VTD, SKU Phạm Nguyên, Đơn PN, DS SKU TH Truemilk, Dữ liệu TH Truemilk) có trạng thái và số đã tải / tổng.</small></li><li><b>Bấm "Tải lại cache máy này", giữ app mở và có mạng.</b><small>Chờ tới khi app báo "Đã kết thúc lượt kiểm tra cache".</small></li><li><b>Quay lại màn nhập, quét lại mã.</b></li></ol>`,
         tip("Chưa thấy nút Tải lại cache?", "Tài khoản chưa được cấp quyền; liên hệ admin để cấp quyền hoặc nhờ admin tải giúp.") + warn("Cần có mạng", "Không có mạng thì app giữ nguyên dữ liệu cũ, không xoá gì."),
         hpPhone("Cài đặt", `<div class="hp-card"><b>Dữ liệu trên máy này</b>Master SKU VTD: Xong · 1.240/1.240<br>SKU Phạm Nguyên: Xong · 386/386<br>Đơn PN: Đang tải · 2.100/2.544<br>DS SKU TH Truemilk: Xong · 52/52<br>Dữ liệu TH Truemilk: Xong · 3.180/3.180</div><div class="hp-btns"><span class="hp-btn pri">Tải lại cache máy này</span></div>`, "settings"));
-      const faq = [["Bấm OK rồi có cần chờ không?", "Không. Đơn đã lưu trên máy, app tự gửi lên hệ thống."], ["Trang chủ chưa thấy đơn vừa nhập?", "Đơn đang được gửi. Bấm nút tải lại ở góc trên sau ít phút."], ["Chụp nhầm ảnh thì sao?", "Xoá ảnh ở phần xem trước rồi chụp lại trước khi bấm OK. Mỗi nhóm ảnh tối đa 8 ảnh."], ["Dòng chữ chạy trên đầu màn hình là gì?", "Là thông báo chung của app, không phải lỗi."], ["Quét mã không thấy đơn hoặc SKU?", "Đơn hoặc SKU mới có thể chưa có trong dữ liệu trên máy. Làm theo mục 10: tải lại cache máy này."], ["Nhập TH sai hoặc thiếu SKU thì làm sao?", "Trong ngày: Trang chủ → bấm vào đơn TH → Sửa. Sửa thông tin, thêm SKU, xóa SKU rồi bấm Lưu sửa. Không nhập lại đơn mới để tránh trùng."], ["Không thấy nút Sửa / nút Xóa ở đơn TH?", "Chỉ sửa được đơn nhập trong ngày, và tài khoản cần quyền Sửa đơn TH (nút Xóa cần thêm quyền Xóa đơn TH). Liên hệ admin để cấp quyền."], ["Máy khác chưa thấy đơn TH vừa nhập / vừa sửa?", "Máy kia bấm nút tải lại ở góc trên Trang chủ, hoặc đăng nhập lại. Dữ liệu TH được tải khi mở app và khi tải lại trang chủ."], ["Gặp lỗi không có trong bảng?", "Chụp màn hình hàng chờ hoặc thông báo lỗi, gửi người phụ trách app."]];
+      const faq = [["Bấm OK rồi có cần chờ không?", "Không. Đơn đã lưu trên máy, app tự gửi lên hệ thống."], ["Trang chủ chưa thấy đơn vừa nhập?", "Đơn đang được gửi. Bấm nút tải lại ở góc trên sau ít phút."], ["Chụp nhầm ảnh thì sao?", "Xoá ảnh ở phần xem trước rồi chụp lại trước khi bấm OK. Mỗi nhóm ảnh tối đa 8 ảnh."], ["Dòng chữ chạy trên đầu màn hình là gì?", "Là thông báo chung của app, không phải lỗi."], ["Quét mã không thấy đơn hoặc SKU?", "Đơn hoặc SKU mới có thể chưa có trong dữ liệu trên máy. Làm theo mục 10: tải lại cache máy này."], ["Nhập VTD sai hoặc thiếu sản phẩm thì làm sao?", "Trong ngày: mở chi tiết đơn → Sửa. Sửa thông tin, chụp thêm ảnh chứng từ / ảnh sản phẩm, bấm + Thêm SKU để thêm sản phẩm (quét mã vật tư, serial, chụp ảnh như màn nhập) rồi bấm Lưu sửa. Mất mạng vẫn lưu được, có mạng app tự gửi và đánh dấu cần đồng bộ lại."], ["Nhập TH sai hoặc thiếu SKU thì làm sao?", "Trong ngày: Trang chủ → bấm vào đơn TH → Sửa. Sửa thông tin, thêm SKU, xóa SKU rồi bấm Lưu sửa. Không nhập lại đơn mới để tránh trùng."], ["Không thấy nút Sửa / nút Xóa ở đơn TH?", "Chỉ sửa được đơn nhập trong ngày, và tài khoản cần quyền Sửa đơn TH (nút Xóa cần thêm quyền Xóa đơn TH). Liên hệ admin để cấp quyền."], ["Máy khác chưa thấy đơn TH vừa nhập / vừa sửa?", "Máy kia bấm nút tải lại ở góc trên Trang chủ, hoặc đăng nhập lại. Dữ liệu TH được tải khi mở app và khi tải lại trang chủ."], ["Gặp lỗi không có trong bảng?", "Chụp màn hình hàng chờ hoặc thông báo lỗi, gửi người phụ trách app."]];
       const s8 = `<section class="hp-sec hp-faq" id="hp-faq" style="--c:${C.blue}"><div class="hp-sec-head"><span class="hp-num">12</span><h3>Hỏi đáp nhanh</h3><span class="hp-sub">Bấm vào câu hỏi để xem</span></div><div style="padding:6px 14px 14px">${faq.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join("")}</div></section>`;
       el("view").innerHTML = `<div class="hp">
         <div class="hp-hero"><h2>Hướng dẫn sử dụng app Chứng từ FF</h2><p>Cách nhập từng màn, màn hình mẫu và cách xử lý đơn lỗi. Bấm một chủ đề để đi tới mục đó.</p><span class="hp-ver">Phiên bản ${html(APP_VERSION)}</span></div>
@@ -2464,6 +2464,9 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       return raw.filter(Boolean).map(x => typeof x === "string"
         ? {name:x, material:"", type:"", qty:"", serial:"", lot:"", status:"", note:""}
         : {
+            id:String(x.id || "").trim(),
+            rawId:String(x.rawId || x.raw_id || "").trim(),
+            imageUrl:x.anhUrl || "",
             name:productNameFrom(x) || x.ma || x.code || "",
             material:productCodeFrom(x),
             type:x.type || x.loai || x["Type"] || "",
@@ -2537,7 +2540,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       if (live.detailLoading[cacheKey]) return;
       if (live.detailCache[cacheKey]) {
         detailRows[index] = live.detailCache[cacheKey];
-        if (navState.detailKey === cacheKey) detail(index, true);
+        if (navState.detailKey === cacheKey && view === "detail") detail(index, true);
         return;
       }
       live.detailLoading[cacheKey] = true;
@@ -2568,7 +2571,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         merged._detailLoaded = true;
         live.detailCache[cacheKey] = merged;
         detailRows[index] = merged;
-        if (navState.detailKey === cacheKey) detail(index, true);
+        if (navState.detailKey === cacheKey && view === "detail") detail(index, true);
       } finally {
         live.detailLoading[cacheKey] = false;
       }
@@ -2589,6 +2592,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         <div class="thumb" style="display:grid;place-items:center;font-weight:900;color:#64748b">SP</div>
         <div><span class="vtd-sku-index">SKU ${index + 1}:</span><strong>${html(item.name)}</strong><br><span>${html([item.status, item.type, item.qty ? `SL ${item.qty}` : ""].filter(Boolean).join(" · "))}</span>
           ${meta.length ? `<div class="sku-meta">${meta.map(([k,v]) => `<span>${html(k)}</span><strong>${html(v)}</strong>`).join("")}</div>` : ""}
+          ${vtdSkuImageLinks(item).filter(url => /^https?:/i.test(url)).map((url, n) => `<a class="image-link" target="_blank" href="${html(url)}" onclick="event.stopPropagation()">Ảnh SP ${n + 1}</a>`).join(" ")}
         </div>
       </div>`;
     }
@@ -2609,6 +2613,32 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
     function editImageKey(img, index){
       return String((img && (img.id || img.url || img.link || img.path || img.label)) || `img_${index}`);
     }
+    // ===== Sửa đơn VTD (5.9.28): SKU đủ thao tác như màn nhập (quét mã vật tư/serial, chụp ảnh, tạo SKU mới),
+    // ảnh chứng từ chụp được trên APK, lưu qua hàng đợi (offline vẫn lưu, có mạng tự gửi updateRecord). =====
+    const VTD_SKU_STATUSES = ["Bình thường", "Móp, lỗi, hỏng sản phẩm", "Sai/thiếu sản phẩm"];
+    function vtdEditBucket(uid){
+      const bucket = "vtdEditFiles_" + uid;
+      nativeImagePickerMap["vtdEditCam_" + uid] = ["camera", bucket, "vtdEditPrev_" + uid];
+      nativeImagePickerMap["vtdEditLib_" + uid] = ["library", bucket, "vtdEditPrev_" + uid];
+      if (!Array.isArray(live[bucket])) live[bucket] = [];
+      return bucket;
+    }
+    function vtdEditPhotoHtml(uid, label){
+      const bucket = vtdEditBucket(uid);
+      return `<div class="file-actions" style="margin-top:6px"><button type="button" onclick="openFilePicker('vtdEditCam_${uid}')">${label}</button><button type="button" onclick="openFilePicker('vtdEditLib_${uid}')">Chọn ảnh</button></div>
+        <input id="vtdEditCam_${uid}" class="hidden-file" type="file" accept="image/*" capture="environment" multiple onchange="captureFiles(this, '${bucket}', 'vtdEditPrev_${uid}')">
+        <input id="vtdEditLib_${uid}" class="hidden-file" type="file" accept="image/*" multiple onchange="captureFiles(this, '${bucket}', 'vtdEditPrev_${uid}')">
+        <div id="vtdEditPrev_${uid}" class="preview-grid"></div>`;
+    }
+    function vtdEditNewSkuDraft(){
+      return {uid:"d" + Date.now().toString(36), name:"", custom:false, newMaterial:"", newName:"", material:"", type:"", qty:"", status:"Bình thường", lot:"", serial:"", note:""};
+    }
+    function vtdEditSkuView(item){
+      return {name:String(item.name || "").trim(), material:String(item.material || "").trim(), type:String(item.type || "").trim(), qty:String(item.qty || "").trim(), status:String(item.status || "").trim(), lot:String(item.lot || "").trim(), serial:String(item.serial || "").trim(), note:String(item.note || "").trim()};
+    }
+    function vtdEditCoreView(r){
+      return {ma:String(r.ma || "").trim(), slog:r.slog || "", loai:r.loai || "", xacThuc:r.xacThuc || "", po:String(r.po || "").trim(), tinhTrang:r.tinhTrang || "Bình thường", note:String(r.note || "").trim()};
+    }
     function startEditRecord(index){
       let r = detailRows[index] || rows[index] || rows[0];
       const cacheKeys = [
@@ -2626,12 +2656,25 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         toast("Bạn không có quyền sửa đơn này hoặc đơn không thuộc ngày hôm nay.", "err");
         return;
       }
+      const rawId = String(r.rawId || r.id || "").trim();
+      const all = recordSkuItems(r);
+      // SKU của lượt nhập khác cùng mã đơn chỉ hiển thị, không ghi đè vào lượt đang sửa.
+      const own = all.filter(x => !x.rawId || x.rawId === rawId);
       editRecordState.active = true;
       editRecordState.index = index;
       editRecordState.record = JSON.parse(JSON.stringify(r || {}));
-      editRecordState.docFiles = [];
-      editRecordState.skuItems = recordSkuItems(r).map(x => Object.assign({}, x));
+      editRecordState.docBucket = vtdEditBucket("doc");
+      live[editRecordState.docBucket] = [];
+      editRecordState.skuItems = own.map((x, i) => {
+        const uid = "s" + i + "_" + Date.now().toString(36);
+        live[vtdEditBucket(uid)] = [];
+        return Object.assign({}, x, {uid});
+      });
+      editRecordState.otherSkus = all.filter(x => x.rawId && x.rawId !== rawId);
       editRecordState.removedImages = {};
+      editRecordState.draft = null;
+      editRecordState.origCore = JSON.stringify(vtdEditCoreView(r));
+      editRecordState.origSku = JSON.stringify(own.map(vtdEditSkuView));
       editRecordState.saving = false;
       renderEditRecord();
     }
@@ -2675,14 +2718,21 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       const img = recordImages(editRecordState.record || {})[index];
       toggleEditImageRemove(editImageKey(img, index));
     }
-    function captureEditRecordFiles(input){
-      editRecordState.docFiles = Array.from(input.files || []);
-      renderEditRecordKeepPosition();
+    // index: số thứ tự SKU trong đơn, hoặc "d" = SKU đang thêm mới.
+    function editSkuTarget(index){
+      return String(index) === "d" ? editRecordState.draft : editRecordState.skuItems[Number(index)];
     }
     function updateEditSku(index, key, value){
-      const item = editRecordState.skuItems[index];
+      const item = editSkuTarget(index);
       if (!item) return;
       item[key] = value;
+      if (key === "type") renderEditRecordKeepPosition();
+    }
+    function applyEditSkuProduct(item, product, name){
+      item.name = name || productNameFrom(product) || item.name;
+      item.material = productCodeFrom(product) || item.material || "";
+      const type = productTypeFrom(product);
+      item.type = type === "Sữa" ? "Sữa" : (type ? "Quà/đồ chơi" : (item.type || ""));
     }
     function applyEditSkuName(index, value){
       updateEditSku(index, "name", value);
@@ -2690,20 +2740,18 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       if (!norm) return;
       const match = skuComboOptions("vtd").find(row => skuSearchText(row.name) === norm);
       if (!match || !match.raw) return;
-      const item = editRecordState.skuItems[index];
-      item.name = match.name;
-      item.type = match.raw.type || match.raw.loai || match.raw["Loại"] || item.type || "";
+      applyEditSkuProduct(editSkuTarget(index), match.raw, match.name);
     }
     function editSkuSuggestionsHtml(index, forceAll){
-      const item = editRecordState.skuItems[index] || {};
+      const item = editSkuTarget(index) || {};
       const query = forceAll ? "" : skuSearchText(item.name || "");
       const rows = skuComboOptions("vtd")
         .filter(row => !query || skuSearchText(row.name).includes(query))
         .slice(0, 2000);
       if (!rows.length) {
-        return `<button type="button" class="sku-suggestion" onclick="chooseEditSkuCustom(${index})">Không thấy SKU phù hợp - nhập tay</button>`;
+        return `<button type="button" class="sku-suggestion" onclick="chooseEditSkuCustom('${index}')">Không thấy SKU phù hợp - tạo mới</button>`;
       }
-      return rows.map(row => `<button type="button" class="sku-suggestion" onclick="chooseEditSku(${index}, '${html(row.key)}')">${html(row.name)}</button>`).join("");
+      return rows.map(row => `<button type="button" class="sku-suggestion" onclick="chooseEditSku('${index}', '${html(row.key)}')">${html(row.name)}</button>`).join("");
     }
     function editSkuSuggestionBox(index){
       return el(`editSkuSuggestions_${index}`);
@@ -2724,9 +2772,10 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       box.classList.add("open");
     }
     function clearEditSkuName(index){
-      const item = editRecordState.skuItems[index];
+      const item = editSkuTarget(index);
       if (!item) return;
       item.name = "";
+      item.material = "";
       const input = el(`editSkuName_${index}`);
       if (input) input.value = "";
       const clearButton = el(`editSkuNameClear_${index}`);
@@ -2734,15 +2783,11 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       focusEditSku(index);
     }
     function chooseEditSku(index, key){
-      const item = editRecordState.skuItems[index];
+      const item = editSkuTarget(index);
       const match = skuComboOptions("vtd").find(row => row.key === String(key));
       if (!item || !match) return;
-      item.name = match.name;
-      item.type = match.raw.type || match.raw.loai || match.raw["Loại"] || item.type || "";
-      const input = el(`editSkuName_${index}`);
-      if (input) input.value = item.name;
-      const clearButton = el(`editSkuNameClear_${index}`);
-      if (clearButton) clearButton.style.display = item.name ? "" : "none";
+      applyEditSkuProduct(item, match.raw, match.name);
+      if (String(index) === "d") item.custom = false;
       const box = editSkuSuggestionBox(index);
       if (box) box.classList.remove("open");
       renderEditRecordKeepPosition();
@@ -2750,43 +2795,132 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
     function chooseEditSkuCustom(index){
       const box = editSkuSuggestionBox(index);
       if (box) box.classList.remove("open");
+      if (String(index) === "d" && editRecordState.draft) {
+        editRecordState.draft.custom = true;
+        editRecordState.draft.name = "";
+        renderEditRecordKeepPosition();
+        return;
+      }
       const input = el(`editSkuName_${index}`);
       if (input) input.focus();
     }
-    function addEditSku(){
-      editRecordState.skuItems.push({name:"", type:"", qty:"1", status:"Bình thường", lot:"", serial:"", note:""});
+    // Quét mã vật tư / serial cho SKU trong màn sửa.
+    function editSkuScan(index, field){
+      live.editSkuScanTarget = {index:String(index), field};
+      openCodeScanner(`editSku_${field}_${index}`, "editSkuScanned");
+    }
+    function editSkuScanned(value){
+      const target = live.editSkuScanTarget || {};
+      const item = editSkuTarget(target.index);
+      if (!item) return;
+      if (target.field === "material") return applyEditSkuMaterial(target.index, value, true);
+      item[target.field] = String(value || "").trim();
       renderEditRecordKeepPosition();
     }
+    function applyEditSkuMaterial(index, value, validate){
+      const item = editSkuTarget(index);
+      if (!item) return;
+      const code = String(value || "").trim();
+      item.material = code;
+      const found = findProductByMaterial(code);
+      if (found >= 0) {
+        applyEditSkuProduct(item, products[found]);
+        if (String(index) === "d") item.custom = false;
+        renderEditRecordKeepPosition();
+      } else if (validate && code) {
+        toast("Không tìm thấy mã vật tư trong cache Master SKU trên máy.", "err");
+        renderEditRecordKeepPosition();
+      }
+    }
+    function openEditSkuDraft(){
+      editRecordState.draft = vtdEditNewSkuDraft();
+      live[vtdEditBucket(editRecordState.draft.uid)] = [];
+      renderEditRecordKeepPosition();
+      setTimeout(() => { const node = el("editSkuName_d"); if (node) node.scrollIntoView({behavior:"smooth", block:"center"}); }, 50);
+    }
+    function closeEditSkuDraft(){
+      if (editRecordState.draft) live[vtdEditBucket(editRecordState.draft.uid)] = [];
+      editRecordState.draft = null;
+      renderEditRecordKeepPosition();
+    }
+    function addEditSkuDraft(){
+      if (Object.values(live.capturePending || {}).some(Boolean)) return toast("Đang nhận ảnh, vui lòng đợi ảnh hiện đủ.", "err");
+      const d = editRecordState.draft;
+      if (!d) return;
+      const name = String(d.custom ? d.newName : d.name).trim();
+      if (!name) return toast("Thiếu tên sản phẩm", "err");
+      if (!Number(d.qty) || Number(d.qty) <= 0) return toast("Thiếu số lượng", "err");
+      const bucket = vtdEditBucket(d.uid);
+      if (!(live[bucket] || []).length) return toast("SKU cần ít nhất 1 ảnh sản phẩm", "err");
+      editRecordState.skuItems.push({
+        uid:d.uid, id:"", rawId:"", addedInEdit:true, isNew:!!d.custom,
+        name, material:String(d.custom ? d.newMaterial : d.material).trim(), type:d.type || "",
+        qty:String(d.qty).trim(), status:d.status || "Bình thường", lot:String(d.lot || "").trim(),
+        serial:String(d.serial || "").trim(), note:String(d.note || "").trim(), imagePath:""
+      });
+      editRecordState.draft = null;
+      renderEditRecordKeepPosition();
+      toast("Đã thêm SKU vào đơn. Bấm Lưu sửa để gửi lên hệ thống.", "ok");
+    }
     function removeEditSku(index){
+      const item = editRecordState.skuItems[index];
+      if (!item) return;
+      if (!confirm(`Xóa SKU "${item.name || "SKU " + (Number(index) + 1)}" khỏi đơn? Bấm Lưu sửa mới ghi lên hệ thống.`)) return;
+      live[vtdEditBucket(item.uid)] = [];
       editRecordState.skuItems.splice(index, 1);
       renderEditRecordKeepPosition();
     }
-    function editSkuRowsHtml(){
-      const typeOptions = ["", "Quà/đồ chơi", "Sữa"].map(x => `<option value="${html(x)}">${html(x || "Chọn type")}</option>`).join("");
-      const statusOptions = ["Bình thường","Móp, lỗi, hỏng sản phẩm","Sai/thiếu sản phẩm"].map(x => `<option value="${html(x)}">${html(x)}</option>`).join("");
-      if (!editRecordState.skuItems.length) return `<div class="edit-muted">Chưa có SKU. Bấm thêm SKU nếu đơn hoàn là sản phẩm/thu hồi.</div>`;
-      return editRecordState.skuItems.map((item, index) => `<div class="edit-sku-row">
-        <label>Tên sản phẩm
+    function vtdSkuImageLinks(item){
+      const raw = String(item.imageUrl || item.imagePath || "").trim();
+      return raw ? raw.split(/\s*;\s*/).filter(Boolean) : [];
+    }
+    function editSkuFieldsHtml(index, item){
+      const typeOptions = ["", "Quà/đồ chơi", "Sữa"].map(x => `<option value="${html(x)}" ${x === (item.type || "") ? "selected" : ""}>${html(x || "Chọn type")}</option>`).join("");
+      const statusOptions = VTD_SKU_STATUSES.map(x => `<option value="${html(x)}" ${x === (item.status || "Bình thường") ? "selected" : ""}>${html(x)}</option>`).join("");
+      const custom = String(index) === "d" && item.custom;
+      return `<label>Tên sản phẩm
           <div class="sku-search-wrap">
-            <input id="editSkuName_${index}" class="sku-search-input" value="${html(item.name || "")}" data-edit-field="sku-name-${index}" autocomplete="off" onfocus="focusEditSku(${index})" onclick="focusEditSku(${index})" oninput="updateEditSkuName(${index}, this.value)" placeholder="Nhập tên SKU để tìm">
-            <button id="editSkuNameClear_${index}" type="button" class="sku-search-clear" style="${String(item.name || "").trim() ? "" : "display:none"}" title="Xóa tên SKU" aria-label="Xóa tên SKU" onclick="clearEditSkuName(${index})">×</button>
+            <input id="editSkuName_${index}" class="sku-search-input" value="${html(item.name || "")}" data-edit-field="sku-name-${index}" autocomplete="off" onfocus="focusEditSku('${index}')" onclick="focusEditSku('${index}')" oninput="updateEditSkuName('${index}', this.value)" placeholder="Nhập tên SKU để tìm">
+            <button id="editSkuNameClear_${index}" type="button" class="sku-search-clear" style="${String(item.name || "").trim() ? "" : "display:none"}" title="Xóa tên SKU" aria-label="Xóa tên SKU" onclick="clearEditSkuName('${index}')">×</button>
             <span class="sku-search-caret" aria-hidden="true"></span>
             <div id="editSkuSuggestions_${index}" class="sku-suggestions">${editSkuSuggestionsHtml(index, false)}</div>
+            ${String(index) === "d" ? `<button type="button" class="sku-create-link" onclick="chooseEditSkuCustom('d')">Tạo mới nếu chưa có</button>` : ""}
           </div>
         </label>
+        ${custom ? `<div class="grid cols-3"><label>Material / Mã SP<input value="${html(item.newMaterial || "")}" data-edit-field="sku-newmat-${index}" placeholder="Nhập mã material" oninput="updateEditSku('${index}', 'newMaterial', this.value)"></label><label>Tên sản phẩm mới<input value="${html(item.newName || "")}" data-edit-field="sku-newname-${index}" placeholder="Nhập tên sản phẩm" oninput="updateEditSku('${index}', 'newName', this.value)"></label><label>Type<select onchange="updateEditSku('${index}', 'type', this.value)">${typeOptions}</select></label></div>` : `<div class="grid cols-2">
+          <label>Type<select onchange="updateEditSku('${index}', 'type', this.value)">${typeOptions}</select></label>
+          <label>Mã vật tư<div class="scan-row"><input id="editSku_material_${index}" value="${html(item.material || "")}" data-edit-field="sku-material-${index}" inputmode="numeric" placeholder="Quét hoặc nhập mã vật tư" oninput="updateEditSku('${index}', 'material', this.value)" onchange="applyEditSkuMaterial('${index}', this.value, true)"><button class="scan-btn" type="button" title="Quét mã vật tư" aria-label="Quét mã vật tư" onclick="editSkuScan('${index}', 'material')">${scanIcon("Quét mã vật tư")}</button></div></label>
+        </div>`}
         <div class="grid cols-2">
-          <label>Type<select onchange="updateEditSku(${index}, 'type', this.value)">${typeOptions.replace(`value="${html(item.type || "")}"`, `value="${html(item.type || "")}" selected`)}</select></label>
-          <label>Số lượng<input type="number" min="1" value="${html(item.qty || "")}" oninput="updateEditSku(${index}, 'qty', this.value)" placeholder="SL"></label>
+          <label>Tình trạng<select onchange="updateEditSku('${index}', 'status', this.value)">${statusOptions}</select></label>
+          <label>Số lượng<input type="number" min="1" value="${html(item.qty || "")}" data-edit-field="sku-qty-${index}" oninput="updateEditSku('${index}', 'qty', this.value)" placeholder="Nhập số lượng"></label>
         </div>
-        <label>Tình trạng<select onchange="updateEditSku(${index}, 'status', this.value)">${statusOptions.replace(`value="${html(item.status || "Bình thường")}"`, `value="${html(item.status || "Bình thường")}" selected`)}</select></label>
         <div class="grid cols-2">
-          <label>Mã lô/HSD<input value="${html(item.lot || "")}" oninput="updateEditSku(${index}, 'lot', this.value)"></label>
-          <label>Mã serial<input value="${html(item.serial || "")}" oninput="updateEditSku(${index}, 'serial', this.value)"></label>
+          <label>Mã lô / HSD<input value="${html(item.lot || "")}" data-edit-field="sku-lot-${index}" oninput="updateEditSku('${index}', 'lot', this.value)" placeholder="${item.type === "Sữa" ? "Mã lô hoặc hạn sử dụng" : "Nếu có"}"></label>
+          <label>Mã serial<div class="scan-row"><input id="editSku_serial_${index}" value="${html(item.serial || "")}" data-edit-field="sku-serial-${index}" oninput="updateEditSku('${index}', 'serial', this.value)" placeholder="Nhập hoặc quét mã serial"><button class="scan-btn" type="button" title="Quét serial" aria-label="Quét serial" onclick="editSkuScan('${index}', 'serial')">${scanIcon("Quét serial")}</button></div></label>
         </div>
-        <label>Ghi chú<input value="${html(item.note || "")}" oninput="updateEditSku(${index}, 'note', this.value)"></label>
-        ${item.imagePath ? `<div class="edit-muted">Ảnh sản phẩm hiện có: ${html(item.imagePath)}</div>` : ""}
-        <div class="edit-inline-actions"><button type="button" class="edit-danger" onclick="removeEditSku(${index})">Xóa SKU</button></div>
-      </div>`).join("");
+        <label>Ghi chú SKU<textarea data-edit-field="sku-note-${index}" oninput="updateEditSku('${index}', 'note', this.value)" placeholder="Ghi chú thêm cho SKU nếu có">${html(item.note || "")}</textarea></label>`;
+    }
+    function editSkuRowsHtml(){
+      const own = editRecordState.skuItems.map((item, index) => {
+        const links = vtdSkuImageLinks(item);
+        return `<div class="edit-sku-row">
+          <div class="detail-actions"><strong>SKU ${index + 1}${item.addedInEdit ? " (mới thêm)" : ""}</strong><button type="button" class="edit-danger" onclick="removeEditSku(${index})">Xóa SKU</button></div>
+          ${editSkuFieldsHtml(String(index), item)}
+          <div class="edit-muted">${links.length ? `Ảnh sản phẩm hiện có: ${links.map((url, n) => /^https?:/i.test(url) ? `<a href="${html(url)}" target="_blank">Ảnh ${n + 1}</a>` : html(url)).join(" · ")}` : (item.addedInEdit ? "" : "Chưa có ảnh sản phẩm.")} ${item.addedInEdit ? "" : "Ảnh chụp thêm sẽ được bổ sung vào SKU này."}</div>
+          ${vtdEditPhotoHtml(item.uid, item.addedInEdit ? "Chụp thêm ảnh SP" : "Chụp thêm ảnh SP")}
+        </div>`;
+      }).join("");
+      const others = (editRecordState.otherSkus || []).length ? `<div class="edit-muted" style="margin-top:8px">Cùng mã đơn còn ${editRecordState.otherSkus.length} SKU của lượt nhập khác (${html(editRecordState.otherSkus.map(x => x.name).filter(Boolean).join("; "))}). Các SKU đó không sửa ở đây.</div>` : "";
+      const d = editRecordState.draft;
+      const draft = d ? `<div class="edit-sku-row" style="border-style:dashed">
+          <div class="detail-actions"><strong>Thêm SKU mới</strong><button type="button" onclick="closeEditSkuDraft()">Đóng</button></div>
+          ${editSkuFieldsHtml("d", d)}
+          ${vtdEditPhotoHtml(d.uid, "Chụp ảnh SP")}
+          <div style="display:flex;justify-content:flex-end"><button type="button" class="primary" onclick="addEditSkuDraft()">Thêm sản phẩm</button></div>
+        </div>` : "";
+      if (!own && !draft) return `<div class="edit-muted">Chưa có SKU. Bấm thêm SKU nếu đơn hoàn là sản phẩm/thu hồi.</div>${others}`;
+      return own + draft + others;
     }
     function renderEditRecord(){
       const r = editRecordState.record || {};
@@ -2812,42 +2946,72 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         <label>Tình trạng<select onchange="updateEditRecordField('tinhTrang', this.value)">${["Bình thường","Khác (điền thông tin bên dưới)","Thiếu chứng từ","Sai/thiếu thông tin","Móp, lỗi, hỏng sản phẩm"].map(x => `<option value="${html(x)}" ${x===(r.tinhTrang || "Bình thường")?"selected":""}>${html(x)}</option>`).join("")}</select></label>
         <label>Ghi chú<textarea data-edit-field="note" oninput="updateEditRecordField('note', this.value)" placeholder="Ghi chú nếu có">${html(r.note || "")}</textarea></label>
         <div>
-          <h2>Ảnh / link</h2>
+          <h2>Ảnh / link chứng từ</h2>
           <div class="edit-image-list">${images.length ? images.map((img, index) => {
             const key = editImageKey(img, index);
             const removed = !!editRecordState.removedImages[key];
             return `<div class="edit-image-row" style="${removed ? "opacity:.45;text-decoration:line-through" : ""}"><img src="${html(img.url)}" onerror="this.style.display='none'"><span>${html(img.label || img.url)}</span><button type="button" class="edit-danger" onclick="toggleEditImageRemoveAt(${index})">${removed ? "Giữ lại" : "Xóa"}</button></div>`;
           }).join("") : `<div class="edit-muted">Đơn chưa có ảnh/link.</div>`}</div>
-          <div class="file-actions" style="margin-top:10px">
-            <button type="button" onclick="openFilePicker('editDocCamera')">Chụp thêm ảnh</button>
-            <button type="button" onclick="openFilePicker('editDocLibrary')">Chọn thêm ảnh</button>
-          </div>
-          <input id="editDocCamera" class="hidden-file" type="file" accept="image/*" capture="environment" multiple onchange="captureEditRecordFiles(this)">
-          <input id="editDocLibrary" class="hidden-file" type="file" accept="image/*" multiple onchange="captureEditRecordFiles(this)">
-          ${editRecordState.docFiles.length ? `<div class="edit-muted">${editRecordState.docFiles.length} ảnh mới sẽ được thêm khi lưu.</div>` : ""}
+          ${vtdEditPhotoHtml("doc", "Chụp thêm ảnh")}
         </div>
         <div>
-          <div class="detail-actions"><h2>SKU / sản phẩm</h2><button type="button" onclick="addEditSku()">+ Thêm SKU</button></div>
+          <div class="detail-actions"><h2>SKU / sản phẩm</h2>${editRecordState.draft ? "" : `<button type="button" onclick="openEditSkuDraft()">+ Thêm SKU</button>`}</div>
           <div class="edit-sku-list">${editSkuRowsHtml()}</div>
         </div>
       </section>`;
+      renderFilePreview(vtdEditBucket("doc"), "vtdEditPrev_doc", "vtdEditCam_doc");
+      editRecordState.skuItems.forEach(item => renderFilePreview(vtdEditBucket(item.uid), "vtdEditPrev_" + item.uid, "vtdEditCam_" + item.uid));
+      if (editRecordState.draft) renderFilePreview(vtdEditBucket(editRecordState.draft.uid), "vtdEditPrev_" + editRecordState.draft.uid, "vtdEditCam_" + editRecordState.draft.uid);
+    }
+    function vtdEditImagePayload(file, meta){
+      return Object.assign({
+        sourceFile:file,
+        fileName:file && (file.fileName || file.name) || `VTD_${Date.now()}.jpg`,
+        mimeType:file && (file.mimeType || file.type) || "image/jpeg"
+      }, meta);
     }
     async function saveEditRecord(){
+      if (Object.values(live.capturePending || {}).some(Boolean)) return toast("Đang nhận ảnh, vui lòng đợi ảnh hiện đủ rồi lưu.", "err");
+      if (editRecordState.saving) return;
       const original = detailRows[editRecordState.index] || rows[editRecordState.index] || {};
       const r = editRecordState.record || {};
       if (!canEditRecord(original)) {
         toast("Bạn không có quyền sửa đơn này.", "err");
         return;
       }
-      const cleanSku = editRecordState.skuItems
-        .map(x => ({name:String(x.name || "").trim(), type:String(x.type || "").trim(), qty:String(x.qty || "").trim(), status:String(x.status || "").trim(), lot:String(x.lot || "").trim(), serial:String(x.serial || "").trim(), note:String(x.note || "").trim(), imagePath:String(x.imagePath || "").trim()}))
-        .filter(x => x.name || x.type || x.qty || x.lot || x.serial || x.note);
+      if (editRecordState.draft && (editRecordState.draft.name || editRecordState.draft.newName || editRecordState.draft.qty || (live[vtdEditBucket(editRecordState.draft.uid)] || []).length)) {
+        return toast("Bạn đang nhập dở SKU mới: bấm Thêm sản phẩm hoặc Đóng trước khi lưu.", "err");
+      }
+      for (let i = 0; i < editRecordState.skuItems.length; i++) {
+        const x = editRecordState.skuItems[i];
+        if (!String(x.name || "").trim()) return toast(`SKU ${i + 1}: thiếu tên sản phẩm.`, "err");
+        if (!Number(x.qty) || Number(x.qty) <= 0) return toast(`SKU ${i + 1}: thiếu số lượng.`, "err");
+      }
+      const skuChanged = JSON.stringify(editRecordState.skuItems.map(vtdEditSkuView)) !== editRecordState.origSku;
+      const coreChanged = JSON.stringify(vtdEditCoreView(r)) !== editRecordState.origCore;
+      const docFiles = (live[vtdEditBucket("doc")] || []).slice(0, 8);
+      const removedImageKeys = recordImages(r).map((img, index) => editImageKey(img, index)).filter(key => editRecordState.removedImages[key]);
+      const skuCount = editRecordState.skuItems.length;
+      const imagePayloads = docFiles.map(file => vtdEditImagePayload(file, {imageType:"document", edit:true}));
+      editRecordState.skuItems.forEach((x, skuIndex) => {
+        const files = (live[vtdEditBucket(x.uid)] || []).slice(0, 8);
+        files.forEach(file => imagePayloads.push(vtdEditImagePayload(file, {imageType:"product", skuIndex, skuName:x.name, skuCount, productImageCount:files.length, edit:true})));
+      });
+      if (!coreChanged && !skuChanged && !imagePayloads.length && !removedImageKeys.length) {
+        editRecordState.active = false;
+        toast("Không có thay đổi nào, không cần lưu.", "ok");
+        return detail(editRecordState.index, true);
+      }
+      const cleanSku = editRecordState.skuItems.map(x => {
+        const v = vtdEditSkuView(x);
+        return {id:x.id || "", name:v.name, ten:v.name, ma:v.material, code:v.material, type:v.type, qty:v.qty, soLuong:v.qty, status:v.status, tinhTrang:v.status, lot:v.lot, maLoHsd:v.lot, serial:v.serial, note:v.note, ghiChu:v.note, imagePath:String(x.imagePath || "").trim(), isNew:!!x.isNew};
+      });
       editRecordState.saving = true;
       renderEditRecord();
       try {
-        const newImages = await imagePayloadsForFiles(editRecordState.docFiles, {imageType:"document", edit:true});
-        const removedImageKeys = recordImages(r).map((img, index) => editImageKey(img, index)).filter(key => editRecordState.removedImages[key]);
+        const itemLocalId = localId();
         const params = {
+          editId: itemLocalId,
           id: original.rawId || r.rawId || original.id || r.id,
           rawId: original.rawId || r.rawId || original.id || r.id,
           rowNumber: original.rowNumber || original.sourceRow || r.rowNumber || r.sourceRow,
@@ -2859,26 +3023,105 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
           po: r.po,
           tinhTrang: r.tinhTrang,
           ghiChu: r.note,
-          skuItems: cleanSku,
-          images: newImages,
           removeImages: removedImageKeys,
           needSync: "Yes"
         };
-        const res = await api("updateRecord", params);
-        if (!res || res.ok === false) throw new Error(res && (res.message || res.error) || "Không lưu được chỉnh sửa");
-        const merged = mergeRecordInfo(original, {ma:r.ma || original.ma, slog:r.slog, loai:r.loai, xacThuc:r.xacThuc, po:r.po, tinhTrang:r.tinhTrang, note:r.note, skuItems:cleanSku, st:"Đang đồng bộ"});
+        // Chỉ gửi danh sách SKU khi SKU có thay đổi; không đổi thì API giữ nguyên dòng SKU và ảnh sản phẩm.
+        if (skuChanged) params.skuItems = cleanSku;
+        const refs = imagePayloads.length ? await persistQueueImages(itemLocalId, imagePayloads) : [];
+        const queue = localQueue();
+        queue.push({kind:"vtdEdit", localId:itemLocalId, createdAt:Date.now(), dateText:todayText(), timeText:timeText(), user:currentEmail(), status:"pending", attempts:0, lastError:"", lastStep:"queued", payload:params, images:refs});
+        saveLocalQueue(queue);
+        const allSku = cleanSku.concat(editRecordState.otherSkus || []);
+        const merged = mergeRecordInfo(original, {ma:r.ma || original.ma, slog:r.slog, loai:r.loai, xacThuc:r.xacThuc, po:r.po, tinhTrang:r.tinhTrang, note:r.note, skuItems:allSku, st:"Đang đồng bộ"});
         merged.needSync = "Running";
         detailRows[editRecordState.index] = merged;
         const globalIndex = rows.findIndex(x => (x.id && x.id === merged.id) || (x.ma && x.ma === merged.ma && x.gio === merged.gio));
         if (globalIndex >= 0) rows[globalIndex] = merged;
+        [navState.detailKey, merged.id, merged.rawId].filter(Boolean).forEach(key => { if (live.detailCache[key]) live.detailCache[key] = mergeRecordInfo(live.detailCache[key], merged); });
         editRecordState.active = false;
-        toast("Đã lưu sửa đơn. Hệ thống sẽ chạy lại đồng bộ.", "ok");
+        editRecordState.saving = false;
+        [vtdEditBucket("doc"), ...editRecordState.skuItems.map(x => vtdEditBucket(x.uid))].forEach(bucket => { live[bucket] = []; });
+        updateInputSyncBadge();
+        scheduleQueueReport();
+        scheduleSyncQueue(0);
+        toast(navigator.onLine ? "Đã lưu sửa đơn. App đang gửi lên hệ thống và đánh dấu cần đồng bộ lại." : "Đã lưu sửa đơn trên máy. Có mạng app sẽ tự gửi lên hệ thống.", "ok");
         detail(editRecordState.index, true);
       } catch (err) {
         toast(err && err.message ? err.message : String(err), "err");
         editRecordState.saving = false;
         renderEditRecord();
       }
+    }
+    // Hàng đợi: lệnh sửa đơn VTD. Chờ đơn gốc (nếu còn trong hàng đợi) và lần sửa trước của cùng đơn gửi xong.
+    async function syncVtdEditItem(item){
+      let queue = localQueue();
+      const pos = queue.findIndex(x => x && x.localId === item.localId);
+      const payload = Object.assign({}, item.payload || {});
+      const key = String(payload.id || "");
+      if (/^LOCAL-/.test(key)) {
+        const origin = queue.find(x => x && x.localId === key);
+        if (origin && (origin.status !== "done" || !origin.remoteId)) return queue;
+        if (origin && origin.remoteId) { payload.id = origin.remoteId; payload.rawId = origin.remoteId; payload.rowNumber = ""; }
+      }
+      const blocked = queue.slice(0, Math.max(0, pos)).some(x => x && x.status !== "done" && (
+        (x.kind === "vtdEdit" && String(x.payload && x.payload.id || "") === key) ||
+        (!x.kind && (x.localId === key || String(x.plannedRawId || x.payload && x.payload.id || "") === key))
+      ));
+      if (blocked) return queue;
+      await ensureQueueItemImageRefs(item);
+      item.status = "syncing";
+      item.attempts = Number(item.attempts || 0) + 1;
+      item.lastTryAt = Date.now();
+      item.lastStep = "updateRecord";
+      saveLocalQueue(queue);
+      updateInputSyncBadge();
+      scheduleQueueReport();
+      const images = [];
+      try {
+        for (const ref of (item.images || [])) images.push(await queuedImagePayload(ref));
+      } catch (err) {
+        queue = localQueue();
+        const updated = queue.find(x => x.localId === item.localId);
+        if (updated) {
+          updated.status = "error";
+          updated.lastError = String(err && err.message || err);
+          updated.lastStep = "readImage";
+          notifyQueueItemError(updated);
+          saveLocalQueue(queue);
+          updateInputSyncBadge();
+          scheduleQueueReport();
+        }
+        return queue;
+      }
+      const res = await apiWithHardTimeout("updateRecord", Object.assign(payload, {images, _silent:true}), 180000, "Lưu sửa đơn quá 3 phút chưa phản hồi.");
+      queue = localQueue();
+      const updated = queue.find(x => x.localId === item.localId);
+      if (!updated) return queue;
+      if (!res || res.ok === false) {
+        updated.status = "error";
+        updated.lastError = res && (res.message || res.error) || "Không lưu được chỉnh sửa";
+        updated.lastStep = "updateRecord";
+        notifyQueueItemError(updated);
+        saveLocalQueue(queue);
+        updateInputSyncBadge();
+        scheduleQueueReport();
+        return queue;
+      }
+      await queueImagesDelete((updated.images || []).map(img => img && img.id));
+      updated.status = "done";
+      updated.remoteId = res.id || payload.id || updated.localId;
+      updated.imagesUploaded = true;
+      updated.syncedAt = Date.now();
+      updated.lastError = (res.imageUpdate && res.imageUpdate.errors && res.imageUpdate.errors.length) ? res.imageUpdate.errors.join("; ") : "";
+      updated.lastStep = "done";
+      notifyQueueItemDone(updated);
+      saveLocalQueue(queue);
+      updateInputSyncBadge();
+      scheduleQueueReport();
+      // Bỏ chi tiết cũ đã lưu trên máy để lần mở sau tải lại bản mới (ảnh/SKU vừa sửa).
+      [key, payload.id, res.id].filter(Boolean).forEach(k => { delete live.detailCache[k]; });
+      return queue;
     }
     function search(){
       el("view").className = "content";
@@ -4127,6 +4370,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
           const user = String(payload.userEmail || payload.user_email || payload.User_email || payload.email || currentEmail() || "").trim().toLowerCase();
           if (!email || user !== email) return;
           if (item && item.kind === "returnTh") add("TH truemilk");
+          else if (item && item.kind === "vtdEdit") add("Sửa đơn VTD");
           else if (item && item.kind === "docOps") add("Chứng từ PN");
           else add(payload.slog || payload.Slog || payload.SLOG || payload.slogCode);
         });
@@ -7397,7 +7641,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       const queue = localQueue();
       let changed = false;
       queue.forEach(item => {
-        if (item && item.status !== "done" && item.kind !== "returnTh" && item.kind !== "docOps") {
+        if (item && item.status !== "done" && item.kind !== "returnTh" && item.kind !== "docOps" && item.kind !== "vtdEdit") {
           const previousPayloadId = String(item.payload && (item.payload.id || item.payload.ID) || "").trim();
           const previousPlannedId = String(item.plannedRawId || "").trim();
           const previousSkuIds = JSON.stringify((item.payload && item.payload.skuItems || []).map(sku => sku && sku.id || ""));
@@ -7586,7 +7830,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         const elapsed = item.lastTryAt ? Math.round((Date.now() - Number(item.lastTryAt)) / 1000) + "s" : "-";
         const status = item.status || "pending";
         const imageCount = (item.images || []).length || 0;
-        const kindText = item.kind === "returnTh" ? "Nhập TH" : (p.loaiHoan || "-");
+        const kindText = item.kind === "returnTh" ? "Nhập TH" : item.kind === "vtdEdit" ? "Sửa đơn VTD" : (p.loaiHoan || "-");
         return `<tr><td>${html(p.maDon || p.ma_don || p.orderCode || "-")}</td><td>${html(p.slog || "-")}</td><td>${html(kindText)}</td><td>${html(status)}</td><td>${html(item.attempts || 0)}</td><td>${html(imageCount)}</td><td>${html(elapsed)}</td><td>${html(item.lastStep || "-")}${item.lastError ? `<div class="muted tiny">${html(item.lastError)}</div>` : ""}</td></tr>`;
       }).join("");
       return `<section class="section"><h2>Queue đang chờ</h2>
@@ -7734,7 +7978,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       return `WEB-${parts.year}${parts.month}${parts.day}-${parts.hour}${parts.minute}${parts.second}-${suffix}`;
     }
     function ensureVtdQueueRawId(item){
-      if (!item || item.kind === "returnTh" || item.kind === "docOps") return "";
+      if (!item || item.kind === "returnTh" || item.kind === "docOps" || item.kind === "vtdEdit") return "";
       item.payload = item.payload || {};
       const rawId = String(item.payload.id || item.payload.ID || item.plannedRawId || "").trim() || vtdRawId();
       item.plannedRawId = rawId;
@@ -7780,7 +8024,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       const key = vtdDedupKeyFromPayload(payload);
       if (!key) return null;
       return localQueue().find(item => {
-        if (!item || item.kind === "returnTh") return false;
+        if (!item || item.kind === "returnTh" || item.kind === "vtdEdit") return false;
         const p = item.payload || {};
         const itemKey = p.clientDedupKey || item.clientDedupKey || vtdDedupKeyFromPayload(p, item.dateText);
         return itemKey === key;
@@ -7815,7 +8059,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
     }
     function pendingLocalRecords(){
       return localQueue()
-        .filter(item => item && item.kind !== "returnTh" && item.status !== "done")
+        .filter(item => item && item.kind !== "returnTh" && item.kind !== "vtdEdit" && item.status !== "done")
         .map(localRecordFromQueue);
     }
     function returnThRecordKey(row){
@@ -8396,6 +8640,10 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         for (let i = 0; i < queue.length; i++) {
           const item = queue[i];
           if (!item || item.status === "done" || item.status === "syncing" || item.status === "pendingImage" || item.remoteId) continue;
+          if (item.kind === "vtdEdit") {
+            queue = await syncVtdEditItem(item);
+            continue;
+          }
           if (item.kind === "returnTh" && returnThIsEditItem(item)) {
             queue = await syncReturnThEditItem(item);
             continue;
@@ -9813,7 +10061,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       const errorNote = live.dashboardError ? `<section class="section"><div class="lookup" style="border-color:#fca5a5;background:#fff1f2"><strong>Không tải được dữ liệu trang chủ.</strong><span>${html(live.dashboardError)}</span><button class="error-retry" type="button" onclick="retryDashboard()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 4v6h-6"></path></svg>Tải lại</button></div></section>` : "";
       const todayRows = d && Array.isArray(d.recent) ? d.recent.map(fromApiRecord) : rows.slice(0, 20);
       const todayQueue=localQueue().filter(item=>item && dateTextDdMmYyyy(item.dateText)===todayApiDateText());
-      const vtdQueue=todayQueue.filter(item=>item.kind!=="returnTh" && item.kind!=="docOps" && item.status!=="done");
+      const vtdQueue=todayQueue.filter(item=>item.kind!=="returnTh" && item.kind!=="docOps" && item.kind!=="vtdEdit" && item.status!=="done");
       const localRows = vtdQueue.map(localRecordFromQueue);
       const previewRows = [...localRows, ...todayRows];
       const slogMap = {};
