@@ -2245,7 +2245,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
           <tr><td>Mã đơn</td><td>Khớp mã đơn, nhập một phần mã cũng được</td></tr>
           <tr><td>Loại hoàn</td><td>Hoàn trả hoặc Ecom</td></tr>
           <tr><td>Tình trạng</td><td>Đơn có ít nhất 1 SKU đúng tình trạng đã chọn</td></tr>
-          <tr><td>Tên sản phẩm</td><td>Đơn có SKU chứa chữ đã nhập (không cần dấu)</td></tr>
+          <tr><td>Tên sản phẩm</td><td>Chọn SKU trong danh sách: đơn có SKU đó</td></tr>
           <tr><td>User thao tác, Ngày nhập</td><td>Người nhập và ngày nhập đơn</td></tr></tbody></table>
         <table class="hp-table" style="--c:${C.violet};margin-top:12px"><thead><tr><th>Nhãn</th><th>Nghĩa</th></tr></thead><tbody>
           <tr><td>${thTag("HT", "#dcfce7", "#15803d")} / ${thTag("EC", "#dbeafe", "#1d4ed8")}</td><td>Loại hoàn Hoàn trả / Ecom</td></tr>
@@ -9882,7 +9882,9 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       if (allowed.length < 2) return "";
       const shop = searchShopValue();
       const names = {vtd:"VTD", pn:"Phạm Nguyên", th:"TH Truemilk"};
-      return `<div class="pns-shop"><span>Chọn shop tìm kiếm</span><div class="pns-seg">${allowed.map(x => `<button type="button" class="${shop === x ? "on" : ""}" onclick="setSearchShop('${x}')">${names[x]}</button>`).join("")}</div></div>`;
+      // Số cột theo số shop được quyền: 3 shop vẫn nằm trên 1 hàng.
+      const compact = allowed.length > 2 ? "padding:0 4px;white-space:nowrap;font-size:14px" : "";
+      return `<div class="pns-shop"><span>Chọn shop tìm kiếm</span><div class="pns-seg" style="grid-template-columns:repeat(${allowed.length},1fr)">${allowed.map(x => `<button type="button" class="${shop === x ? "on" : ""}" style="${compact}" onclick="setSearchShop('${x}')">${names[x]}</button>`).join("")}</div></div>`;
     }
     function setSearchShop(shop){
       live.searchShop = ["pn", "th"].includes(shop) ? shop : "vtd";
@@ -12181,13 +12183,13 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       f.code = returnThCleanMaDon(f.code);
       live.thLoading = true; live.thRan = true; search();
       try {
-        const all = await thSearchOrders(), q = pnKey(f.code), prod = skuSearchText(f.product);
-        live.thUsers = [...new Set(all.map(o => o.user).filter(Boolean))].sort();
+        const all = await thSearchOrders(), q = pnKey(f.code);
+        thSearchOptions(all);
         live.thResults = all.filter(o =>
           (!q || pnKey(o.maDon).includes(q)) &&
           (!f.loai || o.loaiHoan === f.loai || o.items.some(i => i.loaiHoan === f.loai)) &&
           (!f.status || o.items.some(i => i.tinhTrang === f.status)) &&
-          (!prod || o.items.some(i => skuSearchText(i.tenSanPham).includes(prod))) &&
+          (!f.product || o.items.some(i => String(i.tenSanPham || "").trim() === f.product)) &&
           (!f.user || o.user === f.user) &&
           (!f.from || (o.iso && o.iso >= f.from)) &&
           (!f.to || (o.iso && o.iso <= f.to))
@@ -12200,6 +12202,13 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         search();
       }
     }
+    // Danh sách chọn: User từ dữ liệu; Tên sản phẩm = DS SKU TH + tên đã có trong dữ liệu (SKU TH ít nên chọn thẳng).
+    function thSearchOptions(all){
+      live.thUsers = [...new Set(all.map(o => o.user).filter(Boolean))].sort();
+      const names = returnThProducts.map(p => String((typeof p === "string" ? p : p.name) || "").trim());
+      all.forEach(o => o.items.forEach(i => names.push(String(i.tenSanPham || "").trim())));
+      live.thProducts = [...new Set(names.filter(Boolean))].sort((a, b) => a.localeCompare(b, "vi"));
+    }
     function thSearchScanned(value){ const node = el("ths_code"); if (node) node.value = returnThCleanMaDon(value); runThSearch(); }
     function clearThSearch(){ live.thSearch = null; live.thResults = []; live.thRan = false; search(); }
     function openThDetail(key){ live.thDetailKey = key; search(); window.scrollTo(0, 0); }
@@ -12209,8 +12218,8 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       if (live.thDetailKey) return thDetailView();
       if (!live.thUsers && !live.thUsersLoading) {
         live.thUsersLoading = true;
-        thSearchOrders().then(all => { live.thUsers = [...new Set(all.map(o => o.user).filter(Boolean))].sort(); })
-          .catch(() => { live.thUsers = []; })
+        thSearchOrders().then(thSearchOptions)
+          .catch(() => { live.thUsers = []; live.thProducts = []; })
           .finally(() => { live.thUsersLoading = false; if (view === "search" && searchShopValue() === "th" && !live.thDetailKey) search(); });
       }
       const f = thSearchFilters();
@@ -12232,7 +12241,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
               <label>Tình trạng<select id="ths_status">${opt(["Bình thường", "Móp_lỗi hỏng sản phẩm"], f.status)}</select></label>
             </div>
             <div class="search-filter-row">
-              <label>Tên sản phẩm<input id="ths_product" value="${html(f.product)}" placeholder="Một phần tên SKU"></label>
+              <label>Tên sản phẩm<select id="ths_product">${opt(live.thProducts || returnThProducts.map(p => String((typeof p === "string" ? p : p.name) || "").trim()).filter(Boolean), f.product)}</select></label>
               <label>User thao tác<select id="ths_user">${opt(live.thUsers || [], f.user)}</select></label>
             </div>
             <div class="search-filter-row">
