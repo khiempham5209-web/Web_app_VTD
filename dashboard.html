@@ -311,6 +311,18 @@ tbody tr:hover td { background: var(--surface-2); }
   .kpi .val { font-size: 22px; }
   .aging { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* Điện thoại: thanh lọc cao gần nửa màn hình → không dính, cuộn theo trang; nút nổi để quay lên bộ lọc */
+.to-filters {
+  position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 30;
+  display: none; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--fg); font: inherit; font-size: 13px; font-weight: 600;
+  box-shadow: 0 6px 20px rgba(10, 20, 35, .18);
+}
+.to-filters small { font-weight: 400; color: var(--fg-3); max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) {
+  .topbar { position: static; backdrop-filter: none; background: var(--bg); }
+  .to-filters.show { display: inline-flex; }
+}
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -481,6 +493,7 @@ tbody tr:hover td { background: var(--surface-2); }
 </div>
 
 <div class="tip" id="tip" role="tooltip"></div>
+<button type="button" class="to-filters" id="toFilters" aria-label="Lên bộ lọc">↑ Bộ lọc <small id="filterSummary"></small></button>
 
 <script>
 (function () {
@@ -858,6 +871,12 @@ tbody tr:hover td { background: var(--surface-2); }
     return {from: from, to: to, len: len, pFrom: pFrom, pTo: pTo, pName: pName, cmp: cmp,
       pLabel: pFrom === pTo ? dmyFull(pFrom) : dmy(pFrom) + "–" + dmy(pTo)};
   }
+  // Nhãn khoảng đang chọn: "hôm nay" chỉ khi đúng là hôm nay
+  function rangeText(R) {
+    var t = state.data.today;
+    if (R.len === 1) return R.from === t ? "hôm nay" : R.from === addDays(t, -1) ? "hôm qua (" + dmyFull(R.from) + ")" : dmyFull(R.from);
+    return dmy(R.from) + "–" + dmy(R.to) + "/" + R.to.slice(0, 4) + " · " + R.len + " ngày";
+  }
   function shiftMonth(k, m) {
     var p = k.split("-").map(Number), d = new Date(p[0], p[1] - 1 + m, 1);
     var last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
@@ -894,6 +913,7 @@ tbody tr:hover td { background: var(--surface-2); }
     document.querySelectorAll("#rangeSeg button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.range === state.range)); });
     document.querySelectorAll("#shopSeg button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.shop === state.shop)); });
     $("rangeLabel").textContent = R.len === 1 ? dmyFull(R.from) : dmyFull(R.from) + " – " + dmyFull(R.to) + " · " + R.len + " ngày";
+    $("filterSummary").textContent = rangeText(R) + " · " + shopLabel();
 
     var cur = [], prev = [];
     state.data.facts.forEach(function (f) {
@@ -1772,7 +1792,7 @@ tbody tr:hover td { background: var(--surface-2); }
     rows.sort(function (a, b) { var x = a[sk], y = b[sk]; if (typeof x === "string") return dir * x.localeCompare(y); return dir * (x - y); });
     lastUserRows = rows;
     var tot = total(cur);
-    $("userSub").textContent = rows.length + " người · " + (R.len === 1 ? "hôm nay" : R.len + " ngày");
+    $("userSub").textContent = rows.length + " người · " + rangeText(R);
     var srcs = SOURCES.filter(function (s) { return state.srcOn[s.key]; });
     var head = [["user", "Nhân viên", ""]].concat(srcs.map(function (s) { return [s.key, s.label, "n"]; }), [["total", "Tổng", "n"], ["active", "Ngày làm", "n"], ["perDay", "TB/ngày", "n"]]);
     if (!rows.length) { $("userTable").innerHTML = '<div class="empty">Không có thao tác nào trong khoảng này.</div>'; return; }
@@ -1838,6 +1858,13 @@ tbody tr:hover td { background: var(--surface-2); }
   var rt; window.addEventListener("resize", function () { clearTimeout(rt); rt = setTimeout(function () { if (state.data) render(); }, 150); });
   // tự tải lại mỗi 10 phút khi tab đang mở
   setInterval(function () { if (state.mode === "live" && !document.hidden) load(); }, 600000);
+
+  // Nút "↑ Bộ lọc" (chỉ hiện trên điện thoại, khi đã cuộn qua thanh lọc)
+  var topbarEl = document.querySelector(".topbar");
+  window.addEventListener("scroll", function () {
+    $("toFilters").classList.toggle("show", window.scrollY > (topbarEl ? topbarEl.offsetHeight : 300));
+  }, {passive: true});
+  $("toFilters").onclick = function () { window.scrollTo({top: 0, behavior: "smooth"}); };
 
   load();
 })();
