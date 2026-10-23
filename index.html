@@ -1481,7 +1481,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
 .pns-list{display:grid;gap:2px}
 .pns-it{display:grid;grid-template-columns:40px 72px minmax(0,1fr) auto;gap:8px;align-items:center;width:100%;min-height:38px;padding:6px 10px;border:0;border-radius:8px;background:transparent;text-align:left;font-weight:400;font-size:13px;color:var(--text)}
 .pns-it:nth-child(even){background:rgba(148,163,184,.10)}
-.pns-date{color:var(--muted);font-size:12px}.pns-no{font-weight:700}.pns-kh{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.pns-date{color:var(--muted);font-size:12px}.pns-no{font-weight:700}.pns-kh{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}.pns-ec{color:#1d4ed8;font-weight:600}
 .pns-tg{display:flex;gap:4px}
 .pns-dot{font-style:normal;display:inline-grid;place-items:center;min-width:24px;height:20px;padding:0 6px;border-radius:999px;font-size:11px;font-weight:700}
 .pns-dot.ok{background:#dcfce7;color:#047857}.pns-dot.no{background:#fef3c7;color:#b45309}.pns-dot.sp{background:#dbeafe;color:#1d4ed8}
@@ -2215,7 +2215,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         "",
         hpPhone(hpTab("search"), seg("vtd") + hpField("Từ khóa", "PR-15592478", "scan") + `<div class="hp-pair">${hpField("SLOG", "Tất cả", "select")}${hpField("Loại hoàn", "Tất cả", "select")}</div><div class="hp-pair">${hpField("Từ ngày", "01/10/2026")}${hpField("Đến ngày", "10/10/2026")}</div><div class="hp-btns"><span class="hp-btn pri">Tìm</span></div>`, "search"));
       const s6b = hpSection("hp-search-pn", 8, C.amber, "Tìm kiếm Phạm Nguyên", "Chứng từ + sản phẩm hoàn PN",
-        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("search")} ở thanh dưới cùng.</b></li><li><b>Chọn shop Phạm Nguyên ở ô "Chọn shop tìm kiếm".</b><small>App nhớ shop đã chọn cho lần sau.</small></li><li><b>Quét hoặc nhập Mã đơn GHTK / Số đơn hàng.</b><small>Nhập một phần mã cũng tìm được. Muốn xem theo bộ lọc thì để trống ô này.</small></li><li><b>Chọn thêm bộ lọc nếu cần: Loại hoàn, Phân loại, Loại siêu thị, User thao tác, Ngày nhập từ, đến.</b><small>Chọn nhiều bộ lọc thì đơn phải thỏa tất cả. Để trống bộ lọc nào thì không lọc theo mục đó.</small></li><li><b>Bấm Tìm.</b><small>Đơn mới nhất ở trên cùng. Bấm "Xóa lọc" để bỏ hết bộ lọc.</small></li><li><b>Đọc kết quả.</b><small>Dòng đầu: tổng số đơn, số đơn chứng từ, số đơn sản phẩm. Mỗi đơn một dòng: Ngày · Mã đơn · Khách hàng · nhãn CT / SP.</small></li><li><b>Bấm vào một đơn để xem đủ thông tin.</b><small>Gồm Thông tin đơn, Chứng từ (xác thực, trạng thái, mã ecom CT, ngày bàn giao, đã tạo SV, ảnh) và từng Sản phẩm hoàn (mã vật tư, số lượng, phân loại, tình trạng, HSD, kích thước, ảnh).</small></li><li><b>Bấm "Quay lại kết quả" để về danh sách.</b></li></ol>
+        `<ol class="hp-steps"><li><b>Bấm tab ${hpTab("search")} ở thanh dưới cùng.</b></li><li><b>Chọn shop Phạm Nguyên ở ô "Chọn shop tìm kiếm".</b><small>App nhớ shop đã chọn cho lần sau.</small></li><li><b>Quét hoặc nhập Mã đơn GHTK / Số đơn hàng.</b><small>Nhập Mã ecom CT cũng tìm được (đơn khớp theo mã ecom sẽ hiện "ecom ..." ở dòng kết quả). Nhập một phần mã cũng tìm được. Muốn xem theo bộ lọc thì để trống ô này.</small></li><li><b>Chọn thêm bộ lọc nếu cần: Loại hoàn, Phân loại, Loại siêu thị, User thao tác, Ngày nhập từ, đến.</b><small>Chọn nhiều bộ lọc thì đơn phải thỏa tất cả. Để trống bộ lọc nào thì không lọc theo mục đó.</small></li><li><b>Bấm Tìm.</b><small>Đơn mới nhất ở trên cùng. Bấm "Xóa lọc" để bỏ hết bộ lọc.</small></li><li><b>Đọc kết quả.</b><small>Dòng đầu: tổng số đơn, số đơn chứng từ, số đơn sản phẩm. Mỗi đơn một dòng: Ngày · Mã đơn · Khách hàng · nhãn CT / SP.</small></li><li><b>Bấm vào một đơn để xem đủ thông tin.</b><small>Gồm Thông tin đơn, Chứng từ (xác thực, trạng thái, mã ecom CT, ngày bàn giao, đã tạo SV, ảnh) và từng Sản phẩm hoàn (mã vật tư, số lượng, phân loại, tình trạng, HSD, kích thước, ảnh).</small></li><li><b>Bấm "Quay lại kết quả" để về danh sách.</b></li></ol>
         <table class="hp-table" style="--c:${C.amber};margin-top:12px"><thead><tr><th>Bộ lọc Phạm Nguyên</th><th>Tìm như thế nào</th></tr></thead><tbody>
           <tr><td>Mã đơn GHTK / Số đơn hàng</td><td>Khớp Mã đơn GHTK hoặc Số đơn hàng, nhập một phần mã cũng được</td></tr>
           <tr><td>Loại hoàn = Chứng từ</td><td>Đơn đã thao tác chứng từ trên app</td></tr>
@@ -10193,7 +10193,7 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         const all = await pnSearchOrders(), q = pnKey(f.code);
         live.pnOptions = {stores:[...new Set(all.map(o => o.store).filter(Boolean))].sort(), users:[...new Set(all.flatMap(o => [...o.users]).filter(Boolean))].sort()};
         live.pnResults = all.filter(o =>
-          (!q || pnKey(o.orderNo).includes(q) || pnKey(o.ghtk).includes(q)) &&
+          (!q || pnKey(o.orderNo).includes(q) || pnKey(o.ghtk).includes(q) || pnKey(o.doc && o.doc.maEcomCt).includes(q)) &&
           (!f.type || (f.type === "Chứng từ" ? !!(o.doc && o.doc.thoiGian) : o.items.length > 0)) &&
           (!f.cls || o.items.some(i => i.classification === f.cls)) &&
           (!f.store || o.store === f.store) &&
@@ -10210,6 +10210,11 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
       try { const all = await pnSearchOrders(); live.pnOptions = {stores:[...new Set(all.map(o => o.store).filter(Boolean))].sort(), users:[...new Set(all.flatMap(o => [...o.users]).filter(Boolean))].sort()}; }
       catch (err) { live.pnOptions = {stores:[], users:[]}; }
       finally { live.pnOptionsLoading = false; if (view === "search" && searchShopValue() === "pn" && !live.pnDetailKey) search(); }
+    }
+    // Đơn chỉ khớp nhờ Mã ecom CT (không khớp Số đơn / Mã GHTK): hiện mã ecom ở dòng kết quả cho dễ nhận.
+    function pnEcomOnlyHit(o, code){
+      const q = pnKey(code);
+      return !!q && !pnKey(o.orderNo).includes(q) && !pnKey(o.ghtk).includes(q) && pnKey(o.doc && o.doc.maEcomCt).includes(q);
     }
     function pnSearchScanned(value){ const node = el("pns_code"); if (node) node.value = value || ""; runPnSearch(); }
     function clearPnSearch(){ live.pnSearch = null; live.pnResults = []; live.pnRan = false; search(); }
@@ -10228,13 +10233,13 @@ html.desktop #marqueeApp{left:auto;right:16px;width:min(760px,calc(100vw - 300px
         : !live.pnRan ? `<div class="lookup">Nhập mã hoặc chọn bộ lọc rồi bấm Tìm. Để trống tất cả rồi bấm Tìm là xem toàn bộ.</div>`
         : !rows.length ? `<div class="lookup">Không có đơn phù hợp. Thử bỏ bớt bộ lọc, hoặc tải lại dữ liệu trên máy.</div>`
         : `<div class="pns-sum"><span><b>${rows.length.toLocaleString("vi-VN")}</b> đơn${rows.length > shown.length ? ` · hiện ${shown.length} đơn mới nhất` : ""}</span><span class="pns-tot"><span><i class="pns-dot ok">CT</i> <b>${rows.filter(o => o.doc).length.toLocaleString("vi-VN")}</b> đơn chứng từ</span><span><i class="pns-dot sp">SP</i> <b>${rows.filter(o => o.items.length).length.toLocaleString("vi-VN")}</b> đơn sản phẩm</span></span></div>
-          <div class="pns-list">${shown.map(o => `<button type="button" class="pns-it" onclick="openPnDetail('${html(o.key).replace(/'/g, "&#39;")}')"><span class="pns-date">${html(pnDateShow(o.date)) || "--/--"}</span><span class="pns-no">${html(o.orderNo || o.ghtk)}</span><span class="pns-kh">${html(o.customer || "-")}</span><span class="pns-tg">${o.doc ? `<i class="pns-dot ${/^đã nhận/i.test(o.doc.xacThuc || "") ? "ok" : "no"}">CT</i>` : ""}${o.items.length ? `<i class="pns-dot sp">${o.items.length > 1 ? o.items.length + "SP" : "SP"}</i>` : ""}</span></button>`).join("")}</div>
+          <div class="pns-list">${shown.map(o => `<button type="button" class="pns-it" onclick="openPnDetail('${html(o.key).replace(/'/g, "&#39;")}')"><span class="pns-date">${html(pnDateShow(o.date)) || "--/--"}</span><span class="pns-no">${html(o.orderNo || o.ghtk)}</span><span class="pns-kh">${pnEcomOnlyHit(o, f.code) ? `<b class="pns-ec">ecom ${html(o.doc.maEcomCt)}</b> · ` : ""}${html(o.customer || "-")}</span><span class="pns-tg">${o.doc ? `<i class="pns-dot ${/^đã nhận/i.test(o.doc.xacThuc || "") ? "ok" : "no"}">CT</i>` : ""}${o.items.length ? `<i class="pns-dot sp">${o.items.length > 1 ? o.items.length + "SP" : "SP"}</i>` : ""}</span></button>`).join("")}</div>
           <div class="muted" style="text-align:center;margin-top:6px;font-size:12px">Bấm vào đơn để xem đủ thông tin</div>`;
       const docP = keyedProgress("docOpsLookup"), retP = keyedProgress("docOpsReturns");
       el("view").innerHTML = `<section class="section">
           ${searchShopToggle()}
           <div class="search-filter-grid">
-            <label>Mã đơn GHTK / Số đơn hàng<div class="scan-row"><input id="pns_code" value="${html(f.code)}" placeholder="Quét hoặc nhập mã" onkeydown="if(event.key==='Enter')runPnSearch()"><button class="scan-btn" type="button" title="Quét mã" aria-label="Quét mã" onclick="openCodeScanner('pns_code', 'pnSearchScanned')">${scanIcon("Quét mã")}</button></div></label>
+            <label>Mã đơn GHTK / Số đơn hàng<div class="scan-row"><input id="pns_code" value="${html(f.code)}" placeholder="Mã đơn/Số đơn hàng" onkeydown="if(event.key==='Enter')runPnSearch()"><button class="scan-btn" type="button" title="Quét mã" aria-label="Quét mã" onclick="openCodeScanner('pns_code', 'pnSearchScanned')">${scanIcon("Quét mã")}</button></div></label>
             <div class="search-filter-row">
               <label>Loại hoàn<select id="pns_type"><option value="">Tất cả</option>${["Chứng từ", "Sản phẩm"].map(x => `<option ${x === f.type ? "selected" : ""}>${x}</option>`).join("")}</select></label>
               <label>Phân loại<select id="pns_cls"><option value="">Tất cả</option>${["Hoàn trả", "Hàng thu hồi"].map(x => `<option ${x === f.cls ? "selected" : ""}>${x}</option>`).join("")}</select></label>
