@@ -8,6 +8,7 @@ Khi build APK mới: đưa các dòng này vào `RELEASE-<phiên bản>.md`, r�
 | Commit | File | Thay đổi | Cần làm gì khác |
 |---|---|---|---|
 | `475e5d0` | dashboard.html | Dashboard: nhãn khoảng ngày đúng khi chọn Tùy chọn (bảng Hiệu suất nhân viên không còn ghi "hôm nay" sai); trên điện thoại thanh lọc không dính đầu màn hình, thêm nút "↑ Bộ lọc" | Không |
+| `13db3d5` | index.html | Tìm kiếm Phạm Nguyên: ô "Mã đơn GHTK / Số đơn hàng" tìm được cả Mã ecom CT (nhập một phần cũng được); đơn khớp theo mã ecom hiện "ecom &lt;mã&gt;" ở dòng kết quả; placeholder đổi thành "Mã đơn/Số đơn hàng"; cập nhật hướng dẫn trong app | Không |
 
 ## Cách build (cho Claude trên laptop)
 
