@@ -1,11 +1,17 @@
-/* Equivalent of the four observed ARRAYFORMULAs. TT Nhập!L3 stays authoritative.
+/* Equivalent of the four observed ARRAYFORMULAs. TT Nhập!L1 stays authoritative.
  * DS BC and TT Nhập formulas themselves are not removed.
  */
 function pnRoundUp_(v) { return Math.sign(v)*Math.ceil(Math.abs(v)); }
+// Hệ số tính Check: ưu tiên TT Nhập!L1; L1 trống/không phải số thì dùng L3 (2 ô giữ cùng công thức).
+function pnCheckFactor_() {
+  const sh=pnSheet_('TT Nhập');
+  for(const a of ['L1','L3']){const v=sh.getRange(a).getValue();if(typeof v==='number'&&Number.isFinite(v))return v;}
+  throw new Error('TT Nhập!L1 và L3 đều không phải số hợp lệ.');
+}
 function pnLookupKey_(v) { return String(v == null ? '' : v).toLowerCase(); }
 function pnFormulaValues_(p,rows,factor,bcRows) {
   if(p.main==='Booking') {
-    if(typeof factor!=='number'||!Number.isFinite(factor))throw new Error('TT Nhập!L3 không phải số hợp lệ.');
+    if(typeof factor!=='number'||!Number.isFinite(factor))throw new Error('TT Nhập!L1 không phải số hợp lệ.');
     return rows.map(r=>[r[0]===''?'':pnRoundUp_(Number(r[9]||0)*factor)]);
   }
   const byDepot=new Map();
@@ -18,7 +24,7 @@ function pnFormulaValues_(p,rows,factor,bcRows) {
 }
 function pnFormulaPlans_(includeFull) {
   SpreadsheetApp.flush();
-  const factor=pnSheet_('TT Nhập').getRange('L3').getValue();
+  const factor=pnCheckFactor_();
   const bc=pnRows_(pnSheet_('DS BC'),15);
   const plans=[];
   PN_FULL.pairs.slice(0,2).forEach(p=>{

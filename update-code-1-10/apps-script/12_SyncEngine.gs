@@ -410,7 +410,7 @@ function pnV2Audit_(p) {
 // Cột tính bằng code (thay ARRAYFORMULA cũ): Booking!Check, File đơn!Quản lý/Khu vực/Ngay. Chỉ ghi ô khác.
 function pnV2ComputeColumns_() {
   if (PropertiesService.getScriptProperties().getProperty('PN_FORMULAS_CONVERTED') !== '1') return 0;
-  const factor = pnSheet_('TT Nhập').getRange('L3').getValue();
+  const factor = pnCheckFactor_();
   const bc = pnRows_(pnSheet_('DS BC'), 15), byDepot = new Map();
   bc.forEach(r => { const k = pnLookupKey_(r[6]); if (!byDepot.has(k)) byDepot.set(k, r); });
   let writes = 0;
@@ -420,7 +420,7 @@ function pnV2ComputeColumns_() {
       if (p.main === 'Booking') {
         const d = pnV2Col_(L, ['Ngày']), total = pnV2Col_(L, ['Tổng bánh']), out = pnV2Col_(L, ['Check']);
         if (d == null || total == null || out == null) return;
-        if (typeof factor !== 'number' || !Number.isFinite(factor)) throw new Error('TT Nhập!L3 không phải số hợp lệ.');
+        if (typeof factor !== 'number' || !Number.isFinite(factor)) throw new Error('TT Nhập!L1 không phải số hợp lệ.');
         rows.forEach((r, i) => {
           const v = r[d] === '' ? '' : pnRoundUp_(Number(r[total] || 0) * factor);
           if (pnV2Canon_(v) !== pnV2Canon_(r[out])) pnV2Put_(up, i + 2, out, v);
@@ -870,8 +870,8 @@ function pnV2ComputeRows_(name, rowList) {
   if (p.main === 'Booking') {
     const d = pnV2Col_(L, ['Ngày']), total = pnV2Col_(L, ['Tổng bánh']), out = pnV2Col_(L, ['Check']);
     if (d == null || total == null || out == null) return 0;
-    const factor = pnSheet_('TT Nhập').getRange('L3').getValue();
-    if (typeof factor !== 'number' || !Number.isFinite(factor)) throw new Error('TT Nhập!L3 không phải số hợp lệ.');
+    const factor = pnCheckFactor_();
+    if (typeof factor !== 'number' || !Number.isFinite(factor)) throw new Error('TT Nhập!L1 không phải số hợp lệ.');
     rows.forEach(r => { const row = block[r - r1]; const v = row[d] === '' ? '' : pnRoundUp_(Number(row[total] || 0) * factor); if (pnV2Canon_(v) !== pnV2Canon_(row[out])) pnV2Put_(up, r, out, v); });
   } else {
     const code = pnV2Col_(L, ['Mã đơn']), created = pnV2Col_(L, ['Thời gian tạo đơn']), depot = pnV2Col_(L, ['Kho đích']);
@@ -902,33 +902,19 @@ function pnV2HandleRows_(name, r1, r2, cols) {
     res.handover = pnV2HandoverIfNeeded_(name, side === 'full' ? rows : (res.otherRows || []), cols);
     return res;
   }
+  if (p.main === 'Booking') return pnV2HandleBookingRows_(name, side, r1, r2, rows);
   pnV2ComputeRows_(name, rows);
   const own = pnV2SyncRows_(p, side, rows, true);
   const docRows = [];
-  let orders = null;
-  if (p.main === 'Booking') {
-    if (side === 'main') { syncBookingRowsToChungTuFF_(r1, r2); bookingSyncUpdateTargetDatesFromBookingRows_(r1, r2); }
-    else pnSyncBookingFullRows_(r1, r2);
-    // Đồng bộ chứng từ của TẤT CẢ các đơn trong các dòng Booking vừa dán/sửa (đơn mới tạo, đơn đã có, đơn đổi ngày),
-    // để một lượt trước bị dừng giữa chừng cũng không làm sót đơn.
-    pnV2DocRowsForOrders_(pnV2BookingOrders_(name, r1, r2)).forEach(r => docRows.push(r));
-  }
-  else {
-    // File đơn: chỉ các đơn (Mã đơn hàng KH) trong các dòng vừa dán/sửa -> điền Mã GHTK cho đúng các chứng từ đó.
-    // (Đơn chứng từ mới từ Booking đã được điền Mã GHTK ngay lúc tạo.)
-    orders = pnV2FileDonOrders_(name, rows);
-    pnV2FillGhtkForOrders_(orders).forEach(r => docRows.push(r));
-  }
+  // File đơn: chỉ các đơn (Mã đơn hàng KH) trong các dòng vừa dán/sửa -> điền Mã GHTK cho đúng các chứng từ đó.
+  // (Đơn chứng từ mới từ Booking đã được điền Mã GHTK ngay lúc tạo.)
+  const orders = pnV2FileDonOrders_(name, rows);
+  pnV2FillGhtkForOrders_(orders).forEach(r => docRows.push(r));
   const docsRes = pnV2SyncRows_(docs, 'full', docRows, true);
   // Đơn chứng từ đã tích bị đổi theo Booking/File đơn (ngày, mã GHTK...): đẩy ngay sang VHFF.
   docsRes.vhff = pnV2PushVhffRows_(docRows);
-  // Khu vực Booking phụ thuộc Booking và File đơn: chỉ đẩy các dòng Booking vừa đổi khu vực.
   const areaRes = [];
-  if (p.main === 'Booking') {
-    // Dán Booking: tính Khu vực cho đúng các dòng vừa dán.
-    const changed = pnV2AreaForBookingRows_(name, rows);
-    if (changed.length) areaRes.push(pnV2SyncRows_(PN_FULL.pairs[0], side, changed, true));
-  } else {
+  {
     // Dán File đơn: cập nhật Khu vực cho đúng các dòng Booking có Số đơn hàng trong các đơn vừa dán.
     ['Booking', 'Booking_full'].forEach(bn => {
       const changed = pnV2AreaForOrders_(bn, orders);
@@ -936,6 +922,33 @@ function pnV2HandleRows_(name, r1, r2, cols) {
     });
   }
   return {ok: true, own, docs: docsRes, area: areaRes};
+}
+
+/* Dán/sửa Booking (chính hoặc full), đúng thứ tự:
+ * 1. Tính đủ cột tự động cho các dòng vừa dán: Ngày -> Khu vực -> Check.
+ * 2. Đồng bộ Booking <-> Booking_full (dòng sang tab kia đã đủ Ngày, Khu vực, Check).
+ * 3. Booking -> Chứng từ_full (đơn mới, Ngày lên đơn).
+ * 4. Chứng từ_full -> Chứng từ_FF (+ VHFF cho dòng đã tích "Đã tạo sv").
+ * 5. Kiểm tra cuối: tính lại Check và đồng bộ lại đúng các dòng vừa dán; 2 tab đã khớp thì không ghi gì. */
+function pnV2HandleBookingRows_(name, side, r1, r2, rows) {
+  const p = PN_FULL.pairs[0], docs = PN_FULL.pairs[2], sh = pnSheet_(name);
+  // 1. Ngày, Khu vực, Check.
+  bookingSyncFillMissingBookingDates_(sh, bookingSyncHeaderMap_(bookingSyncHeaders_(sh)), r1, r2);
+  pnV2AreaForBookingRows_(name, rows);
+  pnV2ComputeRows_(name, rows);
+  // 2. Booking <-> Booking_full.
+  const own = pnV2SyncRows_(p, side, rows, true);
+  // 3. Booking -> Chứng từ_full.
+  if (side === 'main') { syncBookingRowsToChungTuFF_(r1, r2); bookingSyncUpdateTargetDatesFromBookingRows_(r1, r2); }
+  else pnSyncBookingFullRows_(r1, r2);
+  // 4. Chứng từ_full -> Chứng từ_FF: tất cả chứng từ của các đơn trong các dòng vừa dán (đơn mới, đơn đã có, đơn đổi ngày).
+  const docRows = pnV2DocRowsForOrders_(pnV2BookingOrders_(name, r1, r2));
+  const docsRes = pnV2SyncRows_(docs, 'full', docRows, true);
+  docsRes.vhff = pnV2PushVhffRows_(docRows);
+  // 5. Kiểm tra cuối cho Booking.
+  pnV2ComputeRows_(name, rows);
+  const final = pnV2SyncRows_(p, side, rows, true);
+  return {ok: true, own, docs: docsRes, final};
 }
 
 // Các Số đơn hàng (Row Labels) trong các dòng Booking đã cho.
