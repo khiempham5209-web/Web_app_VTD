@@ -212,6 +212,11 @@ function syncBookingRowsToChungTuFF_(startRow, endRow) {
   if (!output.length) return {ok: true, added: 0, skipped};
 
   const nextRow = Math.max(target.getLastRow() + 1, 2);
+  // Mã toàn chữ số dài (Mã PO 18 số...) hoặc bắt đầu bằng 0: đặt ô dạng chữ TRƯỚC khi ghi,
+  // để Sheets không đổi thành số và mất các chữ số cuối (2,09003E+17).
+  for (let c = 0; c < outputWidth; c++) {
+    if (output.some(r => pnV2IsCode_(r[c]))) target.getRange(nextRow, c + 1, output.length, 1).setNumberFormat("@");
+  }
   target.getRange(nextRow, 1, output.length, outputWidth).setValues(output);
   bookingSyncApplyControlColumnsBatch_(target, targetCol, nextRow, output.length);
   // Chứng từ_full: kẻ viền cho các đơn mới tạo từ Booking (như tab chính).
