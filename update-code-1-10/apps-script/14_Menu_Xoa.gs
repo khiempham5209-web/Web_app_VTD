@@ -30,7 +30,10 @@ function pnMenuXoaThucHien(req) {
   return pnWithLock_(() => {
     pnRequireReady_();
     const plan = pnXoaPlan_(req);
-    if (JSON.stringify(plan.summary.counts) !== JSON.stringify(req.expect || {}))
+    // So tung tab theo so dong (khong so ca chuoi: Google khong giu thu tu cac muc khi gui qua lai voi hop thoai).
+    const now = plan.summary.counts, before = req.expect || {};
+    const keys = Object.keys(now);
+    if (keys.length !== Object.keys(before).length || keys.some(k => Number(now[k]) !== Number(before[k])))
       throw new Error('Dữ liệu vừa thay đổi sau khi xem trước. Bấm "Xem trước" lại.');
     // Xoa tab full truoc, roi tab chinh.
     plan.tabs.slice().sort((a, b) => Number(b.cfg.full) - Number(a.cfg.full)).forEach(t => pnXoaDeleteRows_(t.L, t.rows, !t.cfg.full));
