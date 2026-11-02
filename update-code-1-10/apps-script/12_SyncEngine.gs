@@ -104,6 +104,12 @@ function pnV2Sig_(L, row, names) {
   return JSON.stringify(parts);
 }
 function pnV2Has_(L, row, names) { return pnV2Sig_(L, row, names) !== '[]'; }
+// ID sot: dong mang ID cua ho so khac (vd. cot ID con sot o dong trong, roi du lieu moi duoc dan vao dung dong do).
+// Khac CA ma LAN ngay moi la ho so khac -> khong ghi de. Chi khac 1 trong 2 van la sua ho so (sua ma go nham, doi ngay).
+function pnV2StaleId_(keyA, dateA, keyB, dateB) {
+  const ka = pnV2Canon_(keyA), kb = pnV2Canon_(keyB), da = pnIsoDate_(dateA), db = pnIsoDate_(dateB);
+  return !!(ka && kb && ka !== kb && da && db && da !== db);
+}
 // Một dòng là HỒ SƠ khi có mã định danh (Booking: Row Labels; File đơn: Mã đơn; Chứng từ: Số đơn hàng hoặc Mã đơn GHTK).
 // Dòng trống hoặc chỉ có giá trị mặc định (dropdown, checkbox) không phải hồ sơ: không đồng bộ, không tạo dòng ở full.
 function pnV2Rec_(L, cfg, row) {
@@ -300,6 +306,10 @@ function pnV2SyncPair_(p, opts) {
     const rowNo = i + 2;
     let id = pnText_(r[M.id]);
     if (id && mIds.has(id)) id = ''; // dòng copy/dán kèm ID cũ: coi là hồ sơ mới
+    if (id && fById.has(id)) {
+      const fr = fById.get(id).r, mk = pnV2Col_(M, cfg.key), fk = pnV2Col_(F, cfg.key), md = pnV2Col_(M, cfg.date), fd = pnV2Col_(F, cfg.date);
+      if (mk != null && fk != null && md != null && fd != null && pnV2StaleId_(r[mk], r[md], fr[fk], fr[fd])) id = ''; // ID sót: hồ sơ mới, không ghi đè
+    }
     if (!id && !cfg.repeated) {
       // Dòng chưa có ID nhưng đã có hồ sơ cùng mã ở full (chưa được dòng chính nào nhận): nối lại, không tạo trùng.
       const k = pnV2Key_(M, cfg, r), found = k && fByKey.get(k);
@@ -780,11 +790,20 @@ function pnV2SyncRows_(p, side, rowList, prefer, mode) {
   let next = 0, appendStart = 0;
   const nextRow = () => { if (!next) { next = lastDataRow() + 1; appendStart = next; } return next++; };
   const pending = [];
+  let dstKeyDate = null; // Mã + ngày của tab kia, chỉ đọc khi cần so ID sót
   rows.forEach(r => {
     const row = block[r - r1];
     if (!pnV2Rec_(src, cfg, row)) return;
     let id = pnText_(row[src.id]);
     if (id && srcIds.indexOf(id) + 2 !== r) id = ''; // dòng copy/dán kèm ID của dòng khác: hồ sơ mới
+    if (id && dstById.has(id)) {
+      const sk = pnV2Col_(src, cfg.key), dk = pnV2Col_(dst, cfg.key), sd = pnV2Col_(src, cfg.date), dd = pnV2Col_(dst, cfg.date);
+      if (sk != null && dk != null && sd != null && dd != null) {
+        if (!dstKeyDate) dstKeyDate = {k: colVals(dst, dk), d: colVals(dst, dd)};
+        const n = dstById.get(id) - 2;
+        if (pnV2StaleId_(row[sk], row[sd], dstKeyDate.k[n], dstKeyDate.d[n])) id = ''; // ID sót: hồ sơ mới, không ghi đè
+      }
+    }
     if (!id && side === 'main' && !cfg.repeated) {
       const k = pnV2Key_(src, cfg, row), found = k && keyOf().get(k);
       if (found && !claimed.has(found)) { id = found; claimed.add(found); }
