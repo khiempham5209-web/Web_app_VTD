@@ -1,8 +1,8 @@
 /*************************************************
-DON DONG TRONG O CUOI TAB — moi ngay luc 00h, file rieng.
+DON DONG TRONG O CUOI TAB — moi ngay luc 05h sang, file rieng.
 
 Nhan vien bam "Them 1000 hang" -> Google tu sao dropdown/checkbox xuong cac dong moi.
-Moi dem: giu lai DUNG 5 dong trong ngay sau dong cuoi co du lieu, xoa het phan thua (ke ca dropdown, checkbox chua tich).
+Moi sang: giu lai DUNG 5 dong trong ngay sau dong cuoi co du lieu, xoa het phan thua (ke ca dropdown, checkbox chua tich).
 Dong co bat ky gia tri nao (o bat ky cot nao) deu khong bi xoa; chi dong o CUOI tab moi bi dung toi.
 
 Cai dat: chay ham pnCaiTriggerDonDong() 1 lan, cap quyen.
@@ -18,9 +18,9 @@ function pnCaiTriggerDonDong() {
   ScriptApp.getProjectTriggers()
     .filter(t => t.getHandlerFunction() === 'pnDonDongTrong')
     .forEach(t => ScriptApp.deleteTrigger(t));
-  // Google chay trong khung 00h-01h, khong dung phut 00:00.
-  ScriptApp.newTrigger('pnDonDongTrong').timeBased().atHour(0).everyDays(1).inTimezone('Asia/Ho_Chi_Minh').create();
-  return 'Da cai: pnDonDongTrong moi ngay luc 00h-01h.';
+  // Google chay trong khung 05h-06h, khong dung phut 05:00.
+  ScriptApp.newTrigger('pnDonDongTrong').timeBased().atHour(5).everyDays(1).inTimezone('Asia/Ho_Chi_Minh').create();
+  return 'Da cai: pnDonDongTrong moi ngay luc 05h-06h.';
 }
 
 function pnDonDongTrong() {
