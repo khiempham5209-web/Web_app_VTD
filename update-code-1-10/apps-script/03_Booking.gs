@@ -211,7 +211,7 @@ function syncBookingRowsToChungTuFF_(startRow, endRow) {
 
   if (!output.length) return {ok: true, added: 0, skipped};
 
-  const nextRow = Math.max(target.getLastRow() + 1, 2);
+  const nextRow = bookingSyncLastContentRow_(target) + 1;
   // Mã toàn chữ số dài (Mã PO 18 số...) hoặc bắt đầu bằng 0: đặt ô dạng chữ TRƯỚC khi ghi,
   // để Sheets không đổi thành số và mất các chữ số cuối (2,09003E+17).
   for (let c = 0; c < outputWidth; c++) {
@@ -225,6 +225,17 @@ function syncBookingRowsToChungTuFF_(startRow, endRow) {
   pnStampFullIds_(PN_FULL.pairs[2]);
   pnMarkDirty_();
   return {ok: true, added: output.length, skipped};
+}
+
+// Dòng cuối có dữ liệu thật. Không dùng getLastRow: checkbox chưa tích (FALSE) ở dòng trống cũng bị tính là có dữ liệu.
+function bookingSyncLastContentRow_(sh) {
+  const last = sh.getLastRow();
+  if (last < 2) return 1;
+  const values = sh.getRange(2, 1, last - 1, sh.getLastColumn()).getValues();
+  for (let i = values.length - 1; i >= 0; i--) {
+    if (values[i].some(v => v !== "" && v !== false && v != null)) return i + 2;
+  }
+  return 1;
 }
 
 function bookingSyncRecordFromRow_(row, col) {
