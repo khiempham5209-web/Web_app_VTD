@@ -102,13 +102,14 @@ function ocrNhap_preview(strips, wholeImage, mode) {
 }
 
 // Goi tu sidebar: ghi cac dong da duoc nguoi dung xac nhan/sua.
-// ngay = "yyyy-mm-dd" tu o chon ngay (de trong = hom nay).
-function ocrNhap_commit(rows, ngay) {
+// ngay = "yyyy-mm-dd" tu o chon ngay (de trong = hom nay). rawText = text OCR luc doc anh, ghi vao OCR_LOG.
+function ocrNhap_commit(rows, ngay, rawText) {
   const m = String(ngay || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   const dateText = m ? m[3] + '/' + m[2] + '/' + m[1] : '';
   const checked = ocrNhap_check_({items: rows.map(r => ({
     ordered_item: r.item, quy_cach: r.quyCach, tong: r.tong, thung: r.thung, le: r.le
   }))});
+  checked.rawText = String(rawText || '');
   const written = ocrNhap_write_(checked.rows, dateText);
   ocrNhap_markDone_(checked.rows);
   ocrNhap_log_('Sidebar', '', checked, 'OK', 'Ghi từ dòng ' + written.startRow + ', ngày ' + written.date);
@@ -776,7 +777,7 @@ details{margin-top:10px}pre{white-space:pre-wrap;font-size:11px;background:#f5f5
 
 // Chay tren trinh duyet (sidebar). Khong dung dau backtick trong doan nay.
 const OCR_NHAP_CLIENT_JS = String.raw`
-var img = null, rows = [], grand = null;
+var img = null, rows = [], grand = null, rawText = "";
 var F = ["item", "quyCach", "tong", "thung", "le"], H = ["Mã", "QC", "Tổng", "Thùng", "Lẻ"];
 // Cot can doc: Ma = cot dau tien; cac cot so dem tu PHAI sang (cot Ten banh co the sinh duong doc gia)
 var FIELDS = [["MA", 0], ["QC", -8], ["DATE", -7], ["HAN", -6], ["HD", -5], ["KHD", -4], ["TONG", -3], ["THUNG", -2], ["LE", -1]];
@@ -962,7 +963,7 @@ function cropRow(c, y0, y1) {
 $("btnRead").onclick = function() {
   $("btnRead").disabled = true; msg("Đang đọc ảnh (khoảng 10–30 giây)...");
   google.script.run.withSuccessHandler(function(res) {
-    rows = res.rows; grand = res.grandTotal; render();
+    rows = res.rows; grand = res.grandTotal; rawText = res.rawText || ""; render();
     var skip = (res.warnings || []).filter(function(w) { return /không đọc được mã/.test(w); });
     if (skip.length) msg($("msg").textContent + "\n❌ " + skip.join("; ") + " — xem text OCR thô.", "err");
     $("raw").textContent = res.rawText || ""; $("rawBox").hidden = false;
@@ -1028,7 +1029,7 @@ $("btnSave").onclick = function() {
     msg("❌ " + e.message, "err"); $("btnSave").disabled = false;
   }).ocrNhap_commit(rows.map(function(r) {
     return {item: String(r.item), quyCach: r.quyCach, tong: r.tong, thung: r.thung, le: r.le};
-  }), $("ngay").value);
+  }), $("ngay").value, rawText);
 };
 `;
 
