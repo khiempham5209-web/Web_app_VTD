@@ -238,7 +238,9 @@ function pnV2CopyFormat_(L, start, count, width) {
   const from = L.sh.getRange(2, 1, 1, width), to = L.sh.getRange(start, 1, count, width);
   from.copyTo(to, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
   const numbers = from.getNumberFormats()[0];
-  to.setNumberFormats(Array.from({length: count}, () => numbers.slice()));
+  // Ô đang chứa mã toàn chữ số dài (Mã PO 18 số...) giữ dạng chữ, không lấy định dạng số của dòng 2,
+  // để Sheets không đổi thành số và mất các chữ số cuối (2,09003E+17).
+  to.setNumberFormats(to.getValues().map(r => numbers.map((f, c) => pnV2IsCode_(r[c]) ? '@' : f)));
 }
 
 function pnV2LastDataRow_(L, cfg, rows) {
