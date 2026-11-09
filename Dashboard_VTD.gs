@@ -78,7 +78,10 @@ const DASH_CONFIG = {
     maAliases: ["ma don", "ma don ghtk"],
     kenhAliases: ["kho", "kenh", "slog"],
     nameAliases: ["ten san pham", "ten sp", "san pham"],
-    statusAliases: ["tinh trang", "tinh trang hang", "tinh trang ff"]
+    statusAliases: ["tinh trang", "tinh trang hang", "tinh trang ff"],
+    // Đơn lên: tab Xuất ghi tay theo ngày + SKU (không có mã đơn để gộp).
+    ordersSheet: "Xuất",
+    ordersHeaderRow: 3
   }
 };
 
@@ -157,11 +160,11 @@ function dashBuild() {
     const errors = [];
     const timings = {};
 
-    const put = (metric, src, dateKey, kenh, loai, user, hour, qty) => {
+    const put = (metric, src, dateKey, kenh, loai, user, hour, qty, count) => {
       if (!dateKey || dateKey < (metric === "product" ? productFromKey : fromKey) || dateKey > todayKey) return;
       const k = metric + "|" + dateKey + "|" + src + "|" + kenh + "|" + loai + "|" + user + "|" + hour;
       const f = facts[k] || (facts[k] = [dateKey, src, kenh, loai, user, hour, 0, 0, metric]);
-      f[6] += 1;
+      f[6] += count == null ? 1 : count;
       f[7] += qty;
     };
     // Thao tác nhập trên app
@@ -173,7 +176,7 @@ function dashBuild() {
       if (recentRow && dateKey >= keyBack(3)) recent.push(recentRow);
     };
     // Chỉ số khác: lên đơn, bàn giao, tình trạng, sản phẩm
-    const metric = (m, src, dateKey, kenh, loai, qty) => put(m, src, dateKey, String(kenh || "Khác").trim() || "Khác", String(loai || "").trim(), "", -1, Number(qty) || 0);
+    const metric = (m, src, dateKey, kenh, loai, qty, count) => put(m, src, dateKey, String(kenh || "Khác").trim() || "Khác", String(loai || "").trim(), "", -1, Number(qty) || 0, count);
 
     // Mỗi bước có đo thời gian; hết ngân sách thời gian thì bỏ qua bước còn lại
     const step = (name, fn) => {
@@ -192,6 +195,7 @@ function dashBuild() {
     step("TH hàng hoàn", () => dash_collectTh_(add, metric));
     step("TH lên đơn", () => dash_collectThOrders_(metric));
     step("VNPT hàng hoàn", () => dash_collectTh_(add, metric, DASH_CONFIG.vnpt, "VNPT", "VNPT"));
+    step("VNPT lên đơn", () => dash_collectVnptOrders_(metric));
     step("Lỗi hàng đợi", () => {
       if (typeof vtdApp_queueErrorSheet_ === "function") sync.queueErrors = Math.max(0, vtdApp_queueErrorSheet_().getLastRow() - 1);
     });
@@ -630,6 +634,38 @@ function dash_collectThOrders_(metric) {
     if (seen[id]) return;
     seen[id] = true;
     metric("order", "TH", dash_key_(row[c.date]), "TH Truemilk", "Lên đơn", 1);
+  });
+}
+
+// Tab Xuất VNPT: mỗi dòng = 1 ngày + 1 SKU, SL đơn ghi tay (ưu tiên SL đơn APL nếu có điền).
+// Không có mã đơn nên không gộp được đơn nhiều SKU:
+//   - mặc định: cộng SL đơn các dòng trong ngày (đúng khi mỗi đơn chỉ 1 SKU, như SIM hiện nay);
+//   - ngày nào có điền cột "Tổng đơn ngày" (thêm cột này khi có đơn nhiều SKU) thì lấy số đó, không cộng.
+// Số SP (SL SP) đi vào phần số lượng của chỉ số, Dashboard hiện chỉ dùng số đơn.
+function dash_collectVnptOrders_(metric) {
+  const cfg = DASH_CONFIG.vnpt;
+  if (!cfg || !cfg.spreadsheetId || !cfg.ordersSheet) return;
+  const sh = SpreadsheetApp.openById(cfg.spreadsheetId).getSheetByName(cfg.ordersSheet);
+  if (!sh) throw new Error("Không thấy tab " + cfg.ordersSheet);
+  const d = dash_read_(sh, {
+    date: [["ngay"]], don: [["sl don"]], donApl: [["sl don apl"]],
+    sp: [["sl sp"]], spApl: [["sl sp apl"]], tong: [["tong don ngay"]]
+  }, cfg.ordersHeaderRow), c = d.c;
+  if (c.date < 0 || c.don < 0) throw new Error("Tab " + cfg.ordersSheet + " thiếu cột NGÀY / SL đơn ở dòng " + cfg.ordersHeaderRow);
+  const num = v => { if (typeof v === "number") return isFinite(v) ? v : 0; const n = Number(String(v == null ? "" : v).replace(/\./g, "").replace(",", ".")); return isFinite(n) ? n : 0; };
+  const pick = (row, base, apl) => apl >= 0 && String(row[apl] == null ? "" : row[apl]).trim() !== "" ? num(row[apl]) : (base >= 0 ? num(row[base]) : 0);
+  const days = {};
+  d.rows.forEach(row => {
+    const key = dash_key_(row[c.date]);
+    if (!key) return;
+    const day = days[key] || (days[key] = {sum: 0, sp: 0, tong: null});
+    day.sum += pick(row, c.don, c.donApl);
+    day.sp += pick(row, c.sp, c.spApl);
+    if (c.tong >= 0 && String(row[c.tong] == null ? "" : row[c.tong]).trim() !== "") day.tong = Math.max(day.tong || 0, num(row[c.tong]));
+  });
+  Object.keys(days).forEach(key => {
+    const day = days[key], orders = day.tong != null ? day.tong : day.sum;
+    if (orders > 0) metric("order", "VNPT", key, "VNPT", "Lên đơn", day.sp, orders);
   });
 }
 
