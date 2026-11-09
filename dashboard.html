@@ -24,6 +24,7 @@
   --s-vtd: #2a78d6;
   --s-pn: #eb6834;
   --s-th: #1baf7a;
+  --s-vnpt: #0e7490;
   --c4: #eda100;
   --m-order: #4a3aa7;
   --m-recv: #e87ba4;
@@ -50,7 +51,7 @@
     color-scheme: dark;
     --bg: #0e141c; --surface: #161e29; --surface-2: #1b2531; --line: #253141; --line-strong: #314054;
     --fg: #eef2f7; --fg-2: #b2bdcb; --fg-3: #8592a3; --accent: #35b8bd; --accent-soft: #123338;
-    --s-vtd: #3987e5; --s-pn: #d95926; --s-th: #199e70; --c4: #c98500; --m-order: #9085e9; --m-recv: #d55181; --m-hand: #2f9e2f;
+    --s-vtd: #3987e5; --s-pn: #d95926; --s-th: #199e70; --s-vnpt: #22a5c4; --c4: #c98500; --m-order: #9085e9; --m-recv: #d55181; --m-hand: #2f9e2f;
     --good-ink: #4cc94c; --critical-ink: #f07a7a;
     --seq-0: #1b2531; --seq-1: #184f95; --seq-2: #1c5cab; --seq-3: #2a78d6; --seq-4: #5598e7; --seq-5: #9ec5f4;
     --shadow: none;
@@ -60,7 +61,7 @@
   color-scheme: dark;
   --bg: #0e141c; --surface: #161e29; --surface-2: #1b2531; --line: #253141; --line-strong: #314054;
   --fg: #eef2f7; --fg-2: #b2bdcb; --fg-3: #8592a3; --accent: #35b8bd; --accent-soft: #123338;
-  --s-vtd: #3987e5; --s-pn: #d95926; --s-th: #199e70; --c4: #c98500; --m-order: #9085e9; --m-recv: #d55181; --m-hand: #2f9e2f;
+  --s-vtd: #3987e5; --s-pn: #d95926; --s-th: #199e70; --s-vnpt: #22a5c4; --c4: #c98500; --m-order: #9085e9; --m-recv: #d55181; --m-hand: #2f9e2f;
   --good-ink: #4cc94c; --critical-ink: #f07a7a;
   --seq-0: #1b2531; --seq-1: #184f95; --seq-2: #1c5cab; --seq-3: #2a78d6; --seq-4: #5598e7; --seq-5: #9ec5f4;
   --shadow: none;
@@ -505,7 +506,8 @@ tbody tr:hover td { background: var(--surface-2); }
   var SOURCES = [
     {key: "VTD", label: "VTD", color: "var(--s-vtd)"},
     {key: "PN", label: "Phạm Nguyên", color: "var(--s-pn)"},
-    {key: "TH", label: "TH Truemilk", color: "var(--s-th)"}
+    {key: "TH", label: "TH Truemilk", color: "var(--s-th)"},
+    {key: "VNPT", label: "VNPT", color: "var(--s-vnpt)"}
   ];
   var SRC = {}; SOURCES.forEach(function (s) { SRC[s.key] = s; });
   var DOW = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
@@ -517,7 +519,7 @@ tbody tr:hover td { background: var(--surface-2); }
   var LOAI_COLORS = ["var(--s-vtd)", "var(--s-pn)", "var(--s-th)", "var(--c4)"];
 
   var state = {
-    mode: "demo", data: null, range: "30", shop: "all", srcOn: {VTD: true, PN: true, TH: true},
+    mode: "demo", data: null, range: "30", shop: "all", srcOn: {VTD: true, PN: true, TH: true, VNPT: true},
     kenh: "", user: "", cmp: "prev", userSort: {key: "total", dir: -1}, trendTable: false,
     from: "", to: "", cFrom: "", cTo: "", gran: "day", ordersTable: false, prodQuery: ""
   };
@@ -1023,13 +1025,13 @@ tbody tr:hover td { background: var(--surface-2); }
       tiles = [srcTile("PN", "Thao tác Phạm Nguyên"), loaiTile("PN", "Chứng từ", "Chứng từ đã nhận"), loaiTile("PN", "Sản phẩm", "Sản phẩm hoàn (số lượng)", true),
         {lbl: "Siêu thị có chứng từ", val: n(Object.keys(stores).length), foot: "<span>trong khoảng đang xem</span>"},
         backlogTile("PN", "PN chưa nhận chứng từ")];
-    } else if (sh === "TH") {
-      var days = {}; cur.forEach(function (f) { if (f[1] === "TH") days[f[0]] = 1; });
+    } else if (sh === "TH" || sh === "VNPT") {
+      var days = {}; cur.forEach(function (f) { if (f[1] === sh) days[f[0]] = 1; });
       var thQty = 0, thQtyPrev = 0;
-      cur.forEach(function (f) { if (f[1] === "TH") thQty += f[7]; });
-      prev.forEach(function (f) { if (f[1] === "TH") thQtyPrev += f[7]; });
-      var lastTh = (snap.freshness || {}).TH;
-      tiles = [srcTile("TH", "Dòng hàng hoàn TH"), {lbl: "Số lượng hoàn", val: n(thQty), foot: deltaHtml(thQty, thQtyPrev)},
+      cur.forEach(function (f) { if (f[1] === sh) thQty += f[7]; });
+      prev.forEach(function (f) { if (f[1] === sh) thQtyPrev += f[7]; });
+      var lastTh = (snap.freshness || {})[sh];
+      tiles = [srcTile(sh, "Dòng hàng hoàn " + sh), {lbl: "Số lượng hoàn", val: n(thQty), foot: deltaHtml(thQty, thQtyPrev)},
         {lbl: "Ngày có hàng hoàn", val: n(Object.keys(days).length), foot: "<span>trên " + n(R.len) + " ngày đang xem</span>"},
         {lbl: "Lần nhập gần nhất", val: lastTh ? esc(dmy(lastTh)) : "—", foot: "<span>" + (lastTh ? esc(dmyFull(lastTh)) : "chưa có dữ liệu") + "</span>"}];
     } else {
@@ -1037,7 +1039,7 @@ tbody tr:hover td { background: var(--surface-2); }
       var blTotal = (vb ? vb.total : 0) + (pb ? pb.total : 0), blOver = (vb ? vb.over7 : 0) + (pb ? pb.over7 : 0);
       tiles = [
         {lbl: "Tổng thao tác", val: n(tc), foot: deltaHtml(tc, tp), spark: sparkSvg(dailySeries(cur, R), "var(--accent)")},
-        srcTile("VTD"), srcTile("PN"), srcTile("TH"),
+        srcTile("VTD"), srcTile("PN"), srcTile("TH"), srcTile("VNPT"),
         {lbl: "Chứng từ chưa nhận", val: n(blTotal), cls: blOver ? "warnk" : "",
           foot: "<span>VTD " + (vb ? n(vb.total) : "—") + " · PN " + (pb ? n(pb.total) : "—") + ' · </span><span class="delta" style="color:var(--critical-ink)">' + n(blOver) + "</span><span>quá 7 ngày</span>"},
         syncTile
@@ -1221,7 +1223,7 @@ tbody tr:hover td { background: var(--surface-2); }
   function renderLoai(cur) {
     var by = {};
     cur.forEach(function (f) {
-      var o = by[f[3]] || (by[f[3]] = {VTD: 0, PN: 0, TH: 0});
+      var o = by[f[3]] || (by[f[3]] = {VTD: 0, PN: 0, TH: 0, VNPT: 0});
       o[f[1]] = (o[f[1]] || 0) + f[6];
     });
     var rows = Object.keys(by).map(function (k) {
@@ -1404,7 +1406,7 @@ tbody tr:hover td { background: var(--surface-2); }
     var cur = totalIn(R.from, R.to), prv = totalIn(R.pFrom, R.pTo);
     var bls = getBacklogs();
     var shops = SOURCES.filter(function (s) { return state.srcOn[s.key]; }).map(function (s) { return s.key; });
-    var hasRecv = shops.some(function (k) { return k !== "TH"; });
+    var hasRecv = shops.some(function (k) { return k !== "TH" && k !== "VNPT"; });
     var hasHand = shops.some(function (k) { return bls[k] && bls[k].hasHandover; }) || cur.handAct > 0 || cur.ordhand > 0;
     var ms = MEASURES.filter(function (m) { return m.key === "order" || (m.key === "ordrecv" && hasRecv) || (m.key === "ordhand" && hasHand); });
 
@@ -1541,9 +1543,9 @@ tbody tr:hover td { background: var(--surface-2); }
     if (hasHand) cols.push(["ordhand", "Đã bàn giao"], ["rHand", "Tỷ lệ bàn giao"]);
     if (hasRecv) cols.push(["recvAct", "CT nhận trong kỳ"]);
     var cell = function (k, c, m, p) {
-      var noRecv = byShop && k === "TH";
-      if ((c === "ordrecv" || c === "rRecv") && noRecv) return '<td class="n" style="color:var(--fg-3)" title="TH không có chứng từ">–</td>';
-      if (c === "recvAct" && (noRecv || vtdStore)) return '<td class="n" style="color:var(--fg-3)" title="' + (noRecv ? "TH không có chứng từ" : "App VTD ghi SLOG, không ghi siêu thị") + '">–</td>';
+      var noRecv = byShop && (k === "TH" || k === "VNPT");
+      if ((c === "ordrecv" || c === "rRecv") && noRecv) return '<td class="n" style="color:var(--fg-3)" title="' + k + ' không có chứng từ">–</td>';
+      if (c === "recvAct" && (noRecv || vtdStore)) return '<td class="n" style="color:var(--fg-3)" title="' + (noRecv ? k + " không có chứng từ" : "App VTD ghi SLOG, không ghi siêu thị") + '">–</td>';
       if (c === "rRecv") return '<td class="n">' + pct(rateOf(m, "ordrecv")) + pointCell(rateOf(m, "ordrecv"), p ? rateOf(p, "ordrecv") : null) + "</td>";
       if (c === "rHand") return '<td class="n">' + pct(rateOf(m, "ordhand")) + pointCell(rateOf(m, "ordhand"), p ? rateOf(p, "ordhand") : null) + "</td>";
       return '<td class="n"><b>' + n(m[c]) + "</b> " + (c === "order" || c === "recvAct" ? deltaCell(m[c], p ? p[c] : 0) : "") + "</td>";
@@ -1770,7 +1772,7 @@ tbody tr:hover td { background: var(--surface-2); }
     var fr = snap.freshness || {}, today = state.data.today;
     $("fresh").innerHTML = SOURCES.filter(function (s) { return state.srcOn[s.key]; }).map(function (s) {
       var k = fr[s.key];
-      if (s.key === "TH" && snap.thConfigured === false) return '<div class="fresh-row">' + ICON_WARN + '<span class="src-tag"><i style="background:' + s.color + '"></i>' + esc(s.label) + '</span><span class="when">chưa cấu hình nguồn</span></div>';
+      if ((s.key === "TH" && snap.thConfigured === false) || (s.key === "VNPT" && snap.vnptConfigured !== true)) return '<div class="fresh-row">' + ICON_WARN + '<span class="src-tag"><i style="background:' + s.color + '"></i>' + esc(s.label) + '</span><span class="when">chưa cấu hình nguồn</span></div>';
       if (!k) return '<div class="fresh-row">' + ICON_BAD + '<span class="src-tag"><i style="background:' + s.color + '"></i>' + esc(s.label) + '</span><span class="when">không có dữ liệu</span></div>';
       var lag = diffDays(k, today);
       var ico = lag <= 1 ? ICON_OK : lag <= 3 ? ICON_WARN : ICON_BAD;
@@ -1784,7 +1786,7 @@ tbody tr:hover td { background: var(--surface-2); }
   function renderUsers(R, cur) {
     var by = {};
     cur.forEach(function (f) {
-      var o = by[f[4]] || (by[f[4]] = {user: f[4], VTD: 0, PN: 0, TH: 0, total: 0, days: {}});
+      var o = by[f[4]] || (by[f[4]] = {user: f[4], VTD: 0, PN: 0, TH: 0, VNPT: 0, total: 0, days: {}});
       o[f[1]] = (o[f[1]] || 0) + f[6]; o.total += f[6]; o.days[f[0]] = 1;
     });
     var rows = Object.keys(by).map(function (k) { var o = by[k]; o.active = Object.keys(o.days).length; o.perDay = o.total / Math.max(1, o.active); return o; });
@@ -1812,8 +1814,8 @@ tbody tr:hover td { background: var(--surface-2); }
 
   function exportCsv() {
     var R = rangeKeys();
-    var lines = [["Nhan vien", "VTD", "Pham Nguyen", "TH", "Tong", "Ngay lam", "TB/ngay"].join(",")];
-    lastUserRows.forEach(function (r) { lines.push(['"' + r.user.replace(/"/g, '""') + '"', r.VTD, r.PN, r.TH, r.total, r.active, Math.round(r.perDay)].join(",")); });
+    var lines = [["Nhan vien", "VTD", "Pham Nguyen", "TH", "VNPT", "Tong", "Ngay lam", "TB/ngay"].join(",")];
+    lastUserRows.forEach(function (r) { lines.push(['"' + r.user.replace(/"/g, '""') + '"', r.VTD, r.PN, r.TH, r.VNPT || 0, r.total, r.active, Math.round(r.perDay)].join(",")); });
     var blob = new Blob(["﻿" + lines.join("\n")], {type: "text/csv;charset=utf-8"});
     var a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = "hieu-suat-" + R.from + "_" + R.to + ".csv";

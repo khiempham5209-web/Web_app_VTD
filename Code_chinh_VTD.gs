@@ -83,8 +83,8 @@ const VTD_PERMISSIONS = {
       actions: ["dashboard", "search", "getRecord", "saveRaw", "uploadImage", "queueRecord", "storeInfo"]
     }
   },
-  allScreens: ["home", "search", "input", "returnth", "store", "settings", "ops", "admin"],
-  allActions: ["dashboard", "search", "getRecord", "saveRaw", "saveReturnTh", "updateRecord", "uploadImage", "queueRecord", "storeInfo", "changePass", "changePin", "runCommand", "adminConfig", "manageConfig", "retrySync", "downloadCache", "activityPing", "loginReport"]
+  allScreens: ["home", "search", "input", "returnth", "returnvnpt", "store", "settings", "ops", "admin"],
+  allActions: ["dashboard", "search", "getRecord", "saveRaw", "saveReturnTh", "saveReturnVnpt", "updateReturnVnpt", "deleteReturnVnpt", "updateRecord", "uploadImage", "queueRecord", "storeInfo", "changePass", "changePin", "runCommand", "adminConfig", "manageConfig", "retrySync", "downloadCache", "activityPing", "loginReport"]
 };
 
 const VTD_STATUS_LABELS = {
@@ -339,6 +339,14 @@ function vtdApp_saveSystemConfig(params) {
     config.returnThApiUrl = url;
     changed.returnThApiUrl = config.returnThApiUrl;
   }
+  if (Object.prototype.hasOwnProperty.call(input, "returnVnptApiUrl")) {
+    const url = String(input.returnVnptApiUrl || "").trim();
+    if (url && !/^https:\/\/script\.google\.com\/macros\/s\/[-\w]+\/exec/i.test(url)) {
+      return vtdApp_fail_("Link API Nhập VNPT không hợp lệ.");
+    }
+    config.returnVnptApiUrl = url;
+    changed.returnVnptApiUrl = config.returnVnptApiUrl;
+  }
   if (Object.prototype.hasOwnProperty.call(input, "docOpsApiUrl")) {
     const url = String(input.docOpsApiUrl || "").trim();
     if (url && !/^https:\/\/script\.google\.com\/macros\/s\/[-\w]+\/exec/i.test(url)) {
@@ -438,6 +446,7 @@ function vtdApp_publicSystemConfig_(config) {
   }
   return {
     returnThApiUrl: String(config.returnThApiUrl || ""),
+    returnVnptApiUrl: String(config.returnVnptApiUrl || ""),
     docOpsApiUrl: String(config.docOpsApiUrl || ""),
     uiConfig: uiConfig,
     update: update,
@@ -535,7 +544,7 @@ function vtdApp_systemConfig_() {
     try { return JSON.parse(cached); } catch (err) {}
   }
   const sh = vtdApp_systemConfigSheet_();
-  const config = {returnThApiUrl: "", docOpsApiUrl: "", uiConfig: "", update: "", themeConfig: "", themeImageUrl: ""};
+  const config = {returnThApiUrl: "", returnVnptApiUrl: "", docOpsApiUrl: "", uiConfig: "", update: "", themeConfig: "", themeImageUrl: ""};
   if (sh.getLastRow() > 1) {
     const values = sh.getRange(2, 1, sh.getLastRow() - 1, 4).getValues();
     values.forEach(row => {

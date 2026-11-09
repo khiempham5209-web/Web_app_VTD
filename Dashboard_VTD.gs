@@ -65,6 +65,20 @@ const DASH_CONFIG = {
     statusAliases: ["tinh trang", "tinh trang hang", "tinh trang ff"],
     ordersSheet: "DS đơn all",   // đơn lên của TH
     ordersHeaderRow: 1
+  },
+  vnpt: {
+    // File Vận hành VNPT, tab Hoàn trả (API Nhập VNPT ghi vào). Để trống ID = bỏ qua VNPT. Không có tab đơn lên.
+    spreadsheetId: "1EOyNJyjUoXXXmOH-OJCD_Vsyauhmm2Uj_Ujnqaj6e-s",
+    sheetName: "Hoàn trả",
+    headerRow: 3,
+    dateAliases: ["ngay thang", "ngay hoan", "ngay hoan tra", "ngay", "date"],
+    timeAliases: ["thoi gian", "gio", "time", "timestamp"],
+    userAliases: ["user thao tac", "user", "nguoi nhap", "nguoi thao tac", "email"],
+    qtyAliases: ["so luong", "sl", "qty"],
+    maAliases: ["ma don", "ma don ghtk"],
+    kenhAliases: ["kho", "kenh", "slog"],
+    nameAliases: ["ten san pham", "ten sp", "san pham"],
+    statusAliases: ["tinh trang", "tinh trang hang", "tinh trang ff"]
   }
 };
 
@@ -177,6 +191,7 @@ function dashBuild() {
     const pnBacklog = step("Phạm Nguyên", () => dash_collectPn_(add, now, metric));
     step("TH hàng hoàn", () => dash_collectTh_(add, metric));
     step("TH lên đơn", () => dash_collectThOrders_(metric));
+    step("VNPT hàng hoàn", () => dash_collectTh_(add, metric, DASH_CONFIG.vnpt, "VNPT", "VNPT"));
     step("Lỗi hàng đợi", () => {
       if (typeof vtdApp_queueErrorSheet_ === "function") sync.queueErrors = Math.max(0, vtdApp_queueErrorSheet_().getLastRow() - 1);
     });
@@ -190,6 +205,7 @@ function dashBuild() {
       recent: recent.slice(0, DASH_CONFIG.recentLimit),
       errors: errors,
       thConfigured: !!(DASH_CONFIG.th.spreadsheetId && DASH_CONFIG.th.sheetName),
+      vnptConfigured: !!(DASH_CONFIG.vnpt && DASH_CONFIG.vnpt.spreadsheetId && DASH_CONFIG.vnpt.sheetName),
       metrics: 2,          // phiên bản dữ liệu: có cột Chỉ số
       buildVersion: DASH_BUILD_VERSION,
       timings: timings,
@@ -557,8 +573,9 @@ function dash_collectPn_(add, now, metric) {
 
 /* ============================ Nguồn TH ============================ */
 
-function dash_collectTh_(add, metric) {
-  const cfg = DASH_CONFIG.th;
+// Dùng cho TH và VNPT (cùng cấu trúc tab hàng hoàn). Mặc định là TH như trước.
+function dash_collectTh_(add, metric, cfgIn, srcIn, labelIn) {
+  const cfg = cfgIn || DASH_CONFIG.th, src = srcIn || "TH", label = labelIn || "TH Truemilk";
   if (!cfg.spreadsheetId || !cfg.sheetName) return;
   const sh = SpreadsheetApp.openById(cfg.spreadsheetId).getSheetByName(cfg.sheetName);
   if (!sh) throw new Error("Không thấy tab " + cfg.sheetName);
@@ -573,16 +590,16 @@ function dash_collectTh_(add, metric) {
     const dateKey = dash_key_(get(row, c.date)) || dash_key_(get(row, c.time));
     if (!dateKey) return;
     const user = dash_user_(get(row, c.user));
-    const kenh = String(get(row, c.kenh) || "").trim() || "TH Truemilk";
+    const kenh = String(get(row, c.kenh) || "").trim() || label;
     const qty = Number(get(row, c.qty)) || 0;
-    add("TH", dateKey, dash_hour_(get(row, c.time)), kenh, "Hàng hoàn", user, qty, {
-      at: dateKey + " " + dash_hhmm_(get(row, c.time)), src: "TH", ma: String(get(row, c.ma) || ""), kenh: kenh, loai: "Hàng hoàn", user: user
+    add(src, dateKey, dash_hour_(get(row, c.time)), kenh, "Hàng hoàn", user, qty, {
+      at: dateKey + " " + dash_hhmm_(get(row, c.time)), src: src, ma: String(get(row, c.ma) || ""), kenh: kenh, loai: "Hàng hoàn", user: user
     });
     const name = String(get(row, c.name) || "").trim();
     const status = c.status >= 0 ? (String(row[c.status] || "").trim() || "(trống)") : "";
-    if (name) metric("product", "TH", dateKey, name, status || "(không ghi tình trạng)", qty);
-    if (status) metric("cond", "TH", dateKey, "Sản phẩm", status, qty);
-    dash_clsNote_(metric, "TH", dateKey, c.cls >= 0 ? row[c.cls] : null, c.note >= 0 ? row[c.note] : null, status || "(trống)", qty);
+    if (name) metric("product", src, dateKey, name, status || "(không ghi tình trạng)", qty);
+    if (status) metric("cond", src, dateKey, "Sản phẩm", status, qty);
+    dash_clsNote_(metric, src, dateKey, c.cls >= 0 ? row[c.cls] : null, c.note >= 0 ? row[c.note] : null, status || "(trống)", qty);
   });
 }
 
