@@ -1,15 +1,12 @@
 # Thay đổi chờ build APK
 
-Danh sách thay đổi **đã có trên web (Vercel) nhưng chưa có trong APK**. Bản APK mới nhất: **5.9.28** (build từ commit `800b6bf`).
+Danh sách thay đổi **đã có trên web (Vercel) nhưng chưa có trong APK**. Bản APK mới nhất: **5.9.29** (build từ commit `beb2e64` + nâng APP_VERSION).
 
 Mỗi khi sửa `index.html` hoặc `dashboard.html` mà chưa build APK, ghi thêm 1 dòng vào bảng dưới.
 Khi build APK mới: đưa các dòng này vào `RELEASE-<phiên bản>.md`, rồi xóa khỏi bảng và cập nhật dòng "Bản APK mới nhất" ở trên.
 
 | Commit | File | Thay đổi | Cần làm gì khác |
 |---|---|---|---|
-| `475e5d0` | dashboard.html | Dashboard: nhãn khoảng ngày đúng khi chọn Tùy chọn (bảng Hiệu suất nhân viên không còn ghi "hôm nay" sai); trên điện thoại thanh lọc không dính đầu màn hình, thêm nút "↑ Bộ lọc" | Không |
-| `13db3d5`, `8963f4c` | index.html | Tìm kiếm Phạm Nguyên: ô tìm mã tìm được cả Mã ecom CT (nhập một phần cũng được); đơn khớp theo mã ecom hiện "ecom &lt;mã&gt;" ở dòng kết quả; nhãn ô đổi thành "Mã đơn/Số đơn hàng", placeholder "Nhập/quét mã đơn GHTK, số đh, ecom"; cập nhật hướng dẫn trong app | Không |
-| `cdd383e` | index.html, dashboard.html | Màn **Nhập VNPT** giống Nhập TH (một đơn nhiều SKU, quét ICCID từng SIM, số ICCID = Số lượng), sửa/xóa đơn VNPT trong ngày, Tìm kiếm VNPT (theo mã đơn hoặc ICCID), bảng VNPT ở Trang chủ dưới TH, Dashboard thêm nguồn VNPT; Cài đặt cá nhân: chọn màn nằm ở thanh dưới hay trong Cài đặt, nút ↑↓ đổi thứ tự; hướng dẫn trong app thêm mục VNPT | Dán + deploy lại `Code_chinh_VTD.gs`, `Dashboard_VTD.gs`; dán link API VNPT ở Cài đặt → API hệ thống; cấp quyền màn Nhập VNPT cho user |
 
 ## Cách build (cho Claude trên laptop)
 
