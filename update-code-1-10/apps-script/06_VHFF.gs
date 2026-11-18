@@ -83,7 +83,7 @@ function syncBanGiaoSanPham() {
       sourceClassHeader: 'Phân loại',
       classValue: 'Hàng thu hồi',
     },
-    // Ghi theo dòng: dòng cũ chỉ ghi lại khi nguồn đổi, dòng mới thêm xuống cuối; không ghi lại cả tab.
+    // Vẫn xếp theo Ngày bàn giao như cũ, nhưng chỉ ghi các dòng khác với tab đích; không ghi lại cả tab.
     writeChangedRowsOnly: true,
     dateHeaders: ['Ngày nhận trả', 'Ngày bàn giao', 'Ngày booking'],
     timeHeaders: [],
@@ -231,13 +231,7 @@ function syncSheetWhenHasProduct_(config) {
     });
   }
 
-  pnRequireReady_();
-  if (config.writeChangedRowsOnly) {
-    // Giữ đúng thứ tự dòng của tab nguồn: dòng mới nằm cuối, dòng cũ không bị đẩy lệch khi điền Ngày bàn giao.
-    const write = writeTargetChangedRows_(targetSheet, config, output.map(item => item.values));
-    return Object.assign({ok: true}, write, stats);
-  }
-
+  // Thứ tự như cũ: có Ngày bàn giao xếp trước theo ngày tăng dần, chưa có ngày bàn giao nằm cuối.
   output.sort((a, b) => {
     if (a.sortDate && b.sortDate) {
       const dateDiff = a.sortDate.getTime() - b.sortDate.getTime();
@@ -249,6 +243,11 @@ function syncSheetWhenHasProduct_(config) {
   });
 
   pnRequireReady_();
+  if (config.writeChangedRowsOnly) {
+    // So với tab đích, chỉ ghi các dòng khác (vd. dòng vừa có link chứng từ thu hồi), không ghi lại cả tab.
+    const write = writeTargetChangedRows_(targetSheet, config, output.map(item => item.values));
+    return Object.assign({ok: true}, write, stats);
+  }
   writeTargetByHeaders_(targetSheet, config, output.map(item => item.values));
 }
 
@@ -287,7 +286,7 @@ function writeTargetByHeaders_(targetSheet, config, rows) {
 }
 
 /* Ghi theo dòng, cột theo TÊN tiêu đề ở dòng 1 tab đích (cột chưa có -> thêm vào cuối).
- * Dòng thứ i của đích = dòng thứ i có sản phẩm ở nguồn. Đọc đích một lần, chỉ ghi các dòng khác nguồn,
+ * Dòng thứ i của đích = dòng thứ i của danh sách đã sắp xếp. Đọc đích một lần, chỉ ghi các dòng khác,
  * dòng mới thêm xuống cuối; nguồn bớt dòng thì xóa phần thừa cuối đích. Cột ngoài config không bị đụng. */
 function writeTargetChangedRows_(targetSheet, config, rows) {
   const lastCol = Math.max(targetSheet.getLastColumn(), 1);
