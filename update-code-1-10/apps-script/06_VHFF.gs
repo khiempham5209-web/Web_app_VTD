@@ -309,7 +309,7 @@ function writeTargetChangedRows_(targetSheet, config, rows) {
   const readCount = Math.min(oldCount, rows.length);
   const old = readCount ? targetSheet.getRange(2, minC, readCount, maxC - minC + 1).getValues() : [];
 
-  const changed = [], diffSample = [], diffByColumn = {};
+  const changed = [], diffSample = [], diffByColumn = {}, fixFormat = {};
   const show = v => (isRealDate_(v) ? 'Date ' + v.toISOString() : typeof v + ' ' + JSON.stringify(v));
   rows.forEach((row, i) => {
     if (i >= readCount) { changed.push(i); return; }
@@ -317,6 +317,11 @@ function writeTargetChangedRows_(targetSheet, config, rows) {
     cols.forEach((c, j) => {
       if (targetCellKey_(old[i][c - minC]) === targetCellKey_(row[j])) return;
       diff = true;
+      // Ô đích bị định dạng ngày nhưng nguồn là số (vd. Mã vật tư 55060476 hiện thành năm 152650) -> trả về định dạng số.
+      if (isRealDate_(old[i][c - minC]) && typeof row[j] === 'number') {
+        const f = Number.isInteger(row[j]) ? '0' : '0.##########';
+        (fixFormat[c + '|' + f] = fixFormat[c + '|' + f] || []).push(i);
+      }
       const name = config.columns[j][0];
       diffByColumn[name] = (diffByColumn[name] || 0) + 1;
       if (diffSample.length < 8) diffSample.push({dong: i + 2, cot: name, dich: show(old[i][c - minC]), nguon: show(row[j])});
@@ -342,9 +347,21 @@ function writeTargetChangedRows_(targetSheet, config, rows) {
     timeCols.forEach(c => targetSheet.getRange(b.start + 2, c, n, 1).setNumberFormat('hh:mm:ss'));
   });
 
+  let formatFixed = 0;
+  Object.keys(fixFormat).forEach(k => {
+    const [c, f] = [Number(k.split('|')[0]), k.slice(k.indexOf('|') + 1)], list = fixFormat[k];
+    formatFixed += list.length;
+    for (let a = 0; a < list.length;) {
+      let b = a;
+      while (b + 1 < list.length && list[b + 1] === list[b] + 1) b++;
+      targetSheet.getRange(list[a] + 2, c, b - a + 1, 1).setNumberFormat(f);
+      a = b + 1;
+    }
+  });
+
   const cleared = Math.max(oldCount - rows.length, 0);
   if (cleared) runs.forEach(run => targetSheet.getRange(rows.length + 2, run.start, cleared, run.end - run.start + 1).clearContent());
-  return {total: rows.length, written: changed.length, added: Math.max(rows.length - readCount, 0), cleared, diffByColumn, diffSample};
+  return {total: rows.length, written: changed.length, added: Math.max(rows.length - readCount, 0), cleared, formatFixed, diffByColumn, diffSample};
 }
 
 // So giá trị đã ghi ở đích với giá trị nguồn: ngày so theo thời điểm, số dạng chữ so như số.
