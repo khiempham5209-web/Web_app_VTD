@@ -95,7 +95,12 @@ function pnKeoChungTuThuHoi() {
   return pnWithLock_(() => {
     pnRequireReady_();
     const result = syncBanGiaoSanPham();
+    // In phần đối chiếu trước (danh sách Mã đơn thiếu chứng từ rất dài nên in sau).
+    const missing = result && result.recallMissing;
+    if (result) delete result.recallMissing;
     console.log(JSON.stringify(result));
+    if (missing) console.log('Mã đơn Hàng thu hồi chưa có chứng từ (' + missing.length + '): ' + missing.join(', '));
+    if (result) result.recallMissing = missing;
     return result;
   });
 }
@@ -304,9 +309,19 @@ function writeTargetChangedRows_(targetSheet, config, rows) {
   const readCount = Math.min(oldCount, rows.length);
   const old = readCount ? targetSheet.getRange(2, minC, readCount, maxC - minC + 1).getValues() : [];
 
-  const changed = [];
+  const changed = [], diffSample = [], diffByColumn = {};
+  const show = v => (isRealDate_(v) ? 'Date ' + v.toISOString() : typeof v + ' ' + JSON.stringify(v));
   rows.forEach((row, i) => {
-    if (i >= readCount || cols.some((c, j) => targetCellKey_(old[i][c - minC]) !== targetCellKey_(row[j]))) changed.push(i);
+    if (i >= readCount) { changed.push(i); return; }
+    let diff = false;
+    cols.forEach((c, j) => {
+      if (targetCellKey_(old[i][c - minC]) === targetCellKey_(row[j])) return;
+      diff = true;
+      const name = config.columns[j][0];
+      diffByColumn[name] = (diffByColumn[name] || 0) + 1;
+      if (diffSample.length < 8) diffSample.push({dong: i + 2, cot: name, dich: show(old[i][c - minC]), nguon: show(row[j])});
+    });
+    if (diff) changed.push(i);
   });
 
   // Gom các dòng đổi gần nhau (cách <= 5 dòng) thành một khối để ít lần ghi; ghi lại dòng giống hệt không sao.
@@ -329,7 +344,7 @@ function writeTargetChangedRows_(targetSheet, config, rows) {
 
   const cleared = Math.max(oldCount - rows.length, 0);
   if (cleared) runs.forEach(run => targetSheet.getRange(rows.length + 2, run.start, cleared, run.end - run.start + 1).clearContent());
-  return {total: rows.length, written: changed.length, added: Math.max(rows.length - readCount, 0), cleared};
+  return {total: rows.length, written: changed.length, added: Math.max(rows.length - readCount, 0), cleared, diffByColumn, diffSample};
 }
 
 // So giá trị đã ghi ở đích với giá trị nguồn: ngày so theo thời điểm, số dạng chữ so như số.
