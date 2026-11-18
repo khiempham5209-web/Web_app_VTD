@@ -107,6 +107,8 @@ function pnHandleEdit(e) {
       if(name==='Hàng lỗi'||name==='DS SKU')onEditSyncHangLoiGHTK(e);
       // Như logic cũ: sửa Hoàn sản phẩm -> cập nhật Bàn giao SP_Hàng hoàn; sửa Sự vụ -> cập nhật Sự vụ bánh xẹp (file đích).
       if(name==='Hoàn sản phẩm'&&r2>=2)pnRunTarget_('products',()=>syncBanGiaoSanPham());
+      // Sửa Mã đơn GHTK / Mã ecom CT / Link ảnh ở Chứng từ -> bổ sung cột Chứng từ thu hồi (Bàn giao SP_Hàng hoàn).
+      if((name==='Chứng từ_FF'||name==='Chứng từ_full')&&pnEditTouchesRecall_(sh,e.range))pnRunTarget_('products',()=>syncBanGiaoSanPham());
       if(name==='Sự vụ'&&r2>=2)pnRunTarget_('incidents',()=>syncAllSuVuBanhXep_());
       let result=null;
       if(p){

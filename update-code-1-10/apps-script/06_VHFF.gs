@@ -37,10 +37,11 @@ function syncBanGiaoChungTu() {
 }
 
 function syncBanGiaoSanPham() {
-  syncSheetWhenHasProduct_({
+  return syncSheetWhenHasProduct_({
     sourceSheetName: PRODUCT_SOURCE_SHEET,
     targetSheetName: PRODUCT_TARGET_SHEET,
     // [tên cột đích, tên cột nguồn]. LOOKUP = lấy từ Booking_full theo Số đơn hàng.
+    // THU_HOI = Link ảnh chứng từ thu hồi, tìm ở Chứng từ_FF + Chứng từ_full theo Mã ecom CT = Mã đơn.
     columns: [
       ['Ngày nhận trả', 'Ngày hoàn trả'],
       ['Mã đơn', 'Mã đơn'],
@@ -60,6 +61,7 @@ function syncBanGiaoSanPham() {
       ['Khối lượng', 'Khối lượng'],
       ['Loại siêu thị', 'Loại siêu thị'],
       ['Hình ảnh', 'Hình ảnh'],
+      ['Chứng từ thu hồi', 'THU_HOI'],
       ['CBM', 'CBM'],
       ['Ngày bàn giao', 'Ngày bàn giao'],
     ],
@@ -72,8 +74,39 @@ function syncBanGiaoSanPham() {
       sourceKeyHeaders: ['Row Labels', 'Số đơn hàng', 'Mã đơn hàng KH', 'Mã đơn hàng', 'OD'],
       lookupValueHeaders: ['Ngày'],
     },
+    // Chỉ dòng Phân loại = Hàng thu hồi. Một Mã đơn có nhiều chứng từ thu hồi -> các link cách nhau bằng dấu phẩy.
+    recallLookup: {
+      sheetNames: ['Chứng từ_FF', 'Chứng từ_full'],
+      keyHeader: 'Mã ecom CT',
+      valueHeader: 'Link ảnh',
+      sourceKeyHeader: 'Mã đơn',
+      sourceClassHeader: 'Phân loại',
+      classValue: 'Hàng thu hồi',
+    },
+    // Ghi theo dòng: dòng cũ chỉ ghi lại khi nguồn đổi, dòng mới thêm xuống cuối; không ghi lại cả tab.
+    writeChangedRowsOnly: true,
     dateHeaders: ['Ngày nhận trả', 'Ngày bàn giao', 'Ngày booking'],
     timeHeaders: [],
+  });
+}
+
+// Chạy tay: kéo bù Link ảnh chứng từ thu hồi cho các dòng Hàng thu hồi bị sót, và liệt kê Mã đơn chưa có chứng từ.
+function pnKeoChungTuThuHoi() {
+  return pnWithLock_(() => {
+    pnRequireReady_();
+    const result = syncBanGiaoSanPham();
+    console.log(JSON.stringify(result));
+    return result;
+  });
+}
+
+// Sửa tay Mã đơn GHTK / Mã ecom CT / Link ảnh ở Chứng từ_FF hoặc Chứng từ_full -> cập nhật cột Chứng từ thu hồi.
+function pnEditTouchesRecall_(sheet, range) {
+  if (!sheet || !range || range.getLastRow() < 2) return false;
+  const map = getHeaderMap_(sheet), c1 = range.getColumn(), c2 = range.getLastColumn();
+  return ['Mã đơn GHTK', 'Mã ecom CT', 'Link ảnh'].some(h => {
+    const c = map[normalizeHeader_(h)];
+    return c && c >= c1 && c <= c2;
   });
 }
 
@@ -159,13 +192,20 @@ function syncSheetWhenHasProduct_(config) {
 
   const lastRow = sourceSheet.getLastRow();
   const sourceHeaderMap = getHeaderMap_(sourceSheet);
-  // Cột LOOKUP không đọc từ nguồn (0), lấy từ Booking_full theo Số đơn hàng.
-  const sourceColumns = config.columns.map(([, src]) => src === 'LOOKUP' ? 0 : requireHeaderColumn_(sourceHeaderMap, src, config.sourceSheetName));
+  // Cột LOOKUP / THU_HOI không đọc từ nguồn (0): LOOKUP lấy từ Booking_full, THU_HOI lấy Link ảnh chứng từ thu hồi.
+  const computed = {LOOKUP: true, THU_HOI: true};
+  const sourceColumns = config.columns.map(([, src]) => computed[src] ? 0 : requireHeaderColumn_(sourceHeaderMap, src, config.sourceSheetName));
   const requiredColumns = (config.requiredAnyHeaders || []).map(header => requireHeaderColumn_(sourceHeaderMap, header, config.sourceSheetName));
   const handoverColumn = requireHeaderColumn_(sourceHeaderMap, config.handoverHeader, config.sourceSheetName);
   const lookupMap = config.lookupByOrderNumber ? buildLookupByOrderNumber_(config.lookupByOrderNumber) : null;
   const sourceOrderColumn = lookupMap ? requireHeaderColumn_(sourceHeaderMap, 'Số đơn hàng', config.sourceSheetName) : 0;
-  const maxSourceCol = Math.max(...sourceColumns, ...requiredColumns, handoverColumn, sourceOrderColumn);
+  const recall = config.recallLookup || null;
+  const recallMap = recall ? buildRecallLinkMap_(recall) : null;
+  const recallKeyColumn = recall ? requireHeaderColumn_(sourceHeaderMap, recall.sourceKeyHeader, config.sourceSheetName) : 0;
+  const recallClassColumn = recall ? requireHeaderColumn_(sourceHeaderMap, recall.sourceClassHeader, config.sourceSheetName) : 0;
+  const recallClass = recall ? normalizeHeader_(recall.classValue) : '';
+  const maxSourceCol = Math.max(...sourceColumns, ...requiredColumns, handoverColumn, sourceOrderColumn, recallKeyColumn, recallClassColumn);
+  const stats = {recallRows: 0, recallLinked: 0, recallMissing: []};
 
   const output = [];
   if (lastRow >= 2) {
@@ -175,12 +215,27 @@ function syncSheetWhenHasProduct_(config) {
       if (!hasProductInfo) return;
       const handoverValue = row[handoverColumn - 1];
       const lookup = lookupMap ? (lookupMap[normalizeLookupKey_(row[sourceOrderColumn - 1])] || '') : '';
+      let recallLink = '';
+      if (recallMap && normalizeHeader_(row[recallClassColumn - 1]) === recallClass) {
+        const key = normalizeRecallKey_(row[recallKeyColumn - 1]);
+        recallLink = key && recallMap[key] ? recallMap[key].join(', ') : '';
+        stats.recallRows++;
+        if (recallLink) stats.recallLinked++;
+        else if (key && stats.recallMissing.indexOf(key) < 0) stats.recallMissing.push(key);
+      }
       output.push({
         sortDate: isRealDate_(handoverValue) ? handoverValue : null,
         sourceIndex: index,
-        values: sourceColumns.map(col => col ? row[col - 1] : lookup),
+        values: sourceColumns.map((col, i) => col ? row[col - 1] : (config.columns[i][1] === 'THU_HOI' ? recallLink : lookup)),
       });
     });
+  }
+
+  pnRequireReady_();
+  if (config.writeChangedRowsOnly) {
+    // Giữ đúng thứ tự dòng của tab nguồn: dòng mới nằm cuối, dòng cũ không bị đẩy lệch khi điền Ngày bàn giao.
+    const write = writeTargetChangedRows_(targetSheet, config, output.map(item => item.values));
+    return Object.assign({ok: true}, write, stats);
   }
 
   output.sort((a, b) => {
@@ -229,6 +284,89 @@ function writeTargetByHeaders_(targetSheet, config, rows) {
   });
   fmt(config.dateHeaders, 'dd/MM/yyyy');
   fmt(config.timeHeaders, 'hh:mm:ss');
+}
+
+/* Ghi theo dòng, cột theo TÊN tiêu đề ở dòng 1 tab đích (cột chưa có -> thêm vào cuối).
+ * Dòng thứ i của đích = dòng thứ i có sản phẩm ở nguồn. Đọc đích một lần, chỉ ghi các dòng khác nguồn,
+ * dòng mới thêm xuống cuối; nguồn bớt dòng thì xóa phần thừa cuối đích. Cột ngoài config không bị đụng. */
+function writeTargetChangedRows_(targetSheet, config, rows) {
+  const lastCol = Math.max(targetSheet.getLastColumn(), 1);
+  const headers = targetSheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h == null ? '' : h).trim());
+  if (headers.every(h => !h)) headers.length = 0;
+  const map = {};
+  headers.forEach((h, i) => { const k = normalizeHeader_(h); if (k && !map[k]) map[k] = i + 1; });
+  const cols = config.columns.map(([target]) => {
+    const k = normalizeHeader_(target);
+    if (!map[k]) { headers.push(target); map[k] = headers.length; targetSheet.getRange(1, headers.length).setValue(target); }
+    return map[k];
+  });
+  const minC = Math.min(...cols), maxC = Math.max(...cols);
+  const oldCount = Math.max(targetSheet.getLastRow() - 1, 0);
+  const readCount = Math.min(oldCount, rows.length);
+  const old = readCount ? targetSheet.getRange(2, minC, readCount, maxC - minC + 1).getValues() : [];
+
+  const changed = [];
+  rows.forEach((row, i) => {
+    if (i >= readCount || cols.some((c, j) => targetCellKey_(old[i][c - minC]) !== targetCellKey_(row[j]))) changed.push(i);
+  });
+
+  // Gom các dòng đổi gần nhau (cách <= 5 dòng) thành một khối để ít lần ghi; ghi lại dòng giống hệt không sao.
+  const blocks = [];
+  changed.forEach(i => {
+    const b = blocks[blocks.length - 1];
+    if (b && i - b.end <= 6) b.end = i; else blocks.push({start: i, end: i});
+  });
+  // Nhóm cột liền nhau trên tab đích.
+  const order = cols.map((c, i) => ({c, i})).sort((a, b) => a.c - b.c), runs = [];
+  order.forEach(x => { const r = runs[runs.length - 1]; if (r && r.end === x.c - 1) { r.end = x.c; r.idx.push(x.i); } else runs.push({start: x.c, end: x.c, idx: [x.i]}); });
+  const dateCols = (config.dateHeaders || []).map(n => map[normalizeHeader_(n)]).filter(Boolean);
+  const timeCols = (config.timeHeaders || []).map(n => map[normalizeHeader_(n)]).filter(Boolean);
+  blocks.forEach(b => {
+    const n = b.end - b.start + 1, part = rows.slice(b.start, b.end + 1);
+    runs.forEach(run => targetSheet.getRange(b.start + 2, run.start, n, run.end - run.start + 1).setValues(part.map(v => run.idx.map(i => v[i]))));
+    dateCols.forEach(c => targetSheet.getRange(b.start + 2, c, n, 1).setNumberFormat('dd/MM/yyyy'));
+    timeCols.forEach(c => targetSheet.getRange(b.start + 2, c, n, 1).setNumberFormat('hh:mm:ss'));
+  });
+
+  const cleared = Math.max(oldCount - rows.length, 0);
+  if (cleared) runs.forEach(run => targetSheet.getRange(rows.length + 2, run.start, cleared, run.end - run.start + 1).clearContent());
+  return {total: rows.length, written: changed.length, added: Math.max(rows.length - readCount, 0), cleared};
+}
+
+// So giá trị đã ghi ở đích với giá trị nguồn: ngày so theo thời điểm, số dạng chữ so như số.
+function targetCellKey_(v) {
+  if (v === null || typeof v === 'undefined' || v === '') return '';
+  if (isRealDate_(v)) return 'D' + v.getTime();
+  const s = String(v);
+  if (/^-?\d+(\.\d+)?$/.test(s.trim())) return 'N' + Number(s.trim());
+  return 'S' + s;
+}
+
+/* Map Mã ecom CT -> [Link ảnh] từ Chứng từ_FF + Chứng từ_full (cùng link ở 2 tab chỉ tính 1 lần).
+ * Tab nào thiếu cột thì bỏ qua tab đó; thiếu ở cả hai thì báo lỗi. */
+function buildRecallLinkMap_(cfg) {
+  const ss = pnOpenById_(SOURCE_SPREADSHEET_ID), out = {};
+  let found = 0;
+  cfg.sheetNames.forEach(name => {
+    const sh = ss.getSheetByName(name);
+    if (!sh || sh.getLastRow() < 2) return;
+    const map = getHeaderMap_(sh), kc = map[normalizeHeader_(cfg.keyHeader)], vc = map[normalizeHeader_(cfg.valueHeader)];
+    if (!kc || !vc) return;
+    found++;
+    sh.getRange(2, 1, sh.getLastRow() - 1, Math.max(kc, vc)).getValues().forEach(row => {
+      const key = normalizeRecallKey_(row[kc - 1]), link = String(row[vc - 1] == null ? '' : row[vc - 1]).trim();
+      if (!key || !link) return;
+      if (!out[key]) out[key] = [];
+      if (out[key].indexOf(link) < 0) out[key].push(link);
+    });
+  });
+  if (!found) throw new Error(`Khong tim thay cot "${cfg.keyHeader}" / "${cfg.valueHeader}" trong ${cfg.sheetNames.join(', ')}`);
+  return out;
+}
+
+// Mã đơn / Mã ecom CT: bỏ khoảng trắng, đuôi .0 và số 0 đầu (ô số làm mất số 0 đầu của mã).
+function normalizeRecallKey_(value) {
+  return String(value == null ? '' : value).trim().replace(/\.0+$/, '').replace(/^0+(?=\d)/, '');
 }
 
 function buildLookupByOrderNumber_(config) {
