@@ -103,9 +103,9 @@ function pnKeoChungTuThuHoi() {
 // Sửa tay Mã đơn GHTK / Mã ecom CT / Link ảnh ở Chứng từ_FF hoặc Chứng từ_full -> cập nhật cột Chứng từ thu hồi.
 function pnEditTouchesRecall_(sheet, range) {
   if (!sheet || !range || range.getLastRow() < 2) return false;
-  const map = getHeaderMap_(sheet), c1 = range.getColumn(), c2 = range.getLastColumn();
+  const map = recallHeaderMap_(sheet).map, c1 = range.getColumn(), c2 = range.getLastColumn();
   return ['Mã đơn GHTK', 'Mã ecom CT', 'Link ảnh'].some(h => {
-    const c = map[normalizeHeader_(h)];
+    const c = map[recallHeaderKey_(h)];
     return c && c >= c1 && c <= c2;
   });
 }
@@ -344,13 +344,14 @@ function targetCellKey_(v) {
 /* Map Mã ecom CT -> [Link ảnh] từ Chứng từ_FF + Chứng từ_full (cùng link ở 2 tab chỉ tính 1 lần).
  * Tab nào thiếu cột thì bỏ qua tab đó; thiếu ở cả hai thì báo lỗi. */
 function buildRecallLinkMap_(cfg) {
-  const ss = pnOpenById_(SOURCE_SPREADSHEET_ID), out = {};
+  const ss = pnOpenById_(SOURCE_SPREADSHEET_ID), out = {}, seen = [];
   let found = 0;
   cfg.sheetNames.forEach(name => {
     const sh = ss.getSheetByName(name);
-    if (!sh || sh.getLastRow() < 2) return;
-    const map = getHeaderMap_(sh), kc = map[normalizeHeader_(cfg.keyHeader)], vc = map[normalizeHeader_(cfg.valueHeader)];
-    if (!kc || !vc) return;
+    if (!sh) { seen.push(name + ': không thấy tab'); return; }
+    if (sh.getLastRow() < 2) { seen.push(name + ': tab trống'); return; }
+    const head = recallHeaderMap_(sh), kc = head.map[recallHeaderKey_(cfg.keyHeader)], vc = head.map[recallHeaderKey_(cfg.valueHeader)];
+    if (!kc || !vc) { seen.push(name + ': [' + head.headers.join(' | ') + ']'); return; }
     found++;
     sh.getRange(2, 1, sh.getLastRow() - 1, Math.max(kc, vc)).getValues().forEach(row => {
       const key = normalizeRecallKey_(row[kc - 1]), link = String(row[vc - 1] == null ? '' : row[vc - 1]).trim();
@@ -359,8 +360,21 @@ function buildRecallLinkMap_(cfg) {
       if (out[key].indexOf(link) < 0) out[key].push(link);
     });
   });
-  if (!found) throw new Error(`Khong tim thay cot "${cfg.keyHeader}" / "${cfg.valueHeader}" trong ${cfg.sheetNames.join(', ')}`);
+  if (!found) throw new Error(`Khong tim thay cot "${cfg.keyHeader}" / "${cfg.valueHeader}". Header dong 1 dang doc duoc: ${seen.join(' ; ')}`);
   return out;
+}
+
+// So tên cột không phân biệt dấu/kiểu gõ dấu, hoa thường, khoảng trắng (giống cách các file 1-5, 12 so header).
+function recallHeaderKey_(value) {
+  return String(value == null ? '' : value).normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[đĐ]/g, 'd').toLowerCase().replace(/[\s ​﻿]+/g, '');
+}
+
+function recallHeaderMap_(sheet) {
+  const headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getDisplayValues()[0];
+  const map = {};
+  headers.forEach((h, i) => { const k = recallHeaderKey_(h); if (k && !map[k]) map[k] = i + 1; });
+  return {headers, map};
 }
 
 // Mã đơn / Mã ecom CT: bỏ khoảng trắng, đuôi .0 và số 0 đầu (ô số làm mất số 0 đầu của mã).
