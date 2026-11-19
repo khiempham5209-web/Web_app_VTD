@@ -179,19 +179,16 @@ function pnResolveSave_(sh,col,params) {
 // Đồng bộ đúng dòng fullRow của Chứng từ_full với Chứng từ_FF. prefer=true: bản API vừa ghi thắng.
 // Đồng bộ đúng dòng fullRow của Chứng từ_full với Chứng từ_FF. prefer=true: bản API vừa ghi thắng.
 // API KHÔNG chờ luồng Sheet: Sheet đang bận (dán/dọn) thì xếp dòng này cho luồng Sheet tự đẩy sang tab chính.
+// Không khóa: app chỉ SỬA đúng dòng đơn đã có (theo ID), không thêm dòng ở Chứng từ. Chỉ khi đang dọn tháng (5h sáng)
+// thì lưu dòng lại và tự chạy bù ngay sau khi dọn xong.
 function pnMirrorDocs_(fullRow,prefer) {
   const p=PN_FULL.pairs[2];
-  if(!fullRow)return pnV2SyncPair_(p,{});
-  if(pnLockDepth_)return pnV2SyncRows_(p,'full',[fullRow],prefer!==false,{api:true});
-  const lock=LockService.getScriptLock();
-  if(!lock.tryLock(1)||PropertiesService.getScriptProperties().getProperty('PN_CLEANUP_PENDING')){
-    try { lock.releaseLock(); } catch(err) {}
+  if(!fullRow)return pnAppendLock_(()=>pnV2SyncPair_(p,{}));
+  if(pnCleaning_()||PropertiesService.getScriptProperties().getProperty('PN_CLEANUP_PENDING')){
     pnQueueEdit_(p.full,fullRow,fullRow);
     return {ok:true,queued:true};
   }
-  pnLockDepth_++;
-  try { return pnV2SyncRows_(p,'full',[fullRow],prefer!==false,{api:true}); }
-  finally { pnLockDepth_--; lock.releaseLock(); }
+  return pnRun_(()=>pnV2SyncRows_(p,'full',[fullRow],prefer!==false,{api:true}));
 }
 
 function pnMirrorDocsSafe_(fullRow,prefer) {
@@ -260,6 +257,8 @@ function pnSaveLocked_(params,key,state) {
   }
   const mirrorAfter=pnMirrorDocsSafe_(response.rowNumber||fullRow,true);
   pnMarkDirty_();
+  // Sang VHFF (Đã bàn giao CT, Bàn giao SP_Hàng hoàn): chạy riêng một lần ~20 giây sau, app không phải chờ.
+  pnScheduleJob_(['documents','products']);
   const record=pnResolveSave_(sheet_(),null,params).record;
   const type=norm_(params.returnType||params.loaiHoan||'Chung tu');
   if(['chung tu','docs','san pham + chung tu','product-docs'].includes(type)){

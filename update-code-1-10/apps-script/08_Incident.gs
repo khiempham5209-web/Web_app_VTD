@@ -96,11 +96,7 @@ function syncAllSuVuBanhXep_() {
 
   if (sourceLastCol < 1) return {ok: true, count: 0};
 
-  suVuBanhXepEnsureSize_(
-    target,
-    Math.max(sourceLastRow, SUVU_BANH_XEP_SYNC_CONFIG.dataStartRow),
-    targetWidth
-  );
+  suVuBanhXepEnsureSize_(target, 1, targetWidth);
 
   const sourceHeaders = source
     .getRange(SUVU_BANH_XEP_SYNC_CONFIG.headerRow, 1, 1, sourceLastCol)
@@ -128,23 +124,18 @@ function syncAllSuVuBanhXep_() {
   }
 
   pnRequireReady_();
-  const pnOldLast = target.getLastRow();
-  target
-    .getRange(SUVU_BANH_XEP_SYNC_CONFIG.headerRow, 1, 1, outputHeaders.length)
-    .setValues([outputHeaders]);
-
-  if (outputRows.length) {
-    target
-      .getRange(SUVU_BANH_XEP_SYNC_CONFIG.dataStartRow, 1, outputRows.length, outputHeaders.length)
-      .setValues(outputRows);
-  }
-
-  if(pnOldLast > outputRows.length + 1) target.getRange(outputRows.length + 2, 1, pnOldLast - outputRows.length - 1, targetWidth).clearContent();
-  suVuBanhXepFormatTarget_(target, outputRows.length, outputHeaders.length);
+  // Dòng thứ i đích = dòng thứ i nguồn: so với đích, CHỈ ghi dòng khác; dòng mới ghi tiếp xuống cuối (kẻ viền, font).
+  const res = pnMirrorRows_(target, outputRows, targetWidth, {
+    headers: outputHeaders,
+    formatNew: (sh, start, n) => sh.getRange(start, 1, n, targetWidth)
+      .setFontFamily("Times New Roman").setFontSize(12).setVerticalAlignment("middle")
+      .setBorder(true, true, true, true, true, true)
+  });
 
   return {
     ok: true,
     count: outputRows.length,
+    written: res.written, added: res.added, cleared: res.cleared, skipped: res.skipped,
     sourceSheetId: SUVU_BANH_XEP_SYNC_CONFIG.sourceSheetId,
     targetSheetId: SUVU_BANH_XEP_SYNC_CONFIG.targetSheetId
   };
@@ -175,24 +166,26 @@ function suVuBanhXepBuildOutputRow_(sourceRow, sourceMap, orderInfoMap) {
   ];
 }
 
+// Chỉ đọc 3 cột cần (Mã đơn, Kho đích, QL Lastmile/Quản lý) của File đơn_full, không đọc cả bảng.
 function suVuBanhXepOrderInfoMap_() {
   const sh = suVuBanhXepOrderSheet_();
   const lastRow = sh.getLastRow();
   if (lastRow < 2) return {};
 
-  const lastCol = sh.getLastColumn();
-  const headers = pnHeaders_(sh);
-  const col = suVuBanhXepHeaderMap_(headers);
-  const values = sh.getRange(2, 1, lastRow - 1, lastCol).getDisplayValues();
+  const col = suVuBanhXepHeaderMap_(pnHeaders_(sh));
+  const first = aliases => { for (const a of aliases) { const c = col[suVuBanhXepNorm_(a)]; if (c) return c; } return 0; };
+  const cMa = first(["ma don", "ma don ghtk"]), cKho = first(["kho dich"]), cQl = first(["ql lastmile", "quan ly"]);
+  if (!cMa) return {};
+  const read = c => c ? sh.getRange(2, c, lastRow - 1, 1).getDisplayValues() : null;
+  const ma = read(cMa), kho = read(cKho), ql = read(cQl);
   const out = {};
 
-  values.forEach(row => {
-    const maDon = suVuBanhXepPick_(row, col, ["ma don", "mã đơn", "mã đơn", "ma don ghtk", "mã đơn ghtk", "mã đơn ghtk"]);
+  ma.forEach((r, i) => {
+    const maDon = suVuBanhXepClean_(r[0]);
     if (!maDon) return;
-
     out[suVuBanhXepNorm_(maDon)] = {
-      khoDich: suVuBanhXepPick_(row, col, ["kho dich", "kho đích"]),
-      qlLastmile: suVuBanhXepPick_(row, col, ["ql lastmile", "quan ly", "quản lý"])
+      khoDich: kho ? suVuBanhXepClean_(kho[i][0]) : "",
+      qlLastmile: ql ? suVuBanhXepClean_(ql[i][0]) : ""
     };
   });
 
@@ -302,7 +295,8 @@ function suVuBanhXepPick_(row, col, aliases, fallbackIndex) {
   return "";
 }
 
-function suVuBanhXepSyncWithLock_(fn) { return pnWithLock_(fn); }
+// Không khóa chung: chạy song song, chỉ ghi ô/dòng thay đổi.
+function suVuBanhXepSyncWithLock_(fn) { return pnRun_(fn); }
 
 function suVuBanhXepClean_(value) {
   return String(value == null ? "" : value).trim();

@@ -44,6 +44,72 @@ function pnWithLock_(fn, waitMs) {
   try { return fn(); } finally { pnLockDepth_--; PN_RUN_ = null; lock.releaseLock(); }
 }
 
+/* KHÔNG KHÓA CHUNG. Mỗi người (dán Booking, điền ngày bàn giao, app, Hàng lỗi...) chạy song song.
+ * - pnRun_: chỉ tạo bộ nhớ đệm cho lượt chạy, không khóa ai.
+ * - pnAppendLock_: khóa NGẮN, chỉ quanh bước "tìm dòng trống cuối + ghi dữ liệu MỚI" vào một tab,
+ *   để 2 lượt cùng thêm dữ liệu mới vào cùng tab không ghi đè nhau. Sửa đúng dòng cũ (theo ID/mã) không cần khóa.
+ * - Dọn tháng cũ (xóa dòng) chạy 5h sáng (pnDon5h), giữ khóa và bật cờ PN_CLEANING: trong lúc dọn,
+ *   lần sửa nào tới thì được lưu lại và tự chạy bù ngay sau khi dọn xong (không phải dán lại). */
+let pnAppendDepth_ = 0;
+function pnRun_(fn) {
+  if (PN_RUN_) return fn();
+  PN_RUN_ = {layout: new Map(), sheets: new Map(), lookup: new Map()};
+  try { return fn(); } finally { PN_RUN_ = null; }
+}
+function pnAppendLock_(fn) {
+  if (pnLockDepth_ || pnAppendDepth_) return fn();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('PN_BUSY: Đang có lượt khác thêm dữ liệu mới, thử lại sau.');
+  pnAppendDepth_++;
+  // Tiêu đề/bố cục đọc trước khi khóa vẫn dùng được; chỉ số dòng cuối phải đọc lại bên trong fn.
+  try { const out = fn(); SpreadsheetApp.flush(); return out; }
+  finally { pnAppendDepth_--; lock.releaseLock(); }
+}
+// Đang dọn tháng cũ (5h sáng)? Cờ quá 15 phút coi như đã hết (lượt dọn bị dừng giữa chừng).
+function pnCleaning_() {
+  const t = Number(PropertiesService.getScriptProperties().getProperty('PN_CLEANING') || 0);
+  return !!t && Date.now() - t < 15 * 60000;
+}
+
+/* Việc chạy bù MỘT LẦN (không phải trigger định kỳ): lần sửa bị lưu lại (đang dọn tháng / khóa thêm dòng bận),
+ * hoặc việc sang VHFF sau khi app lưu đơn. Gọi nhiều lần chỉ tạo 1 trigger; chạy xong tự xóa trigger. */
+const PN_JOB_HANDLER_ = 'pnBackgroundJob';
+function pnScheduleJob_(jobs) {
+  const props = PropertiesService.getScriptProperties();
+  const need = new Set(JSON.parse(props.getProperty('PN_JOB_NEED') || '[]'));
+  (jobs || []).forEach(j => need.add(j));
+  props.setProperty('PN_JOB_NEED', JSON.stringify(Array.from(need)));
+  try {
+    if (ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === PN_JOB_HANDLER_)) return {scheduled: false};
+    ScriptApp.newTrigger(PN_JOB_HANDLER_).timeBased().after(20000).create();
+    return {scheduled: true};
+  } catch (err) { console.error('Schedule: ' + String(err && err.message || err)); return {scheduled: false, error: String(err)}; }
+}
+function pnBackgroundJob() {
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === PN_JOB_HANDLER_).forEach(t => ScriptApp.deleteTrigger(t));
+  const props = PropertiesService.getScriptProperties();
+  // Đang dọn tháng, hoặc một lượt chạy bù khác đang chạy: hẹn lại, không chạy chồng.
+  const running = Number(props.getProperty('PN_JOB_RUNNING') || 0);
+  if (pnCleaning_() || (running && Date.now() - running < 6 * 60000)) { pnScheduleJob_([]); return {ok: true, rescheduled: true}; }
+  props.setProperty('PN_JOB_RUNNING', String(Date.now()));
+  const out = {ok: true, jobs: []};
+  try {
+    pnRequireReady_();
+    pnV2Start_ = Date.now();
+    const need = JSON.parse(props.getProperty('PN_JOB_NEED') || '[]');
+    props.deleteProperty('PN_JOB_NEED');
+    out.queue = pnRun_(() => pnDrainEditQueue_());
+    const run = {
+      reject: () => syncAllChungTuKhongDatYC(), documents: () => syncBanGiaoChungTu(), products: () => syncBanGiaoSanPham(),
+      incidents: () => syncAllSuVuBanhXep_(), defects: () => syncAllHangLoiToGHTK()
+    };
+    need.filter(j => run[j]).forEach(j => out.jobs.push({job: j, result: pnRun_(() => pnRunTarget_(j, run[j]))}));
+    // Còn việc (hết giờ, lần sửa mới vào hàng chờ trong lúc chạy): hẹn tiếp.
+    if (out.queue.left || Object.keys(props.getProperties()).some(k => k.indexOf('PN_EDITQ_') === 0)) pnScheduleJob_([]);
+    return out;
+  } finally { pnV2Start_ = 0; props.deleteProperty('PN_JOB_RUNNING'); console.log('Background: ' + JSON.stringify(out).slice(0, 4000)); }
+}
+
 // API, đọc dữ liệu, VHFF chỉ dùng tab full -> KHÔNG bị chặn bởi việc dọn tab chính.
 function pnRequireReady_() {
   if (PropertiesService.getScriptProperties().getProperty('PN_FULL_READY') !== PN_FULL.epoch)
@@ -247,6 +313,38 @@ function pnMarkDirty_() {
   const props=PropertiesService.getScriptProperties(),version=String(Date.now())+':'+Utilities.getUuid();
   props.setProperty('PN_VHFF_DIRTY',version);
   props.setProperty('PN_DOCOPS_DATA_VERSION',version);
+}
+
+/* Tab đích là bản sao THEO THỨ TỰ của nguồn (Hàng lỗi, Sự vụ bánh xẹp): dòng thứ i đích = dòng thứ i nguồn.
+ * Đọc đích 1 lần, so từng ô (theo chữ hiển thị), CHỈ ghi các dòng khác; dòng mới ghi tiếp xuống cuối;
+ * nguồn bớt dòng thì xóa phần thừa ở cuối. Không đổi gì thì không ghi gì. */
+function pnMirrorRows_(target,rows,width,opts) {
+  opts=opts||{};
+  if(pnTargetStale_())return {ok:true,skipped:'stale'};
+  const txt=v=>String(v==null?'':v).trim();
+  if(opts.headers){
+    const head=target.getRange(1,1,1,width).getDisplayValues()[0];
+    if(opts.headers.some((h,j)=>txt(head[j])!==txt(h)))target.getRange(1,1,1,width).setValues([opts.headers.slice(0,width)]);
+  }
+  const oldCount=Math.max(target.getLastRow()-1,0);
+  const old=oldCount?target.getRange(2,1,oldCount,width).getDisplayValues():[];
+  const changed=[];
+  rows.forEach((r,i)=>{
+    if(i>=oldCount){changed.push(i);return;}
+    for(let j=0;j<width;j++)if(txt(old[i][j])!==txt(r[j])){changed.push(i);return;}
+  });
+  const blocks=[];
+  changed.forEach(i=>{const b=blocks[blocks.length-1];if(b&&i-b.end<=6)b.end=i;else blocks.push({start:i,end:i});});
+  if(rows.length>oldCount&&target.getMaxRows()<rows.length+1)target.insertRowsAfter(target.getMaxRows(),rows.length+1-target.getMaxRows());
+  blocks.forEach(b=>target.getRange(b.start+2,1,b.end-b.start+1,width).setValues(rows.slice(b.start,b.end+1).map(r=>{const o=r.slice(0,width);while(o.length<width)o.push('');return o;})));
+  // Phần thừa cuối đích (nguồn đã bớt dòng): chỉ xóa nếu còn chữ.
+  let cleared=0;
+  for(let i=oldCount-1;i>=rows.length;i--)if(old[i].some(v=>txt(v))){cleared=i-rows.length+1;break;}
+  if(cleared)target.getRange(rows.length+2,1,cleared,width).clearContent();
+  const added=Math.max(rows.length-oldCount,0);
+  if(added&&opts.formatNew)opts.formatNew(target,oldCount+2,added);
+  pnTargetDone_();
+  return {ok:true,total:rows.length,written:changed.length,added,cleared};
 }
 function pnAudit_() {
   const results=PN_FULL.pairs.map(p=>{

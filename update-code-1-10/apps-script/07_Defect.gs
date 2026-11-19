@@ -61,13 +61,13 @@ function onEditSyncHangLoiGHTK(e) {
         if (e.range.getRow() < DEFECT_SYNC_CONFIG.skuHeaderRow) return;
         refreshHangLoiMaterialDropdown();
         defectSyncFillProductInfoAll_();
-        return syncAllHangLoiToGHTK();
+        return pnRunTarget_('defects', syncAllHangLoiToGHTK);
       }
 
       if (sheetName === DEFECT_SYNC_CONFIG.sourceSheetName) {
         if (e.range.getRow() < DEFECT_SYNC_CONFIG.sourceDataStartRow) return;
         defectSyncFillProductInfoForEditedRows_(e.range);
-        return syncAllHangLoiToGHTK();
+        return pnRunTarget_('defects', syncAllHangLoiToGHTK);
       }
     });
   } catch (err) {
@@ -101,6 +101,7 @@ function syncAllHangLoiToGHTK() {
   const source = defectSyncSourceSheet_();
   const target = defectSyncTargetSheet_();
   defectSyncEnsureTargetHeaders_(target);
+
 
   const sourceCol = defectSyncHeaderMap_(defectSyncHeaders_(source, DEFECT_SYNC_CONFIG.sourceHeaderRow));
   const lastRow = source.getLastRow();
@@ -139,13 +140,13 @@ function syncAllHangLoiToGHTK() {
   }
 
   pnRequireReady_();
-  const pnOldLast = target.getLastRow();
-  if (output.length) {
-    target.getRange(DEFECT_SYNC_CONFIG.targetDataStartRow, 1, output.length, DEFECT_SYNC_CONFIG.targetColumnCount).setValues(output);
-  }
-  if(pnOldLast > output.length + 1) target.getRange(output.length + 2, 1, pnOldLast - output.length - 1, DEFECT_SYNC_CONFIG.targetColumnCount).clearContent();
-  defectSyncFormatTarget_(target, output.length);
-  return {ok: true, count: output.length};
+  // Dòng thứ i đích = dòng thứ i nguồn: so với đích, CHỈ ghi dòng khác; dòng mới ghi tiếp xuống cuối (kẻ viền, font).
+  const res = pnMirrorRows_(target, output, DEFECT_SYNC_CONFIG.targetColumnCount, {
+    formatNew: (sh, start, n) => sh.getRange(start, 1, n, DEFECT_SYNC_CONFIG.targetColumnCount)
+      .setFontFamily("Times New Roman").setFontSize(12).setVerticalAlignment("middle").setFontWeight("normal")
+      .setBorder(true, true, true, true, true, true)
+  });
+  return Object.assign({count: output.length}, res);
 }
 
 function defectSyncFillProductInfoForEditedRows_(range) {
@@ -245,7 +246,9 @@ function defectSyncSkuMap_() {
 
 function defectSyncEnsureTargetHeaders_(target) {
   const headers = ["Ngày nhận", "Mã vật tư", "Barcode", "Tên sản phẩm", "Số lượng", "Tình trạng GHTK nhận", "GHTK bàn giao", "Ghi chú"];
-  target.getRange(DEFECT_SYNC_CONFIG.targetHeaderRow, 1, 1, headers.length).setValues([headers]);
+  // Chỉ ghi tiêu đề khi khác (không ghi lại mỗi lần).
+  const cur = target.getRange(DEFECT_SYNC_CONFIG.targetHeaderRow, 1, 1, headers.length).getDisplayValues()[0];
+  if (headers.some((h, i) => String(cur[i] || "").trim() !== h)) target.getRange(DEFECT_SYNC_CONFIG.targetHeaderRow, 1, 1, headers.length).setValues([headers]);
 }
 
 function defectSyncClearTargetData_(target) {
@@ -323,8 +326,9 @@ function defectSyncClean_(value) {
   return String(value == null ? "" : value).trim();
 }
 
+// Không khóa chung: chạy song song, chỉ ghi ô/dòng thay đổi.
 function defectSyncWithLock_(fn) {
-  return pnWithLock_(fn);
+  return pnRun_(fn);
 }
 
 function defectSyncNorm_(value) {

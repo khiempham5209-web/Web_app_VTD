@@ -120,11 +120,23 @@ function syncChungTuKhongDatYCRows_(rowNumbers) {
     }
   });
 
+  // Đơn mới: chỉ bước "đọc lại + tìm dòng cuối + ghi" nằm trong khóa ngắn; đơn vừa được lượt khác thêm thì cập nhật đúng dòng đó.
+  let added = 0;
   if (appendRows.length) {
-    const startRow = Math.max(target.getLastRow() + 1, 2);
-    target.getRange(startRow, 1, appendRows.length, outputWidth).setValues(appendRows);
+    const gIdx = rejectSyncFirstCol_(targetCol, ["ma don ghtk", "ma don"]) - 1;
+    pnAppendLock_(function() {
+      const fresh = rejectSyncTargetRowMapByMaDon_(target, targetCol), rows = [];
+      appendRows.forEach(output => {
+        const r = gIdx >= 0 ? fresh[rejectSyncNorm_(output[gIdx])] : 0;
+        if (r) { target.getRange(r, 1, 1, output.length).setValues([output]); updated++; } else rows.push(output);
+      });
+      if (!rows.length) return;
+      const startRow = Math.max(target.getLastRow() + 1, 2);
+      target.getRange(startRow, 1, rows.length, outputWidth).setValues(rows);
+      added = rows.length;
+    });
   }
-  return {ok: true, count: updated + appendRows.length, updated, added: appendRows.length};
+  return {ok: true, count: updated + added, updated, added};
 }
 
 function rejectSyncBuildOutput_(output, targetCol, source, order) {
@@ -174,8 +186,9 @@ function rejectSyncTargetRowMapByMaDon_(sh, col) {
   return out;
 }
 
+// Không khóa chung (chỉ bước thêm đơn mới dùng khóa ngắn pnAppendLock_).
 function rejectSyncWithLock_(fn) {
-  return pnWithLock_(fn);
+  return pnRun_(fn);
 }
 
 /*
@@ -230,10 +243,10 @@ function syncOneChungTuKhongDatYCBySourceRow_(rowNumber) {
   const order = orderMap[rejectSyncNorm_(source.maDonGhtk)] || {};
   const target = rejectSyncTargetSheet_();
   rejectSyncEnsureTargetHeaders_(target);
-  const targetRow = rejectSyncFindTargetRowByMaDon_(target, source.maDonGhtk) || Math.max(target.getLastRow() + 1, 2);
+  const foundRow = rejectSyncFindTargetRowByMaDon_(target, source.maDonGhtk);
   const targetCol = rejectSyncHeaderMap_(rejectSyncHeaders_(target));
   const output = new Array(target.getLastColumn()).fill("");
-  rejectSyncPreserveManualTargetValues_(target, targetCol, targetRow, output);
+  if (foundRow) rejectSyncPreserveManualTargetValues_(target, targetCol, foundRow, output);
 
   rejectSyncSetOutputByAliases_(output, targetCol, ["ngay tao don", "ngay len don"], source.ngayLenDon);
   rejectSyncSetOutputByAliases_(output, targetCol, ["ma don ghtk", "ma don"], source.maDonGhtk);
@@ -249,7 +262,13 @@ function syncOneChungTuKhongDatYCBySourceRow_(rowNumber) {
   rejectSyncSetOutputByAliases_(output, targetCol, ["ff nhan chung tu"], rejectSyncMapXacThucHoaDon_(source.xacThuc));
   rejectSyncSetOutputByAliases_(output, targetCol, ["ff note check"], rejectSyncMapTrangThai_(source.trangThai));
 
-  target.getRange(targetRow, 1, 1, output.length).setValues([output]);
+  // Đơn đã có ở đích: sửa đúng dòng đó (không khóa). Đơn mới: tìm lại + thêm ở cuối trong khóa ngắn.
+  let targetRow = foundRow;
+  if (foundRow) target.getRange(foundRow, 1, 1, output.length).setValues([output]);
+  else pnAppendLock_(function() {
+    targetRow = rejectSyncFindTargetRowByMaDon_(target, source.maDonGhtk) || Math.max(target.getLastRow() + 1, 2);
+    target.getRange(targetRow, 1, 1, output.length).setValues([output]);
+  });
   return {ok: true, targetRow, maDonGhtk: source.maDonGhtk};
 }
 

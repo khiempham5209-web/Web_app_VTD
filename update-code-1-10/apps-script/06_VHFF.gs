@@ -15,7 +15,7 @@ function syncAllBanGiao() {
 /* Cột đích ghi theo TÊN tiêu đề trên tab đích: muốn đổi thứ tự cột thì kéo cột ngay trên Sheet đích,
  * dữ liệu tự đi theo. columns: [tên cột đích, tên cột nguồn]. Cột đích chưa có thì được thêm vào cuối. */
 function syncBanGiaoChungTu() {
-  syncSheetByDate_({
+  return syncSheetByDate_({
     sourceSheetName: DOC_SOURCE_SHEET,
     targetSheetName: DOC_TARGET_SHEET,
     columns: [
@@ -92,7 +92,7 @@ function syncBanGiaoSanPham() {
 
 // Chạy tay: kéo bù Link ảnh chứng từ thu hồi cho các dòng Hàng thu hồi bị sót, và liệt kê Mã đơn chưa có chứng từ.
 function pnKeoChungTuThuHoi() {
-  return pnWithLock_(() => {
+  return pnRun_(() => {
     pnRequireReady_();
     const result = syncBanGiaoSanPham();
     // In phần đối chiếu trước (danh sách Mã đơn thiếu chứng từ rất dài nên in sau).
@@ -186,7 +186,8 @@ function syncSheetByDate_(config) {
   });
 
   pnRequireReady_();
-  writeTargetByHeaders_(targetSheet, config, output.map(item => item.values));
+  // Vẫn xếp theo Ngày bàn giao CT như cũ; so với tab đích, CHỈ ghi các dòng khác (không ghi lại cả tab).
+  return Object.assign({ok: true}, writeTargetChangedRows_(targetSheet, config, output.map(item => item.values)));
 }
 
 function syncSheetWhenHasProduct_(config) {
@@ -294,6 +295,8 @@ function writeTargetByHeaders_(targetSheet, config, rows) {
  * Dòng thứ i của đích = dòng thứ i của danh sách đã sắp xếp. Đọc đích một lần, chỉ ghi các dòng khác,
  * dòng mới thêm xuống cuối; nguồn bớt dòng thì xóa phần thừa cuối đích. Cột ngoài config không bị đụng. */
 function writeTargetChangedRows_(targetSheet, config, rows) {
+  // Lượt cùng luồng bắt đầu sau đã ghi xong (dữ liệu mới hơn): lượt này không ghi đè.
+  if (pnTargetStale_()) return {skipped: 'stale', total: rows.length, written: 0};
   const lastCol = Math.max(targetSheet.getLastColumn(), 1);
   const headers = targetSheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h == null ? '' : h).trim());
   if (headers.every(h => !h)) headers.length = 0;
@@ -361,6 +364,7 @@ function writeTargetChangedRows_(targetSheet, config, rows) {
 
   const cleared = Math.max(oldCount - rows.length, 0);
   if (cleared) runs.forEach(run => targetSheet.getRange(rows.length + 2, run.start, cleared, run.end - run.start + 1).clearContent());
+  pnTargetDone_();
   return {total: rows.length, written: changed.length, added: Math.max(rows.length - readCount, 0), cleared, formatFixed, diffByColumn, diffSample};
 }
 
@@ -509,6 +513,7 @@ function hasValue_(value) {
   return value !== null && value !== '' && typeof value !== 'undefined';
 }
 
+// Không khóa chung: chạy song song, chỉ ghi ô/dòng thay đổi.
 function banGiaoWithLock_(fn) {
-  return pnWithLock_(fn);
+  return pnRun_(fn);
 }

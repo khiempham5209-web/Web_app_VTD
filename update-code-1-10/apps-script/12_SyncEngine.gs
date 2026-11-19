@@ -183,9 +183,8 @@ function pnV2ConflictLog_(p, side, id, values) {
   const ss = pnSS_();
   let sh = ss.getSheetByName(PN_V2.conflictSheet);
   if (!sh) { sh = ss.insertSheet(PN_V2.conflictSheet); sh.getRange(1, 1, 1, 5).setValues([['Thời điểm', 'Tab', 'Bên bị thay', 'ID', 'Nội dung bị thay']]); sh.hideSheet(); }
-  const row = Math.max(2, sh.getLastRow() + 1);
-  pnSize_(sh, row, 5);
-  sh.getRange(row, 1, 1, 5).setValues([[new Date(), p.main, side, id, values]]);
+  // appendRow: nhiều lượt ghi cùng lúc không đè nhau, không cần khóa.
+  sh.appendRow([new Date(), p.main, side, id, values]);
 }
 // Ghi theo từng ô cần đổi; gom dòng liền nhau có cùng tập cột thành một lệnh ghi.
 function pnV2Flush_(sh, updates) {
@@ -420,13 +419,15 @@ function pnV2Audit_(p) {
 }
 
 // Cột tính bằng code (thay ARRAYFORMULA cũ): Booking!Check, File đơn!Quản lý/Khu vực/Ngay. Chỉ ghi ô khác.
-function pnV2ComputeColumns_() {
+// only = 'Booking' | 'File đơn' (chỉ tính cặp đó). out.rows[tên tab] = các dòng vừa được ghi.
+function pnV2ComputeColumns_(only, out) {
   if (PropertiesService.getScriptProperties().getProperty('PN_FORMULAS_CONVERTED') !== '1') return 0;
-  const factor = pnCheckFactor_();
+  const factor = only === 'File đơn' ? null : pnCheckFactor_();
   const bc = pnRows_(pnSheet_('DS BC'), 15), byDepot = new Map();
   bc.forEach(r => { const k = pnLookupKey_(r[6]); if (!byDepot.has(k)) byDepot.set(k, r); });
   let writes = 0;
   PN_FULL.pairs.slice(0, 2).forEach(p => {
+    if (only && p.main !== only) return;
     [p.main, p.full].forEach(name => {
       const L = pnV2Layout_(pnSheet_(name), name === p.full), rows = pnV2Read_(L), up = new Map();
       if (p.main === 'Booking') {
@@ -449,6 +450,7 @@ function pnV2ComputeColumns_() {
           values.forEach(([c, v]) => { if (c != null && pnV2Canon_(v) !== pnV2Canon_(r[c])) pnV2Put_(up, i + 2, c, v); });
         });
       }
+      if (out) out.rows = Object.assign(out.rows || {}, {[name]: Array.from(up.keys())});
       writes += pnV2Flush_(L.sh, up);
     });
   });
@@ -761,15 +763,16 @@ function pnV2SyncRows_(p, side, rowList, prefer, mode) {
   for (let i = 0; i < dstIds.length; i++) if (dstIds[i]) {
     if (dstById.has(dstIds[i])) {
       if (api) { pnQueueEdit_(side === 'main' ? p.main : p.full, rows[0], rows[rows.length - 1]); return Object.assign(res, {queued: true}); }
-      return Object.assign(pnV2SyncPair_(p, prefer ? {prefer: {side, rows: new Set(rows)}} : {}), {fallback: true});
+      // Hiếm: đồng bộ cả cặp (có thêm dòng) -> giữ khóa thêm dòng trong lúc đó.
+      return Object.assign(pnAppendLock_(() => pnV2SyncPair_(p, prefer ? {prefer: {side, rows: new Set(rows)}} : {})), {fallback: true});
     }
     dstById.set(dstIds[i], i + 2);
   }
-  // Dòng cuối có dữ liệu của bên kia (để thêm dòng mới ngay sau). Chỉ đọc khi thật sự cần thêm dòng.
-  const lastDataRow = () => {
+  // Dòng cuối có dữ liệu của bên kia (để thêm dòng mới ngay sau). Chỉ đọc TRONG khóa thêm dòng (số liệu mới nhất).
+  const lastDataRow = (ids) => {
     const identVals = (cfg.ident || []).map(x => pnV2Col_(dst, [x])).filter(c => c != null).map(c => colVals(dst, c));
-    for (let i = Math.max(dstIds.length, ...identVals.map(v => v.length)) - 1; i >= 0; i--)
-      if (dstIds[i] || identVals.some(v => pnV2Canon_(v[i]) !== '')) return i + 2;
+    for (let i = Math.max(ids.length, ...identVals.map(v => v.length)) - 1; i >= 0; i--)
+      if (ids[i] || identVals.some(v => pnV2Canon_(v[i]) !== '')) return i + 2;
     return 1;
   };
   // Nối dòng chính chưa có ID với hồ sơ full cùng mã (không phải File đơn), để không tạo trùng.
@@ -789,8 +792,8 @@ function pnV2SyncRows_(p, side, rowList, prefer, mode) {
   const claimed = new Set(srcIds.filter(Boolean));
   const srcUp = new Map(), dstUp = new Map();
   const M_ = side === 'main' ? {L: M, up: srcUp} : {L: M, up: dstUp}, F_ = side === 'main' ? {L: F, up: dstUp} : {L: F, up: srcUp};
-  let next = 0, appendStart = 0;
-  const nextRow = () => { if (!next) { next = lastDataRow() + 1; appendStart = next; } return next++; };
+  // Hồ sơ mới cần THÊM vào tab kia: ghép sẵn ở khóa tạm (số âm), số dòng thật chỉ chọn trong khóa thêm dòng.
+  const appends = [], dstNew = new Map(), srcNew = new Map();
   const pending = [];
   let dstKeyDate = null; // Mã + ngày của tab kia, chỉ đọc khi cần so ID sót
   rows.forEach(r => {
@@ -814,19 +817,22 @@ function pnV2SyncRows_(p, side, rowList, prefer, mode) {
     if (id && dstById.has(id)) { pending.push({r, row, id, dstNo: dstById.get(id), sigS, hashS}); if (pnText_(row[src.id]) !== id) pnV2Put_(srcUp, r, src.id, id); return; }
     // Chưa có ở bên kia.
     if (api && (side === 'main' || pnV2NeedsMain_(F, cfg, row, month))) { pnQueueEdit_(side === 'main' ? p.main : p.full, r, r); res.queued = true; return; }
-    if (!id) { id = pnV2NewId_(p); pnV2Put_(srcUp, r, src.id, id); }
-    else if (pnText_(row[src.id]) !== id) pnV2Put_(srcUp, r, src.id, id);
+    if (!id) id = pnV2NewId_(p);
+    const needId = pnText_(row[src.id]) !== id;
     if (side === 'full' && !pnV2NeedsMain_(F, cfg, row, month)) {
-      // Hồ sơ lịch sử không thuộc tab chính: chỉ bảo đảm ID, base, Tháng ở full.
+      // Hồ sơ lịch sử không thuộc tab chính: chỉ bảo đảm ID, base, Tháng ở full (sửa đúng dòng, không thêm dòng).
+      if (needId) pnV2Put_(srcUp, r, src.id, id);
       pnV2Put_(srcUp, r, F.base, hashS);
       if (F.month != null) pnV2Put_(srcUp, r, F.month, pnV2Month_(F, cfg, row) || 'CẦN KIỂM TRA');
       return;
     }
-    const t = nextRow();
-    names.forEach(n => { const s = src.cols[n], d = dst.cols[n]; if (d != null) pnV2Put_(dstUp, t, d, s == null ? '' : row[s]); });
-    pnV2Put_(dstUp, t, dst.id, id); pnV2Put_(dstUp, t, dst.base, hashS); pnV2Put_(srcUp, r, src.base, hashS);
-    if (F.month != null) pnV2Put_(F_.up, side === 'main' ? t : r, F.month, pnV2Month_(src, cfg, row) || 'CẦN KIỂM TRA');
-    res.added++; res.otherRows.push(t);
+    const t = -(appends.length + 1);
+    names.forEach(n => { const s = src.cols[n], d = dst.cols[n]; if (d != null) pnV2Put_(dstNew, t, d, s == null ? '' : row[s]); });
+    pnV2Put_(dstNew, t, dst.id, id); pnV2Put_(dstNew, t, dst.base, hashS);
+    if (needId) pnV2Put_(srcNew, r, src.id, id);
+    pnV2Put_(srcNew, r, src.base, hashS);
+    if (F.month != null) pnV2Put_(side === 'main' ? dstNew : srcNew, side === 'main' ? t : r, F.month, pnV2Month_(src, cfg, row) || 'CẦN KIỂM TRA');
+    appends.push({key: t, r, id});
   });
   // Hồ sơ đã có ở cả hai bên: đọc các dòng bên kia (ít thì đọc từng dòng, nhiều thì đọc cả tab một lần).
   if (pending.length) {
@@ -873,8 +879,30 @@ function pnV2SyncRows_(p, side, rowList, prefer, mode) {
       if (!want || pnText_(dst.sh.getRange(r, dst.id + 1).getValue()) !== want) { dstUp.delete(r); pnQueueEdit_(side === 'main' ? p.main : p.full, rows[0], rows[rows.length - 1]); res.queued = true; }
     }
   }
-  const writes = pnV2Flush_(dst.sh, dstUp) + pnV2Flush_(src.sh, srcUp);
-  if (next > appendStart && appendStart) pnV2CopyFormat_(dst, appendStart, next - appendStart, dst.width);
+  // Sửa đúng dòng cũ (theo ID): ghi ngay, không khóa.
+  let writes = pnV2Flush_(dst.sh, dstUp) + pnV2Flush_(src.sh, srcUp);
+  // Thêm hồ sơ mới: chỉ khoảnh khắc "đọc lại dòng cuối + ghi" nằm trong khóa ngắn.
+  if (appends.length) {
+    const r1a = Math.min(...appends.map(a => a.r)), r2a = Math.max(...appends.map(a => a.r));
+    let start = 0, kept = [];
+    pnAppendLock_(() => {
+      // Đọc lại: dòng đã được lượt khác thêm sang tab kia (cùng lúc) thì bỏ qua, không thêm trùng.
+      const freshSrc = src.sh.getRange(r1a, src.id + 1, r2a - r1a + 1, 1).getValues().map(x => pnText_(x[0]));
+      const freshDst = colVals(dst, dst.id).map(pnText_), inDst = new Set(freshDst.filter(Boolean));
+      kept = appends.filter(a => { const cur = freshSrc[a.r - r1a]; return !(cur && inDst.has(cur)); });
+      if (!kept.length) return;
+      start = lastDataRow(freshDst) + 1;
+      const dUp = new Map(), sUp = new Map();
+      kept.forEach((a, k) => { dUp.set(start + k, dstNew.get(a.key)); sUp.set(a.r, srcNew.get(a.r)); });
+      writes += pnV2Flush_(dst.sh, dUp) + pnV2Flush_(src.sh, sUp);
+    });
+    if (kept.length) {
+      pnV2CopyFormat_(dst, start, kept.length, dst.width);
+      kept.forEach((a, k) => res.otherRows.push(start + k));
+      res.added += kept.length;
+    }
+    res.skippedDup = appends.length - kept.length;
+  }
   if (writes) { SpreadsheetApp.flush(); if (res.changed || res.added) pnMarkDirty_(); }
   return res;
 }
@@ -934,6 +962,8 @@ function pnV2HandleRows_(name, r1, r2, cols) {
   const docsRes = pnV2SyncRows_(docs, 'full', docRows, true);
   // Đơn chứng từ đã tích bị đổi theo Booking/File đơn (ngày, mã GHTK...): đẩy ngay sang VHFF.
   docsRes.vhff = pnV2PushVhffRows_(docRows);
+  // Chứng từ đã có ngày bàn giao bị đổi theo (mã GHTK...): cập nhật Đã bàn giao CT ngay.
+  docsRes.handover = pnV2HandoverIfNeeded_(docs.full, docRows, null);
   const areaRes = [];
   {
     // Dán File đơn: cập nhật Khu vực cho đúng các dòng Booking có Số đơn hàng trong các đơn vừa dán.
@@ -966,10 +996,23 @@ function pnV2HandleBookingRows_(name, side, r1, r2, rows) {
   const docRows = pnV2DocRowsForOrders_(pnV2BookingOrders_(name, r1, r2));
   const docsRes = pnV2SyncRows_(docs, 'full', docRows, true);
   docsRes.vhff = pnV2PushVhffRows_(docRows);
+  docsRes.handover = pnV2HandoverIfNeeded_(docs.full, docRows, null);
   // 5. Kiểm tra cuối cho Booking.
   pnV2ComputeRows_(name, rows);
   const final = pnV2SyncRows_(p, side, rows, true);
-  return {ok: true, own, docs: docsRes, final};
+  // Sửa đơn Booking ĐÃ CÓ (vd. đổi Ngày): nếu đơn đó có trong Hoàn sản phẩm -> cập nhật Ngày booking bên đích.
+  const products = (own.changed || final.changed) ? pnV2ProductsIfOrders_(pnV2BookingOrders_(name, r1, r2)) : {skipped: true};
+  return {ok: true, own, docs: docsRes, final, products};
+}
+// Đơn có trong Hoàn sản phẩm (chỉ đọc cột Số đơn hàng) -> chạy Bàn giao SP_Hàng hoàn (chỉ ghi dòng khác).
+function pnV2ProductsIfOrders_(orders) {
+  if (!orders || !orders.size) return {skipped: true};
+  const sh = pnSheet_('Hoàn sản phẩm'), last = sh.getLastRow(), col = bookingSyncHeaderMap_(bookingSyncHeaders_(sh));
+  const c = bookingSyncFirstCol_(col, ['so don hang']);
+  if (!c || last < 2) return {skipped: true};
+  const keys = new Set(Array.from(orders).map(bookingSyncNorm_));
+  const hit = sh.getRange(2, c, last - 1, 1).getDisplayValues().some(r => keys.has(bookingSyncNorm_(r[0])));
+  return hit ? pnRunTarget_('products', () => syncBanGiaoSanPham()) : {skipped: true};
 }
 
 // Các Số đơn hàng (Row Labels) trong các dòng Booking đã cho.
@@ -1078,14 +1121,35 @@ function pnV2AreaForOrders_(bn, orders) {
   return changed;
 }
 
-// Chạy một luồng sang file đích; lỗi thì ghi lại và để lượt VHFF sau làm bù, không làm hỏng lần sửa.
+/* Chạy một luồng sang file đích (VHFF), không khóa ai. Nhiều lượt cùng luồng chạy song song: lượt BẮT ĐẦU SAU
+ * đã ghi xong (dữ liệu mới hơn) thì lượt cũ hơn bỏ qua bước ghi, không đè dữ liệu cũ lên. Lỗi: ghi lại và tự
+ * chạy bù một lần (tối đa 3 lần liên tiếp), không làm hỏng lần sửa. */
+let PN_TARGET_RUN_ = null;
+function pnTargetStale_() {
+  if (!PN_TARGET_RUN_) return false;
+  return Number(PropertiesService.getScriptProperties().getProperty('PN_TDONE_' + PN_TARGET_RUN_.job) || 0) > PN_TARGET_RUN_.start;
+}
+function pnTargetDone_() {
+  if (!PN_TARGET_RUN_) return;
+  const props = PropertiesService.getScriptProperties(), k = 'PN_TDONE_' + PN_TARGET_RUN_.job;
+  if (Number(props.getProperty(k) || 0) < PN_TARGET_RUN_.start) props.setProperty(k, String(PN_TARGET_RUN_.start));
+}
 function pnRunTarget_(job, fn) {
-  try { return fn(); }
-  catch (err) {
-    PropertiesService.getScriptProperties().setProperty('PN_VHFF_ERROR', job + ': ' + String(err && err.message || err));
+  if (PN_TARGET_RUN_) return fn();
+  PN_TARGET_RUN_ = {job, start: Date.now()};
+  const props = PropertiesService.getScriptProperties();
+  try {
+    const out = fn();
+    props.deleteProperty('PN_TFAIL_' + job);
+    return out;
+  } catch (err) {
+    const msg = String(err && err.message || err), fails = Number(props.getProperty('PN_TFAIL_' + job) || 0) + 1;
+    props.setProperty('PN_VHFF_ERROR', job + ': ' + msg);
+    props.setProperty('PN_TFAIL_' + job, String(fails));
     pnMarkDirty_();
-    return {ok: false, error: String(err && err.message || err)};
-  }
+    if (fails <= 3) pnScheduleJob_([job]);
+    return {ok: false, error: msg};
+  } finally { PN_TARGET_RUN_ = null; }
 }
 // Cột "Ngày bàn giao CT" bị sửa (theo cột của lần sửa), hoặc một trong các dòng full liên quan đang có ngày bàn giao.
 function pnV2HandoverIfNeeded_(name, fullRows, cols) {
@@ -1188,6 +1252,8 @@ function pnV2HealOrphans_() {
 function pnQueueEdit_(name, r1, r2) {
   const key = 'PN_EDITQ_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
   PropertiesService.getScriptProperties().setProperty(key, JSON.stringify({name, r1, r2}));
+  // Không đợi lần sửa sau: hẹn một lượt chạy bù riêng (khoảng 20 giây sau).
+  pnScheduleJob_([]);
 }
 function pnDrainEditQueue_(maxMs) {
   const props = PropertiesService.getScriptProperties(), all = props.getProperties(), started = Date.now();
@@ -1198,8 +1264,14 @@ function pnDrainEditQueue_(maxMs) {
     if (pnV2OverBudget_()) break;
     let job = null;
     try { job = JSON.parse(all[k]); } catch (err) {}
-    if (job && job.name && pnPair_(job.name)) pnV2HandleRows_(job.name, Math.max(2, Number(job.r1) || 2), Math.max(Number(job.r1) || 2, Number(job.r2) || 2));
+    // Nhận việc trước (xóa khỏi hàng chờ) để không có lượt khác làm trùng; lỗi thì trả lại hàng chờ.
     props.deleteProperty(k);
+    try {
+      if (job && job.name && pnPair_(job.name)) pnV2HandleRows_(job.name, Math.max(2, Number(job.r1) || 2), Math.max(Number(job.r1) || 2, Number(job.r2) || 2));
+    } catch (err) {
+      if (/PN_BUSY/.test(String(err && err.message || err))) { props.setProperty(k, all[k]); break; }
+      throw err;
+    }
     done++;
   }
   return {done, left: keys.length - done};

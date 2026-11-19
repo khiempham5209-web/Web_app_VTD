@@ -241,13 +241,22 @@ function skuSyncAddNewToDSSKU_(source, sourceCol, startRow, numRows) {
   });
 
   cellUpdates.forEach(u => target.getRange(u[0], u[1]).setValue(u[2]));
+  // SKU mới: đọc lại cột Mã vật tư + tìm dòng cuối + ghi trong khóa ngắn (mã vừa được lượt khác thêm thì bỏ).
+  let added = 0;
   if (appendRows.length) {
-    const start = Math.max(target.getLastRow() + 1, tStart);
-    target.getRange(start, 1, appendRows.length, lastCol).setValues(appendRows);
-    skuSyncFormatTargetRows_(target, start, appendRows.length);
-    skuSyncRenumberSTT_(target);
+    pnAppendLock_(() => {
+      const last = target.getLastRow(), have = {};
+      if (last >= tStart) target.getRange(tStart, cMat, last - tStart + 1, 1).getDisplayValues().forEach(r => { const c = skuSyncClean_(r[0]); if (c) have[skuSyncNorm_(c)] = true; });
+      const rowsNew = appendRows.filter(r => !have[skuSyncNorm_(r[cMat - 1])]);
+      if (!rowsNew.length) return;
+      const start = Math.max(last + 1, tStart);
+      target.getRange(start, 1, rowsNew.length, lastCol).setValues(rowsNew);
+      skuSyncFormatTargetRows_(target, start, rowsNew.length);
+      skuSyncRenumberSTT_(target);
+      added = rowsNew.length;
+    });
   }
-  return {added: appendRows.length, filled: cellUpdates.length};
+  return {added, filled: cellUpdates.length};
 }
 
 function skuSyncFillMissingSourceDates_(source, sourceCol, startRow, numRows) {
@@ -302,8 +311,9 @@ function skuSyncFormatTargetRows_(target, startRow, numRows) {
     .setBorder(true, true, true, true, true, true);
 }
 
+// Không khóa chung: chạy song song, chỉ ghi ô/dòng thay đổi.
 function skuSyncWithLock_(fn) {
-  return pnWithLock_(fn);
+  return pnRun_(fn);
 }
 
 function skuSyncRangeIntersectsAnyColumn_(range, columns) {

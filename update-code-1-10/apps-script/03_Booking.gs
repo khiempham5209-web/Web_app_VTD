@@ -211,29 +211,46 @@ function syncBookingRowsToChungTuFF_(startRow, endRow) {
 
   if (!output.length) return {ok: true, added: 0, skipped};
 
-  const nextRow = bookingSyncLastContentRow_(target) + 1;
-  // Mã toàn chữ số dài (Mã PO 18 số...) hoặc bắt đầu bằng 0: đặt ô dạng chữ TRƯỚC khi ghi,
-  // để Sheets không đổi thành số và mất các chữ số cuối (2,09003E+17).
-  for (let c = 0; c < outputWidth; c++) {
-    if (output.some(r => pnV2IsCode_(r[c]))) target.getRange(nextRow, c + 1, output.length, 1).setNumberFormat("@");
-  }
-  target.getRange(nextRow, 1, output.length, outputWidth).setValues(output);
-  bookingSyncApplyControlColumnsBatch_(target, targetCol, nextRow, output.length);
+  // Thêm đơn MỚI vào cuối Chứng từ_full: chỉ khoảnh khắc "đọc lại + tìm dòng cuối + ghi" nằm trong khóa ngắn.
+  // Đọc lại danh sách Số đơn hàng trong khóa: đơn vừa được lượt khác thêm (cùng lúc) thì bỏ, không thêm trùng.
+  const orderIdx = bookingSyncFirstCol_(targetCol, ["so don hang", "od"]) - 1;
+  let nextRow = 0, rows = [];
+  pnAppendLock_(() => {
+    const fresh = bookingSyncExistingTargetOrders_(target);
+    rows = output.filter(r => orderIdx < 0 || !fresh[bookingSyncNorm_(r[orderIdx])]);
+    if (!rows.length) return;
+    nextRow = bookingSyncLastContentRow_(target) + 1;
+    // Mã toàn chữ số dài (Mã PO 18 số...) hoặc bắt đầu bằng 0: đặt ô dạng chữ TRƯỚC khi ghi,
+    // để Sheets không đổi thành số và mất các chữ số cuối (2,09003E+17).
+    pnSize_(target, nextRow + rows.length - 1, outputWidth);
+    for (let c = 0; c < outputWidth; c++) {
+      if (rows.some(r => pnV2IsCode_(r[c]))) target.getRange(nextRow, c + 1, rows.length, 1).setNumberFormat("@");
+    }
+    target.getRange(nextRow, 1, rows.length, outputWidth).setValues(rows);
+  });
+  skipped += output.length - rows.length;
+  if (!rows.length) return {ok: true, added: 0, skipped};
+  bookingSyncApplyControlColumnsBatch_(target, targetCol, nextRow, rows.length);
   // Chứng từ_full: kẻ viền cho các đơn mới tạo từ Booking (như tab chính).
   const tl = pnV2Layout_(target, true);
-  if (pnV2Bordered_(tl) && tl.width) target.getRange(nextRow, 1, output.length, tl.width).setBorder(true, true, true, true, true, true);
+  if (pnV2Bordered_(tl) && tl.width) target.getRange(nextRow, 1, rows.length, tl.width).setBorder(true, true, true, true, true, true);
   pnStampFullIds_(PN_FULL.pairs[2]);
   pnMarkDirty_();
-  return {ok: true, added: output.length, skipped};
+  return {ok: true, added: rows.length, skipped};
 }
 
 // Dòng cuối có dữ liệu thật. Không dùng getLastRow: checkbox chưa tích (FALSE) ở dòng trống cũng bị tính là có dữ liệu.
+// Chỉ đọc các cột định danh (Ngày lên đơn, Mã đơn GHTK, Khách hàng, Số đơn hàng, Mã PO, __PN_ID), không đọc cả bảng.
 function bookingSyncLastContentRow_(sh) {
   const last = sh.getLastRow();
   if (last < 2) return 1;
-  const values = sh.getRange(2, 1, last - 1, sh.getLastColumn()).getValues();
-  for (let i = values.length - 1; i >= 0; i--) {
-    if (values[i].some(v => v !== "" && v !== false && v != null)) return i + 2;
+  const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0], col = bookingSyncHeaderMap_(headers);
+  const cols = [["ngay len don"], ["ma don ghtk", "ma don"], ["khach hang"], ["so don hang", "od"], ["ma po", "po"]]
+    .map(a => bookingSyncFirstCol_(col, a)).concat([headers.indexOf("__PN_ID") + 1]).filter(c => c > 0);
+  if (!cols.length) cols.push(1);
+  const vals = cols.map(c => sh.getRange(2, c, last - 1, 1).getValues());
+  for (let i = last - 2; i >= 0; i--) {
+    if (vals.some(v => { const x = v[i][0]; return x !== "" && x !== false && x != null; })) return i + 2;
   }
   return 1;
 }
@@ -606,8 +623,9 @@ function bookingSyncUpdateTargetDatesFromBookingRows_(startRow, endRow) {
   return {ok: true, updated};
 }
 
+// Không khóa chung (chỉ bước thêm đơn mới dùng khóa ngắn pnAppendLock_).
 function bookingSyncWithLock_(fn) {
-  return pnWithLock_(fn);
+  return pnRun_(fn);
 }
 
 function bookingSyncRangeIntersectsAnyColumn_(range, columns) {

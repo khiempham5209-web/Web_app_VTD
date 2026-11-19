@@ -16,11 +16,11 @@ const PN_DON_DONG = {
 
 function pnCaiTriggerDonDong() {
   ScriptApp.getProjectTriggers()
-    .filter(t => t.getHandlerFunction() === 'pnDonDongTrong')
+    .filter(t => ['pnDonDongTrong', 'pnDon5h'].indexOf(t.getHandlerFunction()) >= 0)
     .forEach(t => ScriptApp.deleteTrigger(t));
-  // Google chay trong khung 05h-06h, khong dung phut 05:00.
-  ScriptApp.newTrigger('pnDonDongTrong').timeBased().atHour(5).everyDays(1).inTimezone('Asia/Ho_Chi_Minh').create();
-  return 'Da cai: pnDonDongTrong moi ngay luc 05h-06h.';
+  // Google chay trong khung 05h-06h, khong dung phut 05:00. pnDon5h = don thang cu + don dong trong.
+  ScriptApp.newTrigger('pnDon5h').timeBased().atHour(5).everyDays(1).inTimezone('Asia/Ho_Chi_Minh').create();
+  return 'Da cai: pnDon5h moi ngay luc 05h-06h.';
 }
 
 function pnDonDongTrong() {
@@ -30,6 +30,35 @@ function pnDonDongTrong() {
   }, 120000);
   console.log('Don dong trong: ' + JSON.stringify(result));
   return result;
+}
+
+/* 5h sáng mỗi ngày (cài bằng pnInstallTriggers): việc có XÓA DÒNG chạy lúc không ai làm, để không lệch dòng của ai.
+ * Bật cờ PN_CLEANING: trong lúc dọn, lần sửa/app nào tới thì được lưu lại và tự chạy bù ngay sau khi dọn xong.
+ * 1. Đồng bộ đủ + dọn tháng cũ khỏi tab chính (dòng đã khớp 100% với full).  2. Dọn nhật ký API cũ.
+ * 3. Giữ 5 dòng trống cuối Chứng từ_FF. */
+function pnDon5h() {
+  const props = PropertiesService.getScriptProperties(), out = {};
+  props.setProperty('PN_CLEANING', String(Date.now()));
+  try {
+    pnWithLock_(() => {
+      pnRequireReady_();
+      pnV2Start_ = Date.now();
+      try {
+        if (props.getProperty('PN_FULL_CLEANUP') === 'enabled') {
+          const sync = pnV2SyncAll_({fullSweep: true, areaSweep: true});
+          out.cleanup = sync.partial ? {ok: false, reason: 'Đồng bộ chưa xong trong thời gian cho phép; hoãn dọn.'} : pnV2Cleanup_();
+        }
+        try { out.journal = pnJournalPrune_(); } catch (err) { out.journal = String(err && err.message || err); }
+        out.blank = PN_DON_DONG.tabs.map(pnDonDongTab_);
+      } finally { pnV2Start_ = 0; }
+    }, 120000);
+  } finally {
+    props.deleteProperty('PN_CLEANING');
+    console.log('Don 5h: ' + JSON.stringify(out));
+  }
+  // Lần sửa đến trong lúc dọn: chạy bù ngay.
+  if (Object.keys(props.getProperties()).some(k => k.indexOf('PN_EDITQ_') === 0) || props.getProperty('PN_JOB_NEED')) pnScheduleJob_([]);
+  return out;
 }
 
 function pnDonDongTab_(name) {

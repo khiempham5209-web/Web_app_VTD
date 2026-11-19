@@ -89,18 +89,25 @@ function pnComputeColumns_() {
 // Bộ đồng bộ v2 tự cấp ID cho dòng mới ở full trong cùng lượt đồng bộ; giữ tên hàm cho các script cũ gọi.
 function pnStampFullIds_(p) { return 0; }
 
-// Sửa tay trên Sheet: chỉ xử lý các dòng vừa sửa (bên vừa sửa thắng nếu hai bên cùng đổi), rồi đẩy tiếp
-// sang các tab phụ thuộc. Đọc mỗi tab một lần, chỉ ghi ô khác. Khóa bận thì để lượt định kỳ làm, không báo lỗi.
+/* Sửa tay trên Sheet: KHÔNG khóa chung. Mỗi lần sửa chỉ xử lý đúng các dòng vừa sửa (và dòng script đổi theo),
+ * chạy song song với người khác và với app. Chỉ bước thêm dữ liệu MỚI vào cuối một tab đi qua khóa ngắn.
+ * Đang dọn tháng (5h sáng) hoặc khóa thêm dòng bận quá lâu: lưu đúng dòng vừa sửa, tự chạy bù sau ~20 giây. */
 function pnHandleEdit(e) {
   if(!e||!e.range)return;
   const sh=e.range.getSheet(),name=sh.getName(),p=pnPair_(name);
   const watched=['Booking','Booking_full','File đơn','File đơn_full','Chứng từ_FF','Chứng từ_full','DS BC','TT Nhập','DS SKU','Hàng lỗi','Bàn giao chứng từ','Hoàn sản phẩm','Sự vụ'];
   if(watched.indexOf(name)<0)return;
+  const r1=Math.max(2,e.range.getRow()),r2=Math.max(r1,e.range.getLastRow());
+  const later=()=>{
+    if(p)pnQueueEdit_(name,r1,r2);
+    else pnScheduleJob_(pnEditJobs_(name));
+    return {ok:false,busy:true,queued:true};
+  };
+  if(pnCleaning_())return later();
   try {
-    return pnWithLock_(()=>{
+    return pnRun_(()=>{
       pnRequireReady_();
       pnV2Start_=Date.now();
-      const r1=Math.max(2,e.range.getRow()),r2=Math.max(r1,e.range.getLastRow());
       if(name==='Booking'){const col=bookingSyncHeaderMap_(pnHeaders_(sh));bookingSyncFillMissingBookingDates_(sh,col,r1,r2);}
       if(name==='Chứng từ_FF'||name==='Chứng từ_full')bookingSyncRepairControlColumnsForEditedTargetRange_(e.range);
       if(name==='TT Nhập'||name==='DS SKU')onEditSyncTTNhapDSSKU(e);
@@ -118,9 +125,8 @@ function pnHandleEdit(e) {
         try { const caught=pnV2CatchFilteredEdit_(name,r1,r2,e.range.getColumn(),e.range.getLastColumn()); if(result&&caught)result.filtered=caught; }
         catch(err) { console.error('Filtered edit: '+String(err&&err.message||err)); }
       } else if(name==='DS BC'||name==='TT Nhập'){
-        const rows=new Set();if(p)for(let r=r1;r<=r2;r++)rows.add(r);
-        result=pnV2SyncAll_(p?{pair:p.main,prefer:{side:name===p.main?'main':'full',rows}}:{});
-        if(name==='Booking_full')pnSyncBookingFullRows_(r1,r2);
+        // Chỉ khi hệ số Check (TT Nhập!L1) / bảng kho (DS BC) THỰC SỰ đổi: tính lại đúng cột đó, chỉ ghi ô khác.
+        result=pnV2RecalcSettings_(name);
       }
       if(name==='Bàn giao chứng từ'&&e.range.getA1Notation()==='A1'){
         // Lỗi dựng biên bản không được làm hỏng các việc đồng bộ khác trong cùng lần sửa.
@@ -129,16 +135,46 @@ function pnHandleEdit(e) {
       }
       pnAfterActivity_();
       return result;
-    },120000);
+    });
   } catch(err) {
-    if(/PN_BUSY/.test(String(err&&err.message||err))){
-      // Không bỏ qua: lưu đúng dòng đã sửa để xử lý ngay khi khóa trống.
-      if(pnPair_(name))pnQueueEdit_(name,Math.max(2,e.range.getRow()),Math.max(2,e.range.getLastRow()));
-      else PropertiesService.getScriptProperties().setProperty('PN_SYNC_REQUESTED',String(Date.now()));
-      return {ok:false,busy:true,queued:true};
-    }
+    // Khóa thêm dòng bận quá 30 giây (hiếm): không bỏ qua, lưu đúng dòng đã sửa và tự chạy bù.
+    if(/PN_BUSY/.test(String(err&&err.message||err)))return later();
     throw err;
   } finally { pnV2Start_=0; }
+}
+// Tab không thuộc cặp chính/full: việc VHFF cần chạy bù nếu lần sửa bị hoãn.
+function pnEditJobs_(name) {
+  if(name==='Hoàn sản phẩm')return ['products'];
+  if(name==='Sự vụ')return ['incidents'];
+  if(name==='Hàng lỗi'||name==='DS SKU')return ['defects'];
+  return [];
+}
+/* TT Nhập / DS BC: chỉ khi giá trị dùng để tính THỰC SỰ đổi (hệ số Check; Kho đích -> Quản lý/Khu vực của DS BC).
+ * Tính lại đúng cột đó (Booking!Check hoặc File đơn!Quản lý/Khu vực/Ngay) ở cả tab chính và full, chỉ ghi ô khác.
+ * File đơn đổi Khu vực -> cập nhật Khu vực của đúng các đơn đó ở Booking. Không đồng bộ lại toàn bộ. */
+function pnV2RecalcSettings_(name) {
+  const props=PropertiesService.getScriptProperties();
+  const only=name==='TT Nhập'?'Booking':'File đơn',key=name==='TT Nhập'?'PN_SET_CHECK':'PN_SET_DSBC';
+  const sig=name==='TT Nhập'?'F:'+pnCheckFactor_():pnHash_(pnRows_(pnSheet_('DS BC'),15).map(r=>[pnLookupKey_(r[6]),r[4],r[14]]));
+  if(props.getProperty(key)===sig)return {ok:true,skipped:'unchanged'};
+  const out={rows:{}};
+  const writes=pnV2ComputeColumns_(only,out);
+  const res={ok:true,writes,rows:{}};
+  Object.keys(out.rows).forEach(k=>{res.rows[k]=out.rows[k].length;});
+  if(only==='File đơn'){
+    const orders=new Set();
+    ['File đơn','File đơn_full'].forEach(n=>{
+      const rs=(out.rows[n]||[]).slice().sort((a,b)=>a-b);
+      pnV2Blocks_(rs).forEach(([a,b])=>pnV2FileDonOrders_(n,[a,b]).forEach(o=>orders.add(o)));
+    });
+    res.area=[];
+    ['Booking','Booking_full'].forEach(bn=>{
+      const changed=pnV2AreaForOrders_(bn,orders);
+      if(changed.length)res.area.push(pnV2SyncRows_(PN_FULL.pairs[0],bn==='Booking'?'main':'full',changed,true));
+    });
+  }
+  props.setProperty(key,sig);
+  return res;
 }
 
 function pnSyncBookingFullRows_(start,end) {
@@ -158,55 +194,30 @@ function pnSyncAreaAll_() {
     }
   } finally { KHUVUC_BOOKING_SYNC_CONFIG.bookingSheetName=previous; }
 }
-// Lưới an toàn 5 phút: bắt thay đổi không qua onEdit (script, API, dán từ nơi khác). Không chạy VHFF ở đây.
 // Chạy tay khi cần đối soát lại toàn bộ (ví dụ sau khi dán dữ liệu bằng script khác). KHÔNG cài trigger theo giờ.
 function pnScheduledReconcile() {
   try {
     return pnWithLock_(()=>{
       pnRequireReady_();
       pnV2Start_=Date.now();
-      const result=pnV2SyncAll_({});
-      if(!result.partial)PropertiesService.getScriptProperties().deleteProperty('PN_SYNC_REQUESTED');
-      return result;
+      return pnV2SyncAll_({});
     });
   } catch(err) {
     if(/PN_BUSY/.test(String(err&&err.message||err)))return {ok:false,busy:true};
     throw err;
   } finally { pnV2Start_=0; }
 }
-// Việc định kỳ chạy theo sự kiện (sửa Sheet, mở Sheet), trong cùng khóa và trong thời gian cho phép:
-// - Dọn tháng cũ: 1 lần/ngày, ở lần đầu tiên trong ngày.
-// - Lần sửa trước bị bỏ qua vì khóa bận: đồng bộ bù.
-// - VHFF: khi có thay đổi, mỗi lần làm 1 phần (cách nhau ít nhất 2 phút) để không giữ khóa lâu.
+/* Sau mỗi lần sửa/mở Sheet: chỉ việc nhẹ. Không quét lại toàn bộ, không chạy vòng VHFF, không dọn tháng
+ * (dọn tháng chạy 5h sáng: pnDon5h).
+ * - Chứng từ ở full chưa từng được đồng bộ (lượt trước bị dừng giữa chừng): đẩy sang tab chính (tối đa 2 phút/lần).
+ * - Còn lần sửa trong hàng chờ: hẹn lượt chạy bù riêng (không làm chen trong lần sửa của người khác). */
 function pnAfterActivity_() {
   const props=PropertiesService.getScriptProperties();
-  const today=Utilities.formatDate(new Date(),PN_FULL.timezone,'yyyy-MM-dd');
-  if(props.getProperty('PN_DAILY_DONE')!==today&&!pnV2OverBudget_()){
-    if(props.getProperty('PN_FULL_CLEANUP')==='enabled'){
-      // Nhẹ: chỉ đồng bộ dòng thay đổi rồi dọn (vài giây). Không quét lại toàn bộ Booking để app không phải chờ.
-      const sync=pnV2SyncAll_({});
-      if(sync.partial)return;
-      if(pnV2Cleanup_().partial)return;
-    }
-    try { pnJournalPrune_(); } catch(err) { console.error('Journal prune: '+String(err&&err.message||err)); }
-    props.setProperty('PN_DAILY_DONE',today);
-  }
-  // Các lần sửa tay bị bỏ lỡ vì khóa bận: xử lý đúng các dòng đó.
-  if(!pnV2OverBudget_())pnDrainEditQueue_();
-  // Chứng từ ở full chưa từng được đồng bộ (lượt trước bị dừng giữa chừng): đẩy sang tab chính.
   if(!pnV2OverBudget_()&&Date.now()-Number(props.getProperty('PN_HEAL_LAST')||0)>120000){
     props.setProperty('PN_HEAL_LAST',String(Date.now()));
     try { pnV2HealOrphans_(); } catch(err) { console.error('Heal: '+String(err&&err.message||err)); }
   }
-  if(props.getProperty('PN_SYNC_REQUESTED')&&!pnV2OverBudget_()){
-    const sync=pnV2SyncAll_({});
-    if(!sync.partial)props.deleteProperty('PN_SYNC_REQUESTED');
-  }
-  const last=Number(props.getProperty('PN_VHFF_LAST_STEP')||0);
-  if((props.getProperty('PN_VHFF_DIRTY')||props.getProperty('PN_VHFF_CYCLE'))&&Date.now()-last>120000&&!pnV2OverBudget_()){
-    props.setProperty('PN_VHFF_LAST_STEP',String(Date.now()));
-    try { pnV2VhffStep_(); } catch(err) { console.error('VHFF: '+String(err&&err.message||err)); }
-  }
+  if(Object.keys(props.getProperties()).some(k=>k.indexOf('PN_EDITQ_')===0))pnScheduleJob_([]);
 }
 // Chạy tay: đồng bộ VHFF hết các phần còn lại ngay.
 function pnRunVhffNow() {
@@ -281,13 +292,19 @@ function pnInstallTriggers() {
   ScriptApp.getProjectTriggers().filter(t=>old.has(t.getHandlerFunction())).forEach(t=>ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('pnHandleEdit').forSpreadsheet(PN_FULL.spreadsheetId).onEdit().create();
   ScriptApp.newTrigger('pnOpen').forSpreadsheet(PN_FULL.spreadsheetId).onOpen().create();
-  PropertiesService.getScriptProperties().setProperty('PN_FULL_CLEANUP','enabled');
-  return 'Đã cài trigger: khi sửa Sheet và khi mở Sheet. Không có trigger theo giờ. Dọn tháng cũ chạy 1 lần/ngày ở lần sửa/mở đầu tiên.';
+  // 5h sáng (lúc không ai làm): dọn tháng cũ + dọn dòng trống cuối tab. Thay cho trigger pnDonDongTrong cũ.
+  ScriptApp.getProjectTriggers().filter(t=>['pnDonDongTrong','pnDon5h'].indexOf(t.getHandlerFunction())>=0).forEach(t=>ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('pnDon5h').timeBased().atHour(5).everyDays(1).inTimezone('Asia/Ho_Chi_Minh').create();
+  const props=PropertiesService.getScriptProperties();
+  props.setProperty('PN_FULL_CLEANUP','enabled');
+  ['PN_VHFF_CYCLE','PN_DAILY_DONE','PN_SYNC_REQUESTED'].forEach(k=>props.deleteProperty(k));
+  return 'Đã cài trigger: khi sửa Sheet, khi mở Sheet, và 5h sáng (dọn tháng cũ + dòng trống). Không khóa chung.';
 }
 
 function pnOpen() {
+  if(pnCleaning_())return {ok:false,busy:true};
   try {
-    return pnWithLock_(()=>{
+    return pnRun_(()=>{
       pnRequireReady_();
       pnV2Start_=Date.now();
       const r=onOpenSyncBanGiaoChungTu();

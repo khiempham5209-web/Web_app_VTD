@@ -298,7 +298,8 @@ function khuVucBookingFirstCol_(col, aliases) {
   return 0;
 }
 
-function khuVucBookingSyncWithLock_(fn) { return pnWithLock_(fn); }
+// Không khóa chung: chạy song song, chỉ ghi ô/dòng thay đổi.
+function khuVucBookingSyncWithLock_(fn) { return pnRun_(fn); }
 
 function khuVucBookingListToMap_(items) {
   const out = {};

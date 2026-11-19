@@ -26,7 +26,18 @@ function pnMenuXoaXemTruoc(req) {
 }
 
 // Goi tu menu (qua thu vien): xoa that. req.expect = so dong tung tab luc xem truoc; khac -> dung.
+// Xóa dòng làm lệch vị trí dòng: bật cờ PN_CLEANING trong lúc xóa -> lần sửa/app nào tới thì được lưu lại
+// và tự chạy bù ngay sau khi xóa xong (như lượt dọn 5h sáng).
 function pnMenuXoaThucHien(req) {
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('PN_CLEANING', String(Date.now()));
+  try { return pnMenuXoaThucHien_(req); }
+  finally {
+    props.deleteProperty('PN_CLEANING');
+    if (Object.keys(props.getProperties()).some(k => k.indexOf('PN_EDITQ_') === 0) || props.getProperty('PN_JOB_NEED')) pnScheduleJob_([]);
+  }
+}
+function pnMenuXoaThucHien_(req) {
   return pnWithLock_(() => {
     pnRequireReady_();
     const plan = pnXoaPlan_(req);
