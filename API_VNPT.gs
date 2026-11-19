@@ -2,7 +2,7 @@
  * API_VNPT.gs — API nhập hoàn VNPT cho App Chứng Từ (dựa trên API TH).
  * Cùng project với VanHanh_VNPT.gs + CanhBaoLoi_VNPT.gs, deploy Web app riêng (URL riêng với TH).
  * Giữ nguyên payload/callback như TH. Nhận cả tên action cũ (saveReturnTh…) và tên mới (saveReturnVnpt…).
- * Sau khi lưu/sửa/xóa: gọi vnptRefreshHoan() để cập nhật cột HOÀN ở Tổng hợp.
+ * Sau khi lưu/sửa/xóa: hẹn 1 lượt vnptReturnsJob() (vài giây sau) cập nhật cột HOÀN ở Tổng hợp.
  */
 const RETURN_VNPT_CONFIG = {
   spreadsheetId: '1EOyNJyjUoXXXmOH-OJCD_Vsyauhmm2Uj_Ujnqaj6e-s',
@@ -248,11 +248,12 @@ function returnVnpt_applyFixedInputLayout_(row,data,headers) {
 }
 
 function returnVnpt_refreshSummaryIfAvailable_() {
+  // Không tính trong lúc giữ khóa API: hẹn 1 lượt chạy riêng tính HOÀN, trả kết quả cho app ngay.
   try {
-    // Chỉ cập nhật luồng HOÀN. Lỗi vận hành đã được báo email trong vnguard_, không làm hỏng lượt lưu.
-    if (typeof vnptRefreshHoan === 'function') vnptRefreshHoan();
+    if (typeof vnptScheduleReturnsJob === 'function') vnptScheduleReturnsJob();
+    else if (typeof vnptRefreshHoan === 'function') vnptRefreshHoan();
   } catch (err) {
-    console.log('vnptRefreshHoan skipped: ' + (err && err.message ? err.message : err));
+    console.log('Hẹn tính HOÀN lỗi: ' + (err && err.message ? err.message : err));
   }
 }
 

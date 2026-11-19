@@ -117,10 +117,21 @@ function vneq_(a, b) {
   return a === b;
 }
 
+/* Khóa NGẮN chỉ cho khoảnh khắc ghi vào tab chung (Tổng hợp, _VNPT_STATE).
+ * Phần đọc/tính của từng luồng chạy ngoài khóa nên các luồng không chặn nhau.
+ * Đến lượt ghi mà luồng khác đang ghi -> chờ (tối đa 2 phút), không báo lỗi ngay. */
 function vnlock_(cb) {
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) throw new Error('Đang có lượt cập nhật, thử lại sau.');
+  if (!lock.tryLock(120000)) throw new Error('Chờ ghi Tổng hợp quá 2 phút, thử lại sau.');
   try { return cb(); } finally { lock.releaseLock(); }
+}
+
+/* Lượt đọc nguồn sớm hơn lượt đã ghi xong của CÙNG luồng -> dữ liệu cũ hơn -> bỏ qua. */
+function vnisStale_(kind, started) {
+  return Number(PropertiesService.getScriptProperties().getProperty('VNPT_DONE_' + kind) || 0) > started;
+}
+function vnmarkDone_(kind, started) {
+  PropertiesService.getScriptProperties().setProperty('VNPT_DONE_' + kind, String(started));
 }
 
 function vnensureGrid_(sheet, lastRow, lastCol) {
@@ -282,17 +293,24 @@ function vnfillNames_(sheetName, catalog, editedRange) {
 
   t.rows.forEach((row, i) => {
     const r = t.hr + 1 + i;
-    if (editedRange && (r < editedRange.getRow() || r > editedRange.getLastRow())) return;
+    // Sửa khi đang lọc: Google chỉ báo vùng liền đầu tiên. Vẫn quét CẢ tab để điền bù
+    // các dòng có Tên mà thiếu SKU/Đơn vị/Tháng; ngoài vùng vừa sửa thì không đụng dòng không có Tên.
+    const inEdit = !editedRange || (r >= editedRange.getRow() && r <= editedRange.getLastRow());
     if (statusC !== undefined && vnkey_(row[statusC]) === 'hủy') return;
     const name = vntext_(row[nameC]);
     const sku = vnsku_(row[skuC], sheetName + ' dòng ' + r);
     if (!name && !sku) return;
+    if (!inEdit && !name) return;
+    // Chỉ đưa vào kế hoạch ô khác giá trị hiện có. Ngoài vùng sửa: SKU số = SKU chữ cùng nội dung thì coi như giống.
+    const changed = cells => cells.filter(([c, v]) =>
+      !vneq_(row[c], v) && !(c === skuC && !inEdit && vntext_(row[c]) === vntext_(v)));
 
     // Xóa tên → xóa mã và đơn vị tương ứng.
-    if (editedName && !name) {
+    if (inEdit && editedName && !name) {
       const cells = [[skuC, '']];
       if (unitC !== undefined) cells.push([unitC, '']);
-      plan.push([r, cells]);
+      const ch = changed(cells);
+      if (ch.length) plan.push([r, ch]);
       return;
     }
 
@@ -302,7 +320,8 @@ function vnfillNames_(sheetName, catalog, editedRange) {
     if (monthC !== undefined && dateC !== undefined && !vnblank_(row[dateC])) {
       cells.push([monthC, vndate_(vnmonth_(row[dateC]) + '-01')]);
     }
-    plan.push([r, cells]);
+    const ch = changed(cells);
+    if (ch.length) plan.push([r, ch]);
   });
 
   // Mã dài phải giữ dạng văn bản, tránh Sheets tự đổi thành số và làm tròn.
@@ -641,20 +660,29 @@ function vnreadSource_(kind, catalog, editedRange) {
   return { entries: entries, lanes: lanes };
 }
 
-function vnrunUnlocked_(kind, catalog, editedRange) {
-  vnsummary_(catalog); // đích phải hợp lệ trước khi tự điền nguồn
-  const source = vnreadSource_(kind, catalog, editedRange);
-  const state = vnstate_(), next = vnaggregate_(source.entries);
-  for (const lane of source.lanes) {
-    const previous = state.rows.filter(r => vntext_(r[0]) === lane).map(r => vntext_(r[1]));
-    vnwriteLane_(catalog, lane, vntotals_(next, lane), previous);
-  }
-  vncommitState_(state, source.lanes, next);
-  vnheadline_();
-}
-
+/* Một luồng = một tab nguồn. Đọc + tự điền + cộng tổng chạy NGOÀI khóa (luồng này không chặn luồng khác);
+ * chỉ bước ghi Tổng hợp / _VNPT_STATE nằm trong khóa ngắn. */
 function vnrun_(kind, editedRange) {
-  return vnguard_('vnrun_:' + kind, () => vnlock_(() => vnrunUnlocked_(kind, vncatalog_(), editedRange)));
+  return vnguard_('vnrun_:' + kind, () => {
+    const started = Date.now(), catalog = vncatalog_();
+    vnsummary_(catalog); // đích phải hợp lệ trước khi tự điền nguồn
+    const source = vnreadSource_(kind, catalog, editedRange);
+    const next = vnaggregate_(source.entries);
+    return vnlock_(() => {
+      // Lượt mới hơn của cùng luồng đã ghi xong -> không ghi đè số mới bằng số cũ.
+      if (vnisStale_(kind, started)) return { ok: true, skipped: 'stale', kind: kind };
+      // Đọc Tổng hợp/STATE ngay trong khóa: TỒN tính từ số mới nhất của các luồng khác.
+      const state = vnstate_();
+      for (const lane of source.lanes) {
+        const previous = state.rows.filter(r => vntext_(r[0]) === lane).map(r => vntext_(r[1]));
+        vnwriteLane_(catalog, lane, vntotals_(next, lane), previous);
+      }
+      vncommitState_(state, source.lanes, next);
+      vnheadline_();
+      vnmarkDone_(kind, started);
+      return { ok: true, kind: kind };
+    });
+  });
 }
 
 function vnptRefreshNhap() { return vnrun_('in'); }
@@ -769,36 +797,46 @@ function vnptHandleEdit(e) {
 }
 
 function vnptHandleChange(e) {
-  // Sự kiện cấu trúc không chỉ rõ nguồn; các poll riêng sẽ bắt thay đổi.
-  console.log('Thay đổi cấu trúc: ' + (e && e.changeType || 'manual') + '. Các luồng tự kiểm tra riêng.');
+  // Không còn được cài (giữ tên để trigger cũ chưa cài lại không lỗi).
+  console.log('Thay đổi cấu trúc: ' + (e && e.changeType || 'manual') + '. Không xử lý.');
 }
 
 /************************************************
- * POLL RIÊNG TỪNG NGUỒN
- * (Hoàn trả do App Chứng Từ ghi qua API → onEdit không bắt được, poll sẽ bắt.)
+ * BỎ KIỂM TRA THEO GIỜ
+ * Không còn trigger 5 phút. Giữ tên hàm rỗng để trigger cũ (nếu chưa cài lại) chạy không lỗi.
+ * Chạy vnptInstallTriggers() một lần sau khi dán code để xóa hẳn các trigger này.
  ************************************************/
 
-function vnpoll_(sheetName, handler) {
-  return vnguard_('vnpoll_:' + sheetName, () => {
-    const t = vntable_(sheetName);
-    const digest = Utilities.base64Encode(Utilities.computeDigest(
-      Utilities.DigestAlgorithm.MD5, JSON.stringify([t.headers, t.rows]), Utilities.Charset.UTF_8));
-    const props = PropertiesService.getScriptProperties();
-    const key = 'VNPT_HASH_' + sheetName;
-    if (props.getProperty(key) === digest) return;
-    handler();
-    // Đọc lại sau khi chạy (code có thể vừa tự điền SKU/Tháng) để không chạy lặp.
-    const after = vntable_(sheetName);
-    props.setProperty(key, Utilities.base64Encode(Utilities.computeDigest(
-      Utilities.DigestAlgorithm.MD5, JSON.stringify([after.headers, after.rows]), Utilities.Charset.UTF_8)));
-  });
+function vnpoll_(sheetName, handler) { return { ok: true, skipped: 'poll đã bỏ' }; }
+function vnptPollNhap() { return vnpoll_(); }
+function vnptPollChuyenDongTay() { return vnpoll_(); }
+function vnptPollHoan() { return vnpoll_(); }
+function vnptPollXuat() { return vnpoll_(); }
+function vnptPollSku() { return vnpoll_(); }
+
+/************************************************
+ * APP NHẬP HOÀN (API) -> TÍNH HOÀN
+ * App ghi Hoàn trả bằng code nên trigger sửa không chạy. API ghi xong thì hẹn
+ * MỘT lượt chạy một lần (không phải trigger định kỳ) để trả kết quả cho app ngay.
+ * Nhiều đơn liền nhau chỉ giữ 1 lượt hẹn; lượt đó tính theo toàn bộ tab nên gồm cả các đơn sau.
+ ************************************************/
+
+const VNPT_RETURNS_JOB = 'vnptReturnsJob';
+
+function vnptScheduleReturnsJob() {
+  const pending = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === VNPT_RETURNS_JOB);
+  if (pending) return { ok: true, scheduled: false };
+  ScriptApp.newTrigger(VNPT_RETURNS_JOB).timeBased().after(5000).create();
+  return { ok: true, scheduled: true };
 }
 
-function vnptPollNhap() { return vnpoll_(VNPT.sheets.in, vnptRefreshNhap); }
-function vnptPollChuyenDongTay() { return vnpoll_(VNPT.sheets.transfer, vnptRefreshChuyenDongTay); }
-function vnptPollHoan() { return vnpoll_(VNPT.sheets.returns, vnptRefreshHoan); }
-function vnptPollXuat() { return vnpoll_(VNPT.sheets.ff, vnptRefreshXuat); }
-function vnptPollSku() { return vnpoll_(VNPT.sheets.sku, vnptRefreshDanhMuc); }
+function vnptReturnsJob() {
+  // Xóa lượt hẹn TRƯỚC khi đọc nguồn: đơn nào lưu sau thời điểm này sẽ hẹn được lượt mới.
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === VNPT_RETURNS_JOB)
+    .forEach(t => ScriptApp.deleteTrigger(t));
+  return vnptRefreshHoan();
+}
 
 /************************************************
  * ĐỐI SOÁT TẤT CẢ — CHỈ CHẠY KHI CHỦ ĐỘNG
@@ -872,19 +910,19 @@ function vnptInstallTriggers() {
 
     const owned = [
       'vnptHandleEdit', 'vnptHandleChange',
-      'vnptPollNhap', 'vnptPollChuyenDongTay', 'vnptPollHoan', 'vnptPollXuat', 'vnptPollSku'
+      'vnptPollNhap', 'vnptPollChuyenDongTay', 'vnptPollHoan', 'vnptPollXuat', 'vnptPollSku',
+      VNPT_RETURNS_JOB
     ];
     ScriptApp.getProjectTriggers().forEach(tr => {
       if (owned.includes(tr.getHandlerFunction())) ScriptApp.deleteTrigger(tr);
     });
 
+    // Chỉ còn trigger SỬA: sửa tab nào chạy luồng tab đó. Không trigger thay đổi, không trigger theo giờ.
+    // App nhập hoàn: API tự hẹn 1 lượt tính HOÀN (vnptReturnsJob).
     const ss = vnss_();
     ScriptApp.newTrigger('vnptHandleEdit').forSpreadsheet(ss).onEdit().create();
-    ScriptApp.newTrigger('vnptHandleChange').forSpreadsheet(ss).onChange().create();
-    ['vnptPollNhap', 'vnptPollChuyenDongTay', 'vnptPollHoan', 'vnptPollXuat', 'vnptPollSku']
-      .forEach(h => ScriptApp.newTrigger(h).timeBased().everyMinutes(VNPT.pollMinutes).create());
 
-    console.log('Đã cài dropdown và trigger VNPT. Mỗi luồng chạy riêng.');
+    console.log('Đã cài dropdown và trigger sửa VNPT. Đã xóa trigger 5 phút và trigger thay đổi. Mỗi tab chạy luồng riêng.');
   });
 }
 
