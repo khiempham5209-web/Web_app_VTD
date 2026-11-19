@@ -210,10 +210,12 @@ function returnTh_applyFixedInputLayout_(row,data,headers) {
 }
 
 function returnTh_refreshSummaryIfAvailable_() {
+  // Không tính trong lúc giữ khóa API: hẹn 1 lượt chạy riêng (tính HOÀN + đẩy SCUTT), trả kết quả cho app ngay.
   try {
-    if (typeof refreshTongHopAll === 'function') refreshTongHopAll();
+    if (typeof ffplScheduleReturnsJob === 'function') ffplScheduleReturnsJob();
+    else if (typeof refreshTongHopAll === 'function') refreshTongHopAll();
   } catch (err) {
-    console.log('refreshTongHopAll skipped: ' + (err && err.message ? err.message : err));
+    console.log('Hẹn tính HOÀN lỗi: ' + (err && err.message ? err.message : err));
   }
 }
 
