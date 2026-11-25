@@ -223,7 +223,7 @@ function handoverSyncApplySummary_(target, filteredRows, sourceCol) {
   handoverSyncClearSummary_(target);
   const summary = handoverSyncBuildPivotSummary_(filteredRows, sourceCol);
   const startRow = 1;
-  const startCol = 10; // J
+  const startCol = 11; // K, chừa cột J giữa hai bảng.
   const colCount = Math.max(summary.headers.length, 2);
   const rowCount = Math.max(summary.rows.length + 2, 2);
   handoverSyncEnsureColumns_(target, startCol + colCount - 1);
