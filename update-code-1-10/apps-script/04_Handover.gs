@@ -122,7 +122,8 @@ function syncBanGiaoChungTuBySelectedDate() {
 
   const values = source.getRange(2, 1, lastRow - 1, source.getLastColumn()).getDisplayValues();
   const filteredRows = values.filter(row => handoverSyncDateKey_(handoverSyncPick_(row, sourceCol, ["ngay ban giao ct"])) === selectedDate);
-  const rows = filteredRows.map(row => [
+  const rows = filteredRows.map((row, index) => [
+      index + 1,
       handoverSyncPick_(row, sourceCol, ["ngay len don"]),
       handoverSyncPick_(row, sourceCol, ["khach hang"]),
       handoverSyncPick_(row, sourceCol, ["dia chi nhan hang"]),
@@ -134,7 +135,7 @@ function syncBanGiaoChungTuBySelectedDate() {
     ]);
 
   if (rows.length) {
-    target.getRange(3, 1, rows.length, 8)
+    target.getRange(3, 1, rows.length, 9)
       .setValues(rows)
       .setFontWeight("normal")
       .setHorizontalAlignment("left")
@@ -169,7 +170,7 @@ function handoverSyncUniqueHandoverDates_() {
 
 function handoverSyncEnsureTargetHeaders_(target) {
   const headers = [
-    "Ngày lên đơn", "Tên khách hàng", "Địa chỉ nhận", "Mã PO",
+    "STT", "Ngày lên đơn", "Tên khách hàng", "Địa chỉ nhận", "Mã PO",
     "Số đơn hàng", "Mã đơn GHTK", "Ngày bàn giao CT", "Ghi chú"
   ];
   target.getRange(2, 1, 1, headers.length).setValues([headers]);
@@ -178,41 +179,42 @@ function handoverSyncEnsureTargetHeaders_(target) {
 function handoverSyncClearOutput_(target) {
   const lastRow = target.getLastRow();
   if (lastRow >= 3) {
-    const oldRange = target.getRange(3, 1, lastRow - 2, 8);
+    const oldRange = target.getRange(3, 1, lastRow - 2, 9);
     pnBreakApartSafe_(oldRange);
     oldRange.clearContent();
     oldRange.clearFormat();
     oldRange.clearDataValidations();
     oldRange.setBorder(false, false, false, false, false, false);
   }
-  target.getRange(2, 1, 1, 8).setBorder(false, false, false, false, false, false);
+  target.getRange(2, 1, 1, 9).setBorder(false, false, false, false, false, false);
   handoverSyncClearSummary_(target);
 }
 
 function handoverSyncApplyBorders_(target, dataCount) {
   const rowCount = Math.max(Number(dataCount || 0) + 1, 1);
-  target.getRange(2, 1, rowCount, 8).setBorder(true, true, true, true, true, true);
+  target.getRange(2, 1, rowCount, 9).setBorder(true, true, true, true, true, true);
 }
 
 function handoverSyncApplyTableFormat_(target, dataCount) {
   const rowCount = Math.max(Number(dataCount || 0) + 1, 1);
-  const tableRange = target.getRange(2, 1, rowCount, 8);
+  const tableRange = target.getRange(2, 1, rowCount, 9);
   tableRange
     .setFontFamily("Times New Roman")
     .setFontSize(13)
     .setVerticalAlignment("middle");
 
-  target.getRange(2, 1, 1, 8)
+  target.getRange(2, 1, 1, 9)
     .setFontWeight("bold")
     .setHorizontalAlignment("center")
     .setWrap(true);
 
   if (dataCount) {
-    target.getRange(3, 1, dataCount, 8)
+    target.getRange(3, 1, dataCount, 9)
       .setFontWeight("normal")
       .setHorizontalAlignment("left")
       .setWrap(false);
-    target.getRange(3, 3, dataCount, 1).setWrap(true);
+    target.getRange(3, 1, dataCount, 1).setHorizontalAlignment("center");
+    target.getRange(3, 4, dataCount, 1).setWrap(true);
     target.autoResizeRows(3, dataCount);
   }
 }
@@ -346,7 +348,7 @@ function handoverSyncApplySignature_(target, dataCount) {
   rightTop.setValue("Người nhận");
   rightBottom.setValue("(Ký, ghi rõ họ tên)");
 
-  target.getRange(signatureRow, 1, 3, 8)
+  target.getRange(signatureRow, 1, 3, 9)
     .setHorizontalAlignment("center")
     .setVerticalAlignment("middle")
     .setFontFamily("Times New Roman")
