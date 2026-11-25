@@ -143,8 +143,8 @@ function syncBanGiaoChungTuBySelectedDate() {
   }
   target.getRange("G1").setValue(rows.length);
   handoverSyncApplyTableFormat_(target, rows.length);
-  handoverSyncApplyBorders_(target, rows.length);
   handoverSyncApplySummary_(target, filteredRows, sourceCol);
+  handoverSyncApplyBorders_(target, rows.length);
   handoverSyncApplySignature_(target, rows.length);
   return {ok: true, count: rows.length};
 }
@@ -213,7 +213,7 @@ function handoverSyncApplyTableFormat_(target, dataCount) {
       .setFontWeight("normal")
       .setHorizontalAlignment("left")
       .setWrap(false);
-    target.getRange(3, 1, dataCount, 1).setHorizontalAlignment("center");
+    target.getRange(3, 1, dataCount, 1).setNumberFormat("0").setHorizontalAlignment("center");
     target.getRange(3, 4, dataCount, 1).setWrap(true);
     target.autoResizeRows(3, dataCount);
   }
