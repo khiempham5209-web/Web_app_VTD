@@ -2,12 +2,12 @@
 
 ## Giai đoạn 1 — Apps Script cho APK đang dùng
 
-1. Trong project **PJ_Phạm Nguyên**, thay toàn bộ nội dung file `01_API.gs` và `11_API_FullSave.gs` bằng bản trong `update-code-1-10/apps-script/`. Thêm file `16_PN_AppLog.gs` cùng thư mục.
+1. Trong project **PJ_Phạm Nguyên**, nếu đã cài bản log đầu tiên, thay `02_Reject.gs`, `11_API_FullSave.gs`, `12_SyncEngine.gs` và `16_PN_AppLog.gs` bằng các tệp tương ứng. Nếu cài lần đầu, cập nhật thêm `01_API.gs`.
 2. Tạo version Apps Script mới và cập nhật deployment web app đang dùng để giữ nguyên URL `/exec`.
-3. Test một đơn chứng từ, một đơn sản phẩm nhiều SKU, một đơn kết hợp và một lượt gửi lại trùng `clientId`. Kiểm tra cả tab đích lẫn `PN_LOG_APP`. Tab log được tạo khi có request chứa hoặc đối chiếu được mã GHTK.
-4. Test cùng một mã GHTK ở hai lượt độc lập. Bảng có một dòng, các cột tóm tắt theo lượt mới nhất, JSON giữ cả hai lượt. Có thể rollback bằng cách trỏ deployment về version cũ.
+3. Chạy tay `pnRebuildAppLogHistory` trong Apps Script để hiển thị lại lịch sử sẵn có. Chạy thêm nếu kết quả trả `complete: false`. Cột R là nhật ký đọc được, cột S (ẩn) giữ JSON gốc. Lịch sử vượt dung lượng ô được chuyển sang `PN_LOG_HISTORY`.
+4. Kiểm tra một đơn chứng từ thông thường, một đơn sản phẩm, một ca thu hồi khớp Mã ecom CT và một đơn tích Đã tạo sv từ Sheet. Các bước ghi chung GHTK nằm trên một hàng, mỗi mốc xuống một dòng trong ô Update. Kiểm tra app trả thành công nếu chỉ luồng đồng bộ báo lỗi và phần ghi nguồn đã thành công.
 
-`Update 4–8` dành cho mốc phía API, `Update 1–3` và `Update 9` dành cho dữ liệu của bản app sau. `Vị trí ghi` là một chuỗi trên một dòng. Số dòng là vị trí tại thời điểm quan sát, mã bản ghi nằm trong JSON. Khi đồng bộ `Chứng từ_FF` được xếp hàng, log ghi `MIRROR_PENDING`. VHFF ghi `VHFF_SCHEDULED` khi luồng lưu gọi trình lập lịch. Apps Script có thể bị dừng giữa chừng hoặc lỗi ghi log. Khi đó dùng mốc cuối cùng đã lưu, đối chiếu `_PN_REQUESTS` và Apps Script Executions. Log lỗi không làm API báo lưu đơn thất bại.
+`Update 4–8` dành cho mốc phía API. `Update 1–3` và `Update 9` dành cho bản app sau. `Vị trí ghi` là một dòng. `APP_SAVE`, `SYNC_FF`, `SYNC_PRODUCT_VHFF` và `SYNC_SV_VHFF` có kết quả riêng trong Log. `PRODUCT_SYNC_PENDING` xác nhận đã xếp lịch, kết quả worker xem trong Apps Script Executions. `SV_CHECKED` cho biết luồng Sheet đọc được checkbox TRUE ở thời điểm chạy. Bản hiện tại không dựng lại các mốc SV trước thời điểm cập nhật. Nếu cần hoàn tất lượt lưu cũ còn treo, gửi lại đúng mục hàng chờ đang có để dùng lại `clientId`.
 
 ## Giai đoạn 2 — Chờ duyệt
 

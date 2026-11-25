@@ -182,92 +182,24 @@
    } catch (err) {
 --- a/update-code-1-10/apps-script/16_PN_AppLog.gs
 +++ b/update-code-1-10/apps-script/16_PN_AppLog.gs
-@@ -125,7 +125,8 @@
-
- function pnAppLogSummary_(data) {
-   const operation = data.operations[data.operations.length - 1];
--  const attempt = operation.attempts[operation.attempts.length - 1];
-+  const attempt = operation.attempts[operation.attempts.length - 1] || {events: []};
-+  const appEvents = operation.appEvents || [];
-   const updates = Array(9).fill('');
-   const writes = new Map();
-   let status = 'PROCESSING', detail = '', updatedAt = '';
-@@ -136,8 +137,15 @@
-       writes.set(w.tab, rows.concat(w.rows));
-     }
-   }));
-+  appEvents.forEach(event => {
-+    updatedAt = event.at > updatedAt ? event.at : updatedAt;
-+    if (event.update) updates[event.update - 1] = Utilities.formatDate(new Date(event.at), 'Asia/Ho_Chi_Minh', 'dd/MM/yyyy HH:mm:ss') + ' ' + event.state;
-+    if (event.status) status = event.status;
-+    if (event.code && event.code !== 'OK') detail = event.code + ' · origin=APP';
-+  });
-+  if (attempt.events.length) detail = '';
-   attempt.events.forEach(event => {
--    updatedAt = event.at;
-+    updatedAt = event.at > updatedAt ? event.at : updatedAt;
-     if (event.update) updates[event.update - 1] = Utilities.formatDate(new Date(event.at), 'Asia/Ho_Chi_Minh', 'dd/MM/yyyy HH:mm:ss') + ' ' + event.state;
-     if (event.status) status = event.status;
-     if (event.code) {
-@@ -172,7 +180,7 @@
- function pnAppLogFlush_() {
-   const log = pnAppLogContext_;
-   if (!log || !log.key || !log.events.length) return;
--  pnAppLogSafe_(() => {
-+  return pnAppLogSafe_(() => {
-     const lock = LockService.getScriptLock();
-     if (!lock.tryLock(500)) {
-       console.warn('PN_APP_LOG: LOCK_BUSY ' + log.requestId);
-@@ -192,19 +200,31 @@
-       if (!operation) {
-         operation = {clientId: log.operationId, orderNo: log.orderNo, source: log.source,
-           user: log.user, input: log.input, attempts: []};
--        const localTime = /^LOCAL-(\d{13})-/.exec(log.operationId);
--        const created = localTime && Number(localTime[1]);
--        operation.startedAtMs = created && created <= Date.now() + 300000 ? created : Date.parse(log.startedAt);
-         data.operations.push(operation);
--        data.operations.sort((a, b) => a.startedAtMs - b.startedAtMs);
+@@ -330,6 +330,16 @@
+         data.operations.sort((a, b) => a.startedAtMs - b.startedAtMs);
        }
        if (log.orderNo) operation.orderNo = log.orderNo;
--      let attempt = operation.attempts.find(x => x.requestId === log.requestId);
--      if (!attempt) {
--        attempt = {requestId: log.requestId, startedAt: log.startedAt, events: []};
--        operation.attempts.push(attempt);
 +      if (log.app) {
 +        const events = operation.appEvents || (operation.appEvents = []);
-+        for (const event of log.events) {
-+          if (!events.some(existing => existing.eventId === event.eventId)) events.push(event);
-+        }
++        log.events.forEach(event => {
++          if (!events.some(previous => previous.eventId === event.eventId)) events.push(event);
++        });
 +        events.sort((a, b) => a.at.localeCompare(b.at));
-+      } else {
-+        let attempt = operation.attempts.find(x => x.requestId === log.requestId);
-+        if (!attempt) {
-+          attempt = {requestId: log.requestId, startedAt: log.startedAt, events: []};
-+          operation.attempts.push(attempt);
-+        }
-+        attempt.events = log.events.slice();
-       }
--      attempt.events = log.events.slice();
-+      // The existing LOCAL id contains the creation time, including when sent after being offline.
-+      const operationTime = entry => {
-+        const id = /^LOCAL-(\d{13})-/.exec(entry.clientId);
-+        const time = id && Number(id[1]);
-+        return time && time <= Date.now() + 300000 ? time : Date.parse(entry.firstSeenAt || '') || 0;
-+      };
-+      operation.firstSeenAt = operation.firstSeenAt || log.startedAt;
-+      data.operations.sort((a, b) => operationTime(a) - operationTime(b));
-       let values = pnAppLogSummary_(data);
-       if (values[17].length > 42000) {
-         const archive = pnAppLogSheet_(ss, 'PN_LOG_HISTORY', ['Mã đơn GHTK', 'ArchivedAt', 'Log']);
-@@ -222,6 +242,7 @@
-       sheet.getRange(row, 1, 1, values.length).setValues([values.map(v =>
-         typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : v)]);
-       SpreadsheetApp.flush();
-+      return true;
-     } finally {
-       lock.releaseLock();
-     }
-@@ -259,3 +280,59 @@
++        pnAppLogWriteRow_(sheet, row, data);
++        SpreadsheetApp.flush();
++        return true;
++      }
+       let attempt = operation.attempts.find(x => x.requestId === log.requestId);
+       if (!attempt) {
+         attempt = {requestId: log.requestId, startedAt: log.startedAt, events: []};
+@@ -376,3 +386,59 @@
      .createTextFinder(id).matchEntireCell(true).matchCase(true).findAll();
    if (cells.length === 1) pnAppLogWrite_('MIRROR_CONFIRMED', target.sh, [cells[0].getRow()], [id]);
  }

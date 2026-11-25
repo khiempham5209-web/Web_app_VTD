@@ -946,7 +946,7 @@ function pnV2HandleRows_(name, r1, r2, cols) {
   if (p.main === 'Chứng từ_FF') {
     const res = pnV2SyncRows_(p, side, rows, true);
     // Dòng đã tích "Đã tạo sv" vừa sửa: đẩy ngay đúng các dòng đó sang VHFF (Chứng từ không đạt YC).
-    res.vhff = pnV2PushVhffRows_(side === 'full' ? rows : (res.otherRows || []));
+    res.vhff = pnV2PushVhffRows_(side === 'full' ? rows : (res.otherRows || []), name);
     // Đã bàn giao CT: điền/xóa/sửa ngày bàn giao, hoặc sửa dòng đã có ngày bàn giao -> cập nhật đích ngay.
     res.handover = pnV2HandoverIfNeeded_(name, side === 'full' ? rows : (res.otherRows || []), cols);
     return res;
@@ -1181,7 +1181,7 @@ function pnV2HandoverIfNeeded_(name, fullRows, cols) {
 }
 /* Đẩy ngay sang VHFF (Chứng từ không đạt YC) đúng các dòng Chứng từ_full vừa đổi, CHỈ dòng đã tích "Đã tạo sv"
  * và có Mã đơn GHTK. Không có dòng nào đã tích thì không làm gì (không mở file đích). Lỗi thì để lượt VHFF sau làm bù. */
-function pnV2PushVhffRows_(fullRows) {
+function pnV2PushVhffRows_(fullRows, auditSource) {
   const rows = Array.from(new Set((fullRows || []).map(Number).filter(r => r >= 2))).sort((a, b) => a - b);
   if (!rows.length) return {ok: true, count: 0};
   const sh = pnSheet_(PN_FULL.pairs[2].full), L = pnV2Layout_(sh, true);
@@ -1191,7 +1191,7 @@ function pnV2PushVhffRows_(fullRows) {
   const block = sh.getRange(r1, 1, r2 - r1 + 1, Math.max(cTick, cGhtk) + 1).getValues();
   const ticked = rows.filter(r => rejectSyncIsTrue_(block[r - r1][cTick]) && pnText_(block[r - r1][cGhtk]));
   if (!ticked.length) return {ok: true, count: 0};
-  try { return syncChungTuKhongDatYCRows_(ticked); }
+  try { return syncChungTuKhongDatYCRows_(ticked, auditSource); }
   catch (err) {
     PropertiesService.getScriptProperties().setProperty('PN_VHFF_ERROR', 'reject: ' + String(err && err.message || err));
     pnMarkDirty_();
@@ -1355,7 +1355,7 @@ function pnV2CatchFilteredEdit_(name, r1, r2, c1, c2) {
     // Chứng từ: đồng bộ cả lô một lần, rồi VHFF / Đã bàn giao CT cho đúng các dòng đó.
     const res = pnV2SyncRows_(p, side, rows, false);
     const fullRows = side === 'full' ? rows : (res.otherRows || []);
-    res.vhff = pnV2PushVhffRows_(fullRows);
+    res.vhff = pnV2PushVhffRows_(fullRows, name);
     res.handover = pnV2HandoverIfNeeded_(name, fullRows, {c1, c2});
     return Object.assign(res, {rows: rows.length});
   }

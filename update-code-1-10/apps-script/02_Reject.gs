@@ -6,8 +6,7 @@ Paste file nay vao cung Apps Script project voi Code API.gs.
 
 Luồng chạy:
 - User tick "Đã tạo sv" = TRUE ở tab nguồn "Chứng từ_FF" thì onEdit sync.
-- Nếu app/API lưu dữ liệu trực tiếp, Code API.gs gọi thẳng
-  syncOneChungTuKhongDatYCBySourceRow_(rowNumber) sau khi lưu.
+- Luồng lưu từ app không gọi đồng bộ sự vụ.
 - Script append/update sang file đích tab "Chứng từ không đạt YC".
 - Key update: "Mã đơn GHTK".
 - Lookup "Tỉnh đích", "Kho đích", "Vị trí giao", "Quản lý" từ tab nguồn
@@ -63,7 +62,7 @@ function onEditSyncChungTuKhongDatYC(e) {
         if (rejectSyncIsTrue_(row[0])) rows.push(startRow + i);
       });
       if (!rows.length) return {ok: true, count: 0};
-      return syncChungTuKhongDatYCRows_(rows);
+      return syncChungTuKhongDatYCRows_(rows, sh.getName());
     });
   } catch (err) {
     console.error(err && err.stack || err);
@@ -90,8 +89,44 @@ function syncAllChungTuKhongDatYC() {
   });
 }
 
-function syncChungTuKhongDatYCRows_(rowNumbers) {
+function syncChungTuKhongDatYCRows_(rowNumbers, auditSource) {
   const sources = rejectSyncSourceRecordsByRows_(rowNumbers);
+  if (!auditSource || typeof pnAppLogSheetEvents_ !== 'function') return rejectSyncWriteRows_(sources);
+  const eligible = sources.filter(source => source.maDonGhtk && rejectSyncIsTrue_(source.daTaoSv));
+  const checkedAt = new Date().toISOString();
+  const confirmed = new Map();
+  let target;
+  let failure;
+  try {
+    const result = rejectSyncWriteRows_(sources, (sheet, key, row) => {
+      target = sheet;
+      confirmed.set(rejectSyncNorm_(key), row);
+    });
+    SpreadsheetApp.flush();
+    return result;
+  } catch (err) {
+    failure = err;
+    throw err;
+  } finally {
+    const finishedAt = new Date().toISOString();
+    eligible.forEach(source => pnAppLogSafe_(() => {
+      const row = confirmed.get(rejectSyncNorm_(source.maDonGhtk));
+      const result = {at: finishedAt, origin: 'SHEET',
+        state: failure || !row ? 'SYNC_SV_FAILED' : 'SYNC_SV_DONE',
+        target: REJECT_SYNC_CONFIG.targetSheetName};
+      if (failure) result.message = pnAppLogCode_(failure.message || failure);
+      else if (!row) result.message = 'Chưa xác nhận được dòng đích.';
+      else result.write = {tab: target.getName(), gid: target.getSheetId(),
+        rows: [row], ids: [source.maDonGhtk]};
+      pnAppLogSheetEvents_(source, [
+        {at: checkedAt, origin: 'SHEET', state: 'SV_CHECKED', sourceTab: auditSource},
+        result
+      ]);
+    }));
+  }
+}
+
+function rejectSyncWriteRows_(sources, onWrite) {
   const pnKeys=sources.map(r=>rejectSyncNorm_(r.maDonGhtk)).filter(Boolean);
   if(new Set(pnKeys).size!==pnKeys.length)throw new Error("Chứng từ trùng Mã GHTK; hoãn sync để tránh ghi sai đích.");
   const orderMap = rejectSyncOrderInfoMap_();
@@ -114,6 +149,7 @@ function syncChungTuKhongDatYCRows_(rowNumbers) {
     if (targetRow) {
       target.getRange(targetRow, 1, 1, output.length).setValues([output]);
       updated++;
+      if (onWrite) onWrite(target, source.maDonGhtk, targetRow);
     } else {
       appendRows.push(output);
       targetRowByMaDon[rejectSyncNorm_(source.maDonGhtk)] = true;
@@ -128,12 +164,17 @@ function syncChungTuKhongDatYCRows_(rowNumbers) {
       const fresh = rejectSyncTargetRowMapByMaDon_(target, targetCol), rows = [];
       appendRows.forEach(output => {
         const r = gIdx >= 0 ? fresh[rejectSyncNorm_(output[gIdx])] : 0;
-        if (r) { target.getRange(r, 1, 1, output.length).setValues([output]); updated++; } else rows.push(output);
+        if (r) {
+          target.getRange(r, 1, 1, output.length).setValues([output]);
+          updated++;
+          if (onWrite) onWrite(target, output[gIdx], r);
+        } else rows.push(output);
       });
       if (!rows.length) return;
       const startRow = Math.max(target.getLastRow() + 1, 2);
       target.getRange(startRow, 1, rows.length, outputWidth).setValues(rows);
       added = rows.length;
+      if (onWrite) rows.forEach((output, i) => onWrite(target, output[gIdx], startRow + i));
     });
   }
   return {ok: true, count: updated + added, updated, added};

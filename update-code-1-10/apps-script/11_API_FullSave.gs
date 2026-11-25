@@ -220,8 +220,9 @@ function pnMirrorDocsSafe_(fullRow,prefer) {
   }
   catch(err) {
     const message=String(err&&err.message||err);
-    if (prefer && typeof pnAppLogEvent_ === 'function') pnAppLogEvent_('MIRROR_FAILED', 0);
-    PropertiesService.getScriptProperties().setProperty('PN_MIRROR_ERROR',new Date().toISOString()+' '+message.slice(0,4000));
+    if (prefer && typeof pnAppLogEvent_ === 'function') pnAppLogEvent_('MIRROR_FAILED', 0, {message: pnAppLogCode_(message)});
+    try { PropertiesService.getScriptProperties().setProperty('PN_MIRROR_ERROR',new Date().toISOString()+' '+message.slice(0,4000)); }
+    catch (logError) { console.error(logError); }
     console.error('PN mirror (save tiếp tục): '+message);
     return message;
   }
@@ -279,29 +280,48 @@ function pnSaveLocked_(params,key,state) {
   let fullRow=0;
   try { fullRow=pnResolveSave_(sheet_(),null,params).rowNumber; } catch(err) {}
   // Lấy sửa tay ở Chứng từ_FF (nếu luồng Sheet rảnh) trước khi ghi.
-  const mirrorWarning=fullRow&&!state.coreResponse?pnMirrorDocsSafe_(fullRow,false):'';
+  const type=norm_(params.returnType||params.loaiHoan||'Chung tu');
+  const hasDocs=['chung tu','docs','san pham + chung tu','product-docs'].includes(type);
+  const hasProducts=['san pham','product','san pham + chung tu','product-docs'].includes(type);
+  const mirrorWarning=hasDocs&&fullRow&&!state.coreResponse?pnMirrorDocsSafe_(fullRow,false):'';
   let response=state.coreResponse;
   if(!response){
     response=pnApiSaveCore_(params);
     if(!response||!response.ok){ pnJournalWrite_(key,'REJECTED',state,false); return response; }
     state.coreResponse=response;state.uploads=pnRequest_.uploads;state.docWritten=!!pnRequest_.docWritten;state.touchedAtMs=Date.now();
     pnJournalWrite_(key,'WRITTEN',state,false);
+  } else if (typeof pnAppLogEvent_ === 'function') {
+    pnAppLogEvent_('SHEET_WRITE_REUSED', 0);
   }
   if (typeof pnAppLogStage_ === 'function') pnAppLogStage_('FINALIZE');
-  const mirrorAfter=pnMirrorDocsSafe_(response.rowNumber||fullRow,true);
+  const mirrorAfter=hasDocs?pnMirrorDocsSafe_(response.rowNumber||fullRow,true):'';
   pnMarkDirty_();
-  // Sang VHFF (Đã bàn giao CT, Bàn giao SP_Hàng hoàn): chạy riêng một lần ~20 giây sau, app không phải chờ.
-  pnScheduleJob_(['documents','products']);
-  if (typeof pnAppLogEvent_ === 'function') pnAppLogEvent_('VHFF_SCHEDULED', 0, {syncStatus: 'PENDING'});
   const record=pnResolveSave_(sheet_(),null,params).record;
-  const type=norm_(params.returnType||params.loaiHoan||'Chung tu');
-  if(['chung tu','docs','san pham + chung tu','product-docs'].includes(type)){
-    // Chỉ chạy sang VHFF khi dòng đã tích "Đã tạo sv" (hàm tự kiểm tra, chưa tích thì thoát ngay).
-    try { syncOneChungTuKhongDatYCBySourceRow_(record.rowNumber); }
-    catch(err){PropertiesService.getScriptProperties().setProperty('PN_VHFF_ERROR','reject: '+String(err.message||err));}
+  // Chỉ đẩy hàng hoàn nếu lượt này ghi sản phẩm hoặc bổ sung link chứng từ thu hồi.
+  // Sự vụ và bàn giao chứng từ chạy từ luồng chỉnh sửa Sheet.
+  let vhffStatus='not_applicable';
+  if(hasProducts||(hasDocs&&pnText_(params.maEcomCt||record.maEcomCt))){
+    try {
+      if(typeof pnScheduleJob_==='function'){
+        const scheduled=pnScheduleJob_(['products']);
+        if(scheduled&&scheduled.error)throw new Error(scheduled.error);
+        vhffStatus='pending';
+      } else {
+        const result=syncBanGiaoSanPham();
+        if(!result||result.ok===false)throw new Error(result&&result.error||'Không xác nhận được kết quả đồng bộ sản phẩm.');
+        vhffStatus=result.skipped||result.queued||result.busy?'pending':'done';
+      }
+      if(typeof pnAppLogEvent_==='function')pnAppLogEvent_(
+        vhffStatus==='done'?'PRODUCT_SYNC_DONE':'PRODUCT_SYNC_PENDING',0);
+    } catch(err) {
+      vhffStatus='failed';
+      const message=String(err&&err.message||err);
+      if(typeof pnAppLogEvent_==='function')pnAppLogEvent_('PRODUCT_SYNC_FAILED',0,{message:pnAppLogCode_(message)});
+      console.error('PN products: '+message);
+    }
   }
   response=Object.assign({},response,{
-    sourceEpoch:PN_FULL.epoch,syncStatus:'stored',vhffStatus:'pending',
+    sourceEpoch:PN_FULL.epoch,syncStatus:'stored',vhffStatus,
     rowNumber:record.rowNumber,record,
     mirrorWarning:mirrorAfter||mirrorWarning||''
   });
