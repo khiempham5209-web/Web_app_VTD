@@ -93,7 +93,6 @@ function syncChungTuKhongDatYCRows_(rowNumbers, auditSource) {
   const sources = rejectSyncSourceRecordsByRows_(rowNumbers);
   if (!auditSource || typeof pnAppLogSheetEvents_ !== 'function') return rejectSyncWriteRows_(sources);
   const eligible = sources.filter(source => source.maDonGhtk && rejectSyncIsTrue_(source.daTaoSv));
-  const checkedAt = new Date().toISOString();
   const confirmed = new Map();
   let target;
   let failure;
@@ -118,10 +117,7 @@ function syncChungTuKhongDatYCRows_(rowNumbers, auditSource) {
       else if (!row) result.message = 'Chưa xác nhận được dòng đích.';
       else result.write = {tab: target.getName(), gid: target.getSheetId(),
         rows: [row], ids: [source.maDonGhtk]};
-      pnAppLogSheetEvents_(source, [
-        {at: checkedAt, origin: 'SHEET', state: 'SV_CHECKED', sourceTab: auditSource},
-        result
-      ]);
+      pnAppLogSheetEvents_(source, [result]);
     }));
   }
 }

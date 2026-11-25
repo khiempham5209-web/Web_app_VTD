@@ -151,7 +151,9 @@ function pnAppLogSummary_(data) {
       /^SYNC_SV_/.test(event.state) ? 'SYNC_SV_VHFF' : label;
     const w = event.write;
     const context = [w && w.tab + '!' + pnAppLogRanges_(w.rows),
+      event.editor && 'editor=' + event.editor,
       event.sourceTab && 'source=' + event.sourceTab + (event.sourceRow ? '!A' + event.sourceRow : ''),
+      event.sourceCell && 'cell=' + event.sourceCell,
       event.recordKey && 'record=' + event.recordKey, event.target && 'target=' + event.target,
       event.files != null && 'photos=' + event.files, event.code, event.message].filter(Boolean);
     return [time, flow, event.state, ...context].join(' | ');

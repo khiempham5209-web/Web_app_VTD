@@ -97,6 +97,11 @@ function pnHandleEdit(e) {
   const sh=e.range.getSheet(),name=sh.getName(),p=pnPair_(name);
   const watched=['Booking','Booking_full','File đơn','File đơn_full','Chứng từ_FF','Chứng từ_full','DS BC','TT Nhập','DS SKU','Hàng lỗi','Bàn giao chứng từ','Hoàn sản phẩm','Sự vụ'];
   if(watched.indexOf(name)<0)return;
+  // Capture the original manual edit before the two tabs are synchronized or queued.
+  if ((name === 'Chứng từ_FF' || name === 'Chứng từ_full') &&
+      typeof pnAppLogSheetEvents_ === 'function') {
+    pnAppLogSafe_(() => pnLogOriginalSvEdit_(e, sh));
+  }
   const r1=Math.max(2,e.range.getRow()),r2=Math.max(r1,e.range.getLastRow());
   const later=()=>{
     if(p)pnQueueEdit_(name,r1,r2);
@@ -142,6 +147,38 @@ function pnHandleEdit(e) {
     throw err;
   } finally { pnV2Start_=0; }
 }
+function pnLogOriginalSvEdit_(e, sheet) {
+  const edit = e.range;
+  if (edit.getLastRow() < 2) return;
+  const col = rejectSyncHeaderMap_(rejectSyncHeaders_(sheet));
+  const checkbox = rejectSyncFirstCol_(col, ['da tao sv', 'đã tạo sv']);
+  if (!checkbox || edit.getColumn() > checkbox || edit.getLastColumn() < checkbox) return;
+
+  const single = edit.getNumRows() === 1 && edit.getNumColumns() === 1;
+  if (single && (!rejectSyncIsTrue_(e.value) || rejectSyncIsTrue_(e.oldValue))) return;
+
+  const first = Math.max(2, edit.getRow());
+  const count = edit.getLastRow() - first + 1;
+  const rows = sheet.getRange(first, 1, count, sheet.getLastColumn()).getDisplayValues();
+  const sourceTab = sheet.getName();
+  const at = new Date().toISOString();
+  let editor = '';
+  try { editor = e.user ? String(e.user.getEmail() || '').trim() : ''; }
+  catch (err) { console.warn('PN SV editor unavailable'); }
+  const column = sheet.getRange(1, checkbox).getA1Notation().replace(/1$/, '');
+
+  rows.forEach((row, index) => {
+    const source = rejectSyncRecordFromRowValues_(row, col);
+    if (!source.maDonGhtk || (!single && !rejectSyncIsTrue_(source.daTaoSv))) return;
+    pnAppLogSheetEvents_(source, [{
+      at, origin: 'SHEET',
+      state: single ? 'SV_CHECKED' : 'SV_TRUE_PASTED',
+      editor: editor || 'Không xác định',
+      sourceTab, sourceCell: column + (first + index)
+    }]);
+  });
+}
+
 // Tab không thuộc cặp chính/full: việc VHFF cần chạy bù nếu lần sửa bị hoãn.
 function pnEditJobs_(name) {
   if(name==='Hoàn sản phẩm')return ['products'];
