@@ -337,9 +337,9 @@ function handoverSyncApplySignature_(target, dataCount) {
   const signatureRow = Number(dataCount) + 4;
   // Không gộp ô (Google cấm gộp ô trên dòng đang bị bộ lọc ẩn): ghi chữ vào ô GIỮA của 3 cột và căn giữa,
   // chữ tự tràn sang 2 ô trống hai bên -> in ra giống ô gộp, chạy được cả khi người dùng đang lọc.
-  const dateRange = target.getRange(signatureRow, 2);
-  const leftTop = target.getRange(signatureRow + 1, 2);
-  const leftBottom = target.getRange(signatureRow + 2, 2);
+  const dateRange = target.getRange(signatureRow, 3);
+  const leftTop = target.getRange(signatureRow + 1, 3);
+  const leftBottom = target.getRange(signatureRow + 2, 3);
   const rightTop = target.getRange(signatureRow + 1, 7);
   const rightBottom = target.getRange(signatureRow + 2, 7);
   dateRange.setValue(handoverSyncTodayHanoiText_());
