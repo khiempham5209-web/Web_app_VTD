@@ -74,13 +74,24 @@ const PN_UPLOAD_STALE_MS_=7*60*1000; // Apps Script dừng mọi lần chạy sa
 function pnUploadOnce_(stage,fn) {
   if(!pnRequest_)throw new Error('Upload phải qua apiSave_.');
   const uploads=pnRequest_.uploads||(pnRequest_.uploads={});
-  if(uploads[stage])return uploads[stage];
+  if (uploads[stage]) {
+    if (typeof pnAppLogEvent_ === 'function') pnAppLogEvent_('UPLOAD_REUSED', 0, {target: stage});
+    return uploads[stage];
+  }
   // Đơn gửi bởi bản code cũ: kết quả tải ảnh nằm ở dòng nhật ký riêng.
   if(pnRequest_.legacy){
     const old=pnJournalRead_(pnRequest_.key+':'+stage);
     if(old&&old.state==='DONE')return uploads[stage]=old.data;
   }
-  return uploads[stage]=fn();
+  if (typeof pnAppLogStage_ === 'function') {
+    pnAppLogStage_('UPLOAD');
+    pnAppLogEvent_('UPLOAD_STARTED', 0, {target: stage});
+  }
+  const uploaded = uploads[stage] = fn();
+  if (typeof pnAppLogEvent_ === 'function') {
+    pnAppLogEvent_('UPLOAD_TARGET_DONE', 0, {target: stage, files: Array.isArray(uploaded.files) ? uploaded.files.length : 0});
+  }
+  return uploaded;
 }
 
 // Tải ảnh TRƯỚC khi vào khóa chung. Khi vào khóa, pnApiSaveCore_ chỉ đọc lại kết quả đã có
@@ -139,7 +150,15 @@ function pnAppendProductsOnce_(sh,rows,width) {
   const c=pnProductIdColumn_(sh),existing=new Set();
   const last=sh.getLastRow();
   if(last>=2)sh.getRange(2,c,last-1,1).getValues().forEach(r=>{ if(r[0])existing.add(String(r[0])); });
-  rows.filter(r=>!existing.has(String(r[c-1]))).forEach(r=>sh.appendRow(r.slice(0,Math.max(width,c))));
+  let complete = false;
+  try {
+    rows.filter(r=>!existing.has(String(r[c-1]))).forEach(r=>sh.appendRow(r.slice(0,Math.max(width,c))));
+    complete = true;
+  } finally {
+    if (typeof pnAppLogSafe_ === 'function') {
+      pnAppLogSafe_(() => pnAppLogProductRows_(sh, c, rows.map(row => String(row[c - 1])), complete));
+    }
+  }
 }
 
 /* Tìm dòng của đơn trong Chứng từ_full: chỉ đọc các cột mã (Mã đơn GHTK, Mã PO, Số đơn hàng), không đọc cả bảng.
@@ -172,7 +191,9 @@ function pnResolveSave_(sh,col,params) {
   }
   if(rows.length!==1)throw new Error(rows.length?'Mã khớp nhiều đơn; dùng Số đơn hàng duy nhất.':'Không tìm thấy đơn trong Chứng từ_full.');
   pnResolveMemo_={params,sheet:sh.getName(),rowNumber:rows[0]};
-  return {rowNumber:rows[0],record:result(rows[0]).rec};
+  const found = {rowNumber:rows[0],record:result(rows[0]).rec};
+  if (typeof pnAppLogSafe_ === 'function') pnAppLogSafe_(() => pnAppLogResolve_(found));
+  return found;
 }
 
 // Đồng bộ cặp Chứng từ. fullRow: dòng API vừa ghi ở full -> bản API thắng và được đẩy sang Chứng từ_FF.
@@ -192,9 +213,14 @@ function pnMirrorDocs_(fullRow,prefer) {
 }
 
 function pnMirrorDocsSafe_(fullRow,prefer) {
-  try { pnMirrorDocs_(fullRow,prefer); return ''; }
+  try {
+    const result = pnMirrorDocs_(fullRow,prefer);
+    if (prefer && typeof pnAppLogSafe_ === 'function') pnAppLogSafe_(() => pnAppLogMirror_(fullRow, result));
+    return '';
+  }
   catch(err) {
     const message=String(err&&err.message||err);
+    if (prefer && typeof pnAppLogEvent_ === 'function') pnAppLogEvent_('MIRROR_FAILED', 0);
     PropertiesService.getScriptProperties().setProperty('PN_MIRROR_ERROR',new Date().toISOString()+' '+message.slice(0,4000));
     console.error('PN mirror (save tiếp tục): '+message);
     return message;
@@ -220,9 +246,15 @@ function apiSave_(params) {
     pnRequireReady_();
     const saved=pnJournalRead_(key);
     if(saved&&saved.data.signature!==signature)return fail_('clientId đã dùng cho nội dung khác.');
-    if(saved&&saved.state==='DONE')return saved.data.response;
+    if(saved&&saved.state==='DONE') {
+      if (typeof pnAppLogSafe_ === 'function') pnAppLogSafe_(() => pnAppLogCached_(saved.data.response));
+      return saved.data.response;
+    }
     const legacy=!saved&&readSavedRequest_(clientId);
-    if(legacy)return legacy;
+    if(legacy) {
+      if (typeof pnAppLogSafe_ === 'function') pnAppLogSafe_(() => pnAppLogCached_(legacy));
+      return legacy;
+    }
     const now=Date.now();
     if(saved&&(saved.state==='PENDING'||saved.state==='WRITTEN')&&now-Number(saved.data.touchedAtMs||0)<PN_UPLOAD_STALE_MS_)
       throw new Error('PN_BUSY: Đơn này đang được lưu ở lần gửi trước, app sẽ gửi lại sau.');
@@ -255,10 +287,12 @@ function pnSaveLocked_(params,key,state) {
     state.coreResponse=response;state.uploads=pnRequest_.uploads;state.docWritten=!!pnRequest_.docWritten;state.touchedAtMs=Date.now();
     pnJournalWrite_(key,'WRITTEN',state,false);
   }
+  if (typeof pnAppLogStage_ === 'function') pnAppLogStage_('FINALIZE');
   const mirrorAfter=pnMirrorDocsSafe_(response.rowNumber||fullRow,true);
   pnMarkDirty_();
   // Sang VHFF (Đã bàn giao CT, Bàn giao SP_Hàng hoàn): chạy riêng một lần ~20 giây sau, app không phải chờ.
   pnScheduleJob_(['documents','products']);
+  if (typeof pnAppLogEvent_ === 'function') pnAppLogEvent_('VHFF_SCHEDULED', 0, {syncStatus: 'PENDING'});
   const record=pnResolveSave_(sheet_(),null,params).record;
   const type=norm_(params.returnType||params.loaiHoan||'Chung tu');
   if(['chung tu','docs','san pham + chung tu','product-docs'].includes(type)){

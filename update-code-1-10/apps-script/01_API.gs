@@ -27,7 +27,7 @@ function doPost(e) {
     const body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
     const action = String(body.action || "").trim();
     const params = body.params || {};
-    const map = {keySync: apiKeySync_, init: apiInit_, lookup: apiLookup_, page: apiPage_, today: apiToday_, skuSync: apiSkuSync_, skuInit: apiSkuInit_, skuPage: apiSkuPage_, save: apiSave_, returnsSync: apiReturnsSync_};
+    const map = {keySync: apiKeySync_, init: apiInit_, lookup: apiLookup_, page: apiPage_, today: apiToday_, skuSync: apiSkuSync_, skuInit: apiSkuInit_, skuPage: apiSkuPage_, save: pnApiSaveAudited_, returnsSync: apiReturnsSync_};
     if (!map[action]) return json_({ok: false, message: "Action khong hop le: " + action});
     return json_(map[action](params));
   } catch (err) {
@@ -251,6 +251,23 @@ function productReturnIndexForDate_(dateText) {
   return out;
 }
 
+// Optional audit wrapper keeps the existing save contract for installed APKs.
+function pnApiSaveAudited_(params) {
+  if (typeof pnAppLogBegin_ !== 'function') return apiSave_(params);
+  pnAppLogSafe_(() => pnAppLogBegin_(params));
+  try {
+    const result = apiSave_(params);
+    pnAppLogSafe_(() => pnAppLogFinish_(result));
+    return result;
+  } catch (err) {
+    pnAppLogSafe_(() => pnAppLogFinish_(null, err));
+    throw err;
+  } finally {
+    pnAppLogSafe_(pnAppLogFlush_);
+    pnAppLogContext_ = null;
+  }
+}
+
 function pnApiSaveCore_(params) {
   const query = clean_(params.maDon || params.query || params.po || params.orderNo);
   const rowNumber = Number(params.rowNumber || 0);
@@ -282,22 +299,35 @@ function pnApiSaveCore_(params) {
     if (invalid) return fail_(invalid);
   }
 
+  if (typeof pnAppLogStage_ === 'function') pnAppLogStage_('UPLOAD');
   const upload = hasDocuments ? pnUploadOnce_("docs", () => uploadFiles_(maDonForFolder, files)) : {linkAnh: "", files: [], folderUrl: ""};
   if (items.some(item => item.productSchema >= 2)) {
     const hc = headerMap_(headers_(productReturnSheet_()));
     if (!firstCol_(hc,['phan loai']) || !firstCol_(hc,['han su dung'])) return fail_('Thiếu header Phân loại hoặc Hạn sử dụng trong Hoàn sản phẩm.');
   }
   const productUploads = items.map((item, i) => pnUploadOnce_("product:" + i, () => uploadProductFiles_(found.record.orderNo || params.orderNo || maDonForFolder, item)));
+  if (typeof pnAppLogStage_ === 'function') {
+    pnAppLogEvent_((upload.files.length || productUploads.some(x => x.files.length)) ? 'UPLOAD_DONE' : 'UPLOAD_SKIPPED', 6);
+    pnAppLogStage_('WRITE_SHEET');
+  }
   const now = pnRequestNow_();
   const dateText = Utilities.formatDate(now, CONFIG.timezone, "dd/MM/yyyy");
   const clockText = Utilities.formatDate(now, CONFIG.timezone, "HH:mm:ss");
   const timeText = dateText + " " + clockText;
   const user = clean_(params.userEmail || params.user || Session.getActiveUser().getEmail() || "");
 
-  if (hasDocuments) pnWriteDocumentOnce_(sh, found.rowNumber, col, params, upload, timeText, user);
+  if (hasDocuments) {
+    if (typeof pnAppLogStage_ === 'function') pnAppLogStage_('WRITE_DOCUMENTS');
+    const alreadyWritten = pnRequest_.docWritten;
+    pnWriteDocumentOnce_(sh, found.rowNumber, col, params, upload, timeText, user);
+    if (typeof pnAppLogSafe_ === 'function' && !alreadyWritten) {
+      pnAppLogSafe_(() => pnAppLogWrite_('DOC_WRITTEN', sh, [found.rowNumber], [found.record.syncKey || '']));
+    }
+  }
 
   const productRows = [];
   if (hasProducts) {
+    if (typeof pnAppLogStage_ === 'function') pnAppLogStage_('WRITE_PRODUCTS');
     const productSheet = productReturnSheet_();
     pnProductIdColumn_(productSheet);
     const productHeaders = headers_(productSheet);
@@ -341,7 +371,12 @@ function pnApiSaveCore_(params) {
     }
   }
 
+  if (typeof pnAppLogStage_ === 'function') pnAppLogStage_('WRITE_FLUSH');
   SpreadsheetApp.flush();
+  if (typeof pnAppLogStage_ === 'function') {
+    pnAppLogEvent_('SHEET_WRITTEN', 7);
+    pnAppLogStage_('FINALIZE');
+  }
   pnMarkDirty_(); // VHFF worker retries independently; never hide a failed sync.
   const dataVersion = String(Date.now());
   PropertiesService.getScriptProperties().setProperty("PN_DOCOPS_DATA_VERSION", dataVersion);

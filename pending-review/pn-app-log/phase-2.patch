@@ -1,0 +1,329 @@
+--- a/index.html
++++ b/index.html
+@@ -8991,8 +8991,51 @@
+       scheduleSyncQueue(0);
+       return item;
+     }
++    const PN_APP_LOG_KEY = "pn_app_log_outbox_v1";
++    let pnAppLogSending = false;
++    let pnAppLogTimer;
++    function pnAppLogOutbox(){
++      try { return JSON.parse(localStorage.getItem(PN_APP_LOG_KEY) || "[]"); }
++      catch (error) { return []; }
++    }
++    function pnAppLogTrack(order, state, code){
++      if (!order || !order.clientId || !order.maDonGhtk) return;
++      try {
++        const events = pnAppLogOutbox();
++        events.push({
++          eventId: localId(), owner: order.auditOwner || currentEmail(), clientId: order.clientId, maDonGhtk: order.maDonGhtk,
++          orderNo: order.orderNo || "", returnType: order.returnType || "",
++          at: new Date().toISOString(), state, code: code || ""
++        });
++        localStorage.setItem(PN_APP_LOG_KEY, JSON.stringify(events));
++        pnAppLogSchedule(1000);
++      } catch (error) { console.warn("PN app log storage failed", error); }
++    }
++    function pnAppLogSchedule(delay){
++      clearTimeout(pnAppLogTimer);
++      pnAppLogTimer = setTimeout(pnAppLogSend, delay);
++    }
++    async function pnAppLogSend(){
++      if (pnAppLogSending || navigator.onLine === false || !live.token || !docOpsApiUrl()) return;
++      const batch = pnAppLogOutbox().filter(event => event.owner === currentEmail()).slice(0, 20);
++      if (!batch.length) return;
++      pnAppLogSending = true;
++      try {
++        const result = await docOpsApiTransport("pnAppLogEvents", {_silent:true, events:batch});
++        if (!result.ok) return;
++        const ack = new Set(result.ack || []);
++        localStorage.setItem(PN_APP_LOG_KEY, JSON.stringify(pnAppLogOutbox().filter(event => !ack.has(event.eventId))));
++      } catch (error) { console.warn("PN app log transport failed", error); }
++      finally {
++        pnAppLogSending = false;
++        if (pnAppLogOutbox().length) pnAppLogSchedule(15000);
++      }
++    }
++    window.addEventListener("online", () => pnAppLogSchedule(0));
++    setInterval(() => pnAppLogSchedule(0), 30000);
++
+     async function enqueueDocOpsSave(record, payload, imagePayloads){
+-      const itemLocalId = localId();
++      const itemLocalId = payload.clientId || localId();
+       const maDon = String(payload && payload.maDon || record && (record.maDon || record.po || record.orderNo) || "").trim();
+       const preparedImages = await prepareDocOpsQueueImages(imagePayloads || []);
+       const imageRefs = await persistQueueImages(itemLocalId, preparedImages);
+@@ -9043,6 +9086,7 @@
+       const queue = localQueue();
+       queue.push(item);
+       saveLocalQueue(queue);
++      pnAppLogTrack(cleanPayload, "APP_QUEUED");
+       saveDocOpsRowsCache([row, ...docOpsRowsCache().filter(x => String(x.localId || "") !== itemLocalId && String(x.maDon || x.po || x.orderNo || "") !== maDon)]);
+       // The pending action lives in the queue, not in the authoritative lookup cache.
+       updateInputSyncBadge();
+@@ -9162,9 +9206,14 @@
+             continue;
+           }
+           if (item.kind === "docOps") {
+-            await ensureQueueItemImageRefs(item);
++            try { await ensureQueueItemImageRefs(item); }
++            catch (error) {
++              pnAppLogTrack(item.payload, "SEND_PREP_FAILED", "QUEUE_IMAGE_READ_FAILED");
++              throw error;
++            }
+             item.status = "syncing";
+             item.attempts = Number(item.attempts || 0) + 1;
++            if (item.attempts > 1) pnAppLogTrack(item.payload, "APP_RETRY");
+             item.lastTryAt = Date.now();
+             item.lastStep = "saveDocOps";
+             saveLocalQueue(queue);
+@@ -9187,6 +9236,7 @@
+                 }
+               }
+             } catch (err) {
++              pnAppLogTrack(item.payload, "SEND_PREP_FAILED", "QUEUE_IMAGE_READ_FAILED");
+               queue = localQueue();
+               const updated = queue.find(x => x.localId === item.localId);
+               if (updated) {
+@@ -9206,7 +9256,10 @@
+               images: productFilesBySku[skuIndex] || [],
+               files: productFilesBySku[skuIndex] || []
+             }));
+-            const res = await docOpsApi("save", Object.assign({}, item.payload, {files: docFiles, items:docOpsItems, _silent:true}));
++            pnAppLogTrack(item.payload, "SEND_STARTED");
++            const res = await docOpsApi("save", Object.assign({}, item.payload, {auditOwner: undefined, files: docFiles, items:docOpsItems, _silent:true}));
++            const responseState = netResponseLost(res) ? (res.timeout ? "RESPONSE_TIMEOUT" : "RESPONSE_LOST") : "APP_ACK";
++            pnAppLogTrack(item.payload, responseState, res.ok ? "OK" : String(res.code || "SAVE_RESPONSE_ERROR"));
+             queue = localQueue();
+             const updated = queue.find(x => x.localId === item.localId);
+             if (!updated) continue;
+@@ -11797,22 +11850,33 @@
+       live.docOpsFiles = [];
+     }
+     async function saveDocOps(){
+-      if(Object.values(live.capturePending || {}).some(Boolean))return toast('Đang nhận ảnh, vui lòng đợi ảnh hiện đủ rồi lưu.','err');
+       if (docOpsState.saving) return;
+       const maDon = String(el("docOpsMaDon")?.value || docOpsState.maDon || "").trim();
+-      if (!maDon) return toast("Vui lòng nhập mã đơn.", "err");
+       const record = docOpsState.record;
+-      if (!record || ![record.orderNo,record.maDonGhtk,record.maDon,record.po].some(v=>docOpsCacheKey(v)===docOpsCacheKey(maDon))) return toast("Chưa có thông tin đơn. Vui lòng nhập mã đơn để hệ thống tìm dữ liệu trước.", "err");
++      const matchingRecord = record && maDon && [record.orderNo,record.maDonGhtk,record.maDon,record.po]
++        .some(value => docOpsCacheKey(value) === docOpsCacheKey(maDon));
++      const audit = {
++        clientId: localId(), maDonGhtk: matchingRecord ? record.maDonGhtk : "",
++        orderNo: matchingRecord ? record.orderNo : "", returnType: docOpsState.returnType
++      };
++      pnAppLogTrack(audit, "SAVE_CLICKED");
++      const reject = (code, message) => {
++        pnAppLogTrack(audit, "APP_REJECTED", code);
++        return toast(message, "err");
++      };
++      if (Object.values(live.capturePending || {}).some(Boolean)) return reject("CAPTURE_PENDING", "Đang nhận ảnh, vui lòng đợi ảnh hiện đủ rồi lưu.");
++      if (!maDon) return reject("ORDER_REQUIRED", "Vui lòng nhập mã đơn.");
++      if (!record || ![record.orderNo,record.maDonGhtk,record.maDon,record.po].some(v=>docOpsCacheKey(v)===docOpsCacheKey(maDon))) return reject("ORDER_UNRESOLVED", "Chưa có thông tin đơn. Vui lòng nhập mã đơn để hệ thống tìm dữ liệu trước.");
+       const files = live.docOpsFiles || [];
+-      if (!docOpsState.returnType) return toast("Vui lòng chọn Loại hoàn.", "err");
++      if (!docOpsState.returnType) return reject("RETURN_TYPE_REQUIRED", "Vui lòng chọn Loại hoàn.");
+       const hasDocument = docOpsState.returnType === "Chứng từ" || docOpsState.returnType === "Sản phẩm + chứng từ";
+       const hasProduct = docOpsState.returnType === "Sản phẩm" || docOpsState.returnType === "Sản phẩm + chứng từ";
+-      if (hasDocument && !files.length) return toast("Chứng từ cần ít nhất 1 ảnh để hoàn tất.", "err");
++      if (hasDocument && !files.length) return reject("DOC_PHOTO_REQUIRED", "Chứng từ cần ít nhất 1 ảnh để hoàn tất.");
+       const products = hasProduct ? docOpsProductsForSave() : [];
+-      if (hasProduct && !products.length) return toast(`${docOpsState.returnType} cần ít nhất 1 SKU hoàn chỉnh.`, "err");
++      if (hasProduct && !products.length) return reject("SKU_REQUIRED", `${docOpsState.returnType} cần ít nhất 1 SKU hoàn chỉnh.`);
+       for (let i = 0; i < products.length; i++) {
+         const error = validateDocOpsProduct(products[i], `SKU ${i + 1}`);
+-        if (error) return toast(error, "err");
++        if (error) return reject("SKU_VALIDATION_FAILED", error);
+       }
+       docOpsState.saving = true;
+       const nativeFastQueue = !!(window.VTDNative && typeof window.VTDNative === "object");
+@@ -11836,6 +11900,8 @@
+           })));
+         });
+         const payload = {
++          clientId: audit.clientId,
++          auditOwner: currentEmail(),
+           maDon,
+           rowNumber: record.rowNumber || "",
+           returnType: docOpsState.returnType,
+@@ -11849,6 +11915,7 @@
+         resetDocOpsForm();
+         docops();
+       } catch (err) {
++        pnAppLogTrack(audit, "APP_REJECTED", "QUEUE_WRITE_FAILED");
+         docOpsState.saving = false;
+         docops();
+         const message = err && err.message ? err.message : "Chưa lưu được vào bộ nhớ máy.";
+--- a/Code_chinh_VTD.gs
++++ b/Code_chinh_VTD.gs
+@@ -5157,6 +5157,11 @@
+   try {
+     if (action === "clientDiagnostics" && typeof vtdDiagnosticsReceive === "function") return vtdDiagnosticsReceive(params || {});
+     params = params || {};
++    if (action === "pnLogSession") {
++      const email = vtdApp_sessionEmail_(String(params.sessionToken || ""));
++      const auth = email && vtdApp_auth_({sessionToken: params.sessionToken});
++      return auth && auth.allowed ? vtdApp_ok_({email}) : vtdApp_fail_("UNAUTHORIZED");
++    }
+     const map = {
+       publicConfig: vtdApp_publicConfig,
+       login: vtdApp_login,
+--- a/update-code-1-10/apps-script/01_API.gs
++++ b/update-code-1-10/apps-script/01_API.gs
+@@ -27,7 +27,7 @@
+     const body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
+     const action = String(body.action || "").trim();
+     const params = body.params || {};
+-    const map = {keySync: apiKeySync_, init: apiInit_, lookup: apiLookup_, page: apiPage_, today: apiToday_, skuSync: apiSkuSync_, skuInit: apiSkuInit_, skuPage: apiSkuPage_, save: pnApiSaveAudited_, returnsSync: apiReturnsSync_};
++    const map = {keySync: apiKeySync_, init: apiInit_, lookup: apiLookup_, page: apiPage_, today: apiToday_, skuSync: apiSkuSync_, skuInit: apiSkuInit_, skuPage: apiSkuPage_, save: pnApiSaveAudited_, pnAppLogEvents: pnAppLogAuthorizedReceive_, returnsSync: apiReturnsSync_};
+     if (!map[action]) return json_({ok: false, message: "Action khong hop le: " + action});
+     return json_(map[action](params));
+   } catch (err) {
+--- a/update-code-1-10/apps-script/16_PN_AppLog.gs
++++ b/update-code-1-10/apps-script/16_PN_AppLog.gs
+@@ -125,7 +125,8 @@
+
+ function pnAppLogSummary_(data) {
+   const operation = data.operations[data.operations.length - 1];
+-  const attempt = operation.attempts[operation.attempts.length - 1];
++  const attempt = operation.attempts[operation.attempts.length - 1] || {events: []};
++  const appEvents = operation.appEvents || [];
+   const updates = Array(9).fill('');
+   const writes = new Map();
+   let status = 'PROCESSING', detail = '', updatedAt = '';
+@@ -136,8 +137,15 @@
+       writes.set(w.tab, rows.concat(w.rows));
+     }
+   }));
++  appEvents.forEach(event => {
++    updatedAt = event.at > updatedAt ? event.at : updatedAt;
++    if (event.update) updates[event.update - 1] = Utilities.formatDate(new Date(event.at), 'Asia/Ho_Chi_Minh', 'dd/MM/yyyy HH:mm:ss') + ' ' + event.state;
++    if (event.status) status = event.status;
++    if (event.code && event.code !== 'OK') detail = event.code + ' · origin=APP';
++  });
++  if (attempt.events.length) detail = '';
+   attempt.events.forEach(event => {
+-    updatedAt = event.at;
++    updatedAt = event.at > updatedAt ? event.at : updatedAt;
+     if (event.update) updates[event.update - 1] = Utilities.formatDate(new Date(event.at), 'Asia/Ho_Chi_Minh', 'dd/MM/yyyy HH:mm:ss') + ' ' + event.state;
+     if (event.status) status = event.status;
+     if (event.code) {
+@@ -172,7 +180,7 @@
+ function pnAppLogFlush_() {
+   const log = pnAppLogContext_;
+   if (!log || !log.key || !log.events.length) return;
+-  pnAppLogSafe_(() => {
++  return pnAppLogSafe_(() => {
+     const lock = LockService.getScriptLock();
+     if (!lock.tryLock(500)) {
+       console.warn('PN_APP_LOG: LOCK_BUSY ' + log.requestId);
+@@ -192,19 +200,31 @@
+       if (!operation) {
+         operation = {clientId: log.operationId, orderNo: log.orderNo, source: log.source,
+           user: log.user, input: log.input, attempts: []};
+-        const localTime = /^LOCAL-(\d{13})-/.exec(log.operationId);
+-        const created = localTime && Number(localTime[1]);
+-        operation.startedAtMs = created && created <= Date.now() + 300000 ? created : Date.parse(log.startedAt);
+         data.operations.push(operation);
+-        data.operations.sort((a, b) => a.startedAtMs - b.startedAtMs);
+       }
+       if (log.orderNo) operation.orderNo = log.orderNo;
+-      let attempt = operation.attempts.find(x => x.requestId === log.requestId);
+-      if (!attempt) {
+-        attempt = {requestId: log.requestId, startedAt: log.startedAt, events: []};
+-        operation.attempts.push(attempt);
++      if (log.app) {
++        const events = operation.appEvents || (operation.appEvents = []);
++        for (const event of log.events) {
++          if (!events.some(existing => existing.eventId === event.eventId)) events.push(event);
++        }
++        events.sort((a, b) => a.at.localeCompare(b.at));
++      } else {
++        let attempt = operation.attempts.find(x => x.requestId === log.requestId);
++        if (!attempt) {
++          attempt = {requestId: log.requestId, startedAt: log.startedAt, events: []};
++          operation.attempts.push(attempt);
++        }
++        attempt.events = log.events.slice();
+       }
+-      attempt.events = log.events.slice();
++      // The existing LOCAL id contains the creation time, including when sent after being offline.
++      const operationTime = entry => {
++        const id = /^LOCAL-(\d{13})-/.exec(entry.clientId);
++        const time = id && Number(id[1]);
++        return time && time <= Date.now() + 300000 ? time : Date.parse(entry.firstSeenAt || '') || 0;
++      };
++      operation.firstSeenAt = operation.firstSeenAt || log.startedAt;
++      data.operations.sort((a, b) => operationTime(a) - operationTime(b));
+       let values = pnAppLogSummary_(data);
+       if (values[17].length > 42000) {
+         const archive = pnAppLogSheet_(ss, 'PN_LOG_HISTORY', ['Mã đơn GHTK', 'ArchivedAt', 'Log']);
+@@ -222,6 +242,7 @@
+       sheet.getRange(row, 1, 1, values.length).setValues([values.map(v =>
+         typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : v)]);
+       SpreadsheetApp.flush();
++      return true;
+     } finally {
+       lock.releaseLock();
+     }
+@@ -259,3 +280,59 @@
+     .createTextFinder(id).matchEntireCell(true).matchCase(true).findAll();
+   if (cells.length === 1) pnAppLogWrite_('MIRROR_CONFIRMED', target.sh, [cells[0].getRow()], [id]);
+ }
++
++// Enable only with an authenticated PN deployment. The existing PN doPost does not verify VTD tokens.
++function pnAppLogReceive_(params) {
++  const events = Array.isArray(params.events) ? params.events.slice(0, 20) : [];
++  const ack = [], groups = new Map();
++  const states = {
++    SAVE_CLICKED: [1, 'PROCESSING'], APP_QUEUED: [2, 'QUEUED'],
++    APP_REJECTED: [2, 'REJECTED'], SEND_STARTED: [3, 'SENDING'],
++    SEND_PREP_FAILED: [3, 'FAILED'], APP_RETRY: [0, 'RETRY_PENDING'],
++    APP_ACK: [9, ''], RESPONSE_TIMEOUT: [9, ''], RESPONSE_LOST: [9, '']
++  };
++  const receivedAt = new Date().toISOString();
++  for (const event of events) {
++    if (!event || !/^LOCAL-\d{13}-[a-f0-9]{1,32}$/.test(event.eventId)) continue;
++    const key = pnAppLogOrderKey_(event.maDonGhtk), timestamp = Date.parse(event.at);
++    if (!key || !Object.prototype.hasOwnProperty.call(states, event.state) ||
++        !/^LOCAL-\d{13}-[a-f0-9]{1,32}$/.test(event.clientId) || !Number.isFinite(timestamp)) {
++      ack.push(event.eventId);
++      continue;
++    }
++    const id = key + ':' + event.clientId;
++    if (!groups.has(id)) groups.set(id, {key, input: {}, app: true, operationId: event.clientId,
++      orderNo: pnAppLogCode_(event.orderNo), source: pnAppLogCode_(event.returnType),
++      user: pnAppLogCode_(params.userEmail), startedAt: receivedAt, events: []});
++    const [update, status] = states[event.state];
++    groups.get(id).events.push({
++      eventId: event.eventId, state: event.state, at: new Date(timestamp).toISOString(),
++      receivedAt, origin: 'APP', update, status, code: /^[A-Z0-9_]{1,50}$/.test(event.code) ? event.code : ''
++    });
++  }
++  for (const group of groups.values()) {
++    pnAppLogContext_ = group;
++    try {
++      if (pnAppLogFlush_()) group.events.forEach(event => ack.push(event.eventId));
++    } finally {
++      pnAppLogContext_ = null;
++    }
++  }
++  return {ok: true, ack};
++}
++
++function pnAppLogAuthorizedReceive_(params) {
++  const url = PropertiesService.getScriptProperties().getProperty('PN_LOG_VTD_API_URL') || '';
++  if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url)) {
++    return {ok: false, code: 'PN_LOG_AUTH_NOT_CONFIGURED'};
++  }
++  const token = String(params.sessionToken || '');
++  if (!/^[\w-]{20,180}$/.test(token)) return {ok: false, code: 'UNAUTHORIZED'};
++  const response = UrlFetchApp.fetch(url, {
++    method: 'post', contentType: 'application/json', muteHttpExceptions: true,
++    payload: JSON.stringify({action: 'pnLogSession', params: {sessionToken: token}})
++  });
++  const identity = JSON.parse(response.getContentText());
++  if (!identity.ok || !identity.email) return {ok: false, code: 'UNAUTHORIZED'};
++  return pnAppLogReceive_(Object.assign({}, params, {userEmail: identity.email}));
++}
